@@ -1,0 +1,57 @@
+x-postgres-base: &postgres-base
+  image: ${POSTGRES_IMAGE:-postgres:18.6}
+  restart: unless-stopped
+  ports:
+    - "127.0.0.1:5432:5432"
+  environment:
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    POSTGRES_DB: lab_db
+  deploy:
+    resources:
+      limits:
+        cpus: '1.0'
+        memory: 256M
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U postgres -d lab_db"]
+    interval: 2s
+    timeout: 3s
+    retries: 15
+
+services:
+  # Experiment 1: Isolation anomalies & Write Skew
+  isolation:
+    <<: *postgres-base
+    profiles: ["isolation"]
+    volumes:
+      - ./initdb.d:/docker-entrypoint-initdb.d:ro
+      - postgres-isolation-data:/var/lib/postgresql
+
+  # Experiment 2: Lock Contention & Fast Deadlock Detection
+  locks:
+    <<: *postgres-base
+    profiles: ["locks"]
+    command: >
+      postgres
+      -c deadlock_timeout=100ms
+      -c log_lock_waits=on
+    volumes:
+      - ./initdb.d:/docker-entrypoint-initdb.d:ro
+      - postgres-locks-data:/var/lib/postgresql
+
+  # Experiment 3: Memory Spill to Disk (low work_mem)
+  work-mem:
+    <<: *postgres-base
+    profiles: ["work-mem"]
+    command: >
+      postgres
+      -c work_mem=4MB
+      -c log_temp_files=0
+    volumes:
+      - ./initdb.d:/docker-entrypoint-initdb.d:ro
+      - postgres-work-mem-data:/var/lib/postgresql
+
+volumes:
+  postgres-isolation-data:
+  postgres-locks-data:
+  postgres-work-mem-data:

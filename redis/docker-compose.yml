@@ -1,0 +1,110 @@
+x-redis-base: &redis-base
+  image: ${REDIS_IMAGE:-redis:8.10.2}
+  restart: unless-stopped
+  ports:
+    - "127.0.0.1:6379:6379"
+  deploy:
+    resources:
+      limits:
+        cpus: '1.0'
+        memory: 64M
+  healthcheck:
+    test: ["CMD", "redis-cli", "ping"]
+    interval: 2s
+    timeout: 2s
+    retries: 5
+
+services:
+  # Experiment 1A: allkeys-lru with 16MB maxmemory limit
+  eviction-lru:
+    <<: *redis-base
+    profiles: ["eviction-lru", "eviction"]
+    command: >
+      redis-server
+      --maxmemory 16mb
+      --maxmemory-policy allkeys-lru
+      --loglevel notice
+    volumes:
+      - redis-eviction-lru-data:/data
+
+  # Experiment 1B: noeviction with 16MB maxmemory limit (should trigger OOM errors)
+  eviction-noeviction:
+    <<: *redis-base
+    profiles: ["eviction-noeviction"]
+    command: >
+      redis-server
+      --maxmemory 16mb
+      --maxmemory-policy noeviction
+      --loglevel notice
+    volumes:
+      - redis-eviction-noeviction-data:/data
+
+  # Experiment 1C: allkeys-lfu with 16MB maxmemory limit (frequency-based eviction)
+  eviction-lfu:
+    <<: *redis-base
+    profiles: ["eviction-lfu"]
+    command: >
+      redis-server
+      --maxmemory 16mb
+      --maxmemory-policy allkeys-lfu
+      --loglevel notice
+    volumes:
+      - redis-eviction-lfu-data:/data
+
+  # Experiment 2: Cache stampede simulation
+  stampede:
+    <<: *redis-base
+    profiles: ["stampede"]
+    command: >
+      redis-server
+      --maxmemory 64mb
+      --loglevel notice
+    volumes:
+      - redis-stampede-data:/data
+
+  # Experiment 3A: Persistence - RDB snapshots only (no AOF)
+  persistence-rdb:
+    <<: *redis-base
+    profiles: ["persistence-rdb", "persistence"]
+    command: >
+      redis-server
+      --save 60 10000
+      --appendonly no
+      --loglevel notice
+    volumes:
+      - redis-persist-rdb-data:/data
+
+  # Experiment 3B: Persistence - AOF with appendfsync everysec (standard production default)
+  persistence-aof:
+    <<: *redis-base
+    profiles: ["persistence-aof"]
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --save ""
+      --loglevel notice
+    volumes:
+      - redis-persist-aof-data:/data
+
+  # Experiment 3C: Persistence - AOF with appendfsync always (maximum durability, disk bound)
+  persistence-always:
+    <<: *redis-base
+    profiles: ["persistence-always"]
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync always
+      --save ""
+      --loglevel notice
+    volumes:
+      - redis-persist-always-data:/data
+
+volumes:
+  redis-eviction-lru-data:
+  redis-eviction-noeviction-data:
+  redis-eviction-lfu-data:
+  redis-stampede-data:
+  redis-persist-rdb-data:
+  redis-persist-aof-data:
+  redis-persist-always-data:

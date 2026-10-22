@@ -1,0 +1,15 @@
+# OS & Editor artifacts
+.DS_Store
+*.swp
+
+# Python / uv artifacts
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Temporary logs or dumps
+*.log
+*.rdb
+*.aof

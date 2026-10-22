@@ -1,0 +1,43 @@
+x-mongo-base: &mongo-base
+  image: ${MONGO_IMAGE:-mongo:9.0.4}
+  restart: unless-stopped
+  ports:
+    - "127.0.0.1:27017:27017"
+  deploy:
+    resources:
+      limits:
+        cpus: '1.0'
+        memory: 384M
+  healthcheck:
+    test: ["CMD-SHELL", "mongosh --eval 'db.runCommand({ping: 1})' --quiet"]
+    interval: 2s
+    timeout: 5s
+    retries: 15
+    start_period: 3s
+
+services:
+  # Experiment 1: The 100MB RAM In-Memory Sort Limit
+  unindexed-sort:
+    <<: *mongo-base
+    profiles: ["unindexed-sort"]
+    volumes:
+      - mongo-sort-data:/data/db
+
+  # Experiment 2: Write Concerns & Crash Durability (w:0 vs w:1 vs j:True)
+  durability:
+    <<: *mongo-base
+    profiles: ["durability"]
+    volumes:
+      - mongo-durability-data:/data/db
+
+  # Experiment 3: Document Growth, Reallocation & 16MB BSON Hard Cap
+  document-limits:
+    <<: *mongo-base
+    profiles: ["document-limits"]
+    volumes:
+      - mongo-doclimit-data:/data/db
+
+volumes:
+  mongo-sort-data:
+  mongo-durability-data:
+  mongo-doclimit-data:

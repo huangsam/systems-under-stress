@@ -1,0 +1,58 @@
+x-linux-base: &linux-base
+  image: ${LINUX_IMAGE:-debian-kernel-lab:trixie}
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  working_dir: /lab
+  volumes:
+    - .:/lab:ro
+  command: ["sleep", "infinity"]
+  healthcheck:
+    test: ["CMD-SHELL", "test -d /proc && python3 --version"]
+    interval: 2s
+    timeout: 2s
+    retries: 5
+
+services:
+  # Profile: pid-limit
+  # Strict cgroups v2 pids ceiling (40 processes max), 64MB RAM, 0.5 CPU
+  pid-limit:
+    <<: *linux-base
+    container_name: linux-pid-limit
+    profiles: ["pid-limit"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 64M
+          pids: 40
+
+  # Profile: fd-exhaustion
+  # Process-level descriptor limits (ulimit -n 64), 64MB RAM, 0.5 CPU
+  fd-exhaustion:
+    <<: *linux-base
+    container_name: linux-fd-exhaustion
+    profiles: ["fd-exhaustion"]
+    ulimits:
+      nofile:
+        soft: 64
+        hard: 64
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 64M
+
+  # Profile: oom-killer
+  # Strict memory limit (32MB) with zero swap (memswap_limit == memory)
+  oom-killer:
+    <<: *linux-base
+    container_name: linux-oom-killer
+    profiles: ["oom-killer"]
+    memswap_limit: 32M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 32M

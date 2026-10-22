@@ -1,0 +1,8 @@
+<clickhouse>
+    <profiles>
+        <default>
+            <!-- Constrain maximum analytical query RAM to 64MB for limit testing -->
+            <max_memory_usage>64000000</max_memory_usage>
+        </default>
+    </profiles>
+</clickhouse>

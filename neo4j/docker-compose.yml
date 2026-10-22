@@ -1,0 +1,75 @@
+x-neo4j-base: &neo4j-base
+  image: ${NEO4J_IMAGE:-neo4j:5.26.32-community}
+  restart: unless-stopped
+  ports:
+    - "127.0.0.1:7474:7474"
+    - "127.0.0.1:7687:7687"
+  environment:
+    NEO4J_AUTH: neo4j/password123
+    NEO4J_server_memory_heap_initial__size: 256m
+    NEO4J_server_memory_heap_max__size: 384m
+    NEO4J_server_memory_pagecache_size: 64m
+  deploy:
+    resources:
+      limits:
+        cpus: '1.0'
+        memory: 512M
+  healthcheck:
+    test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:7474 || exit 1"]
+    interval: 5s
+    timeout: 5s
+    retries: 20
+    start_period: 15s
+
+services:
+  # Experiment 1: Unbounded Path Traversal (Combinatorial Explosion)
+  traversal-depth:
+    <<: *neo4j-base
+    profiles: ["traversal-depth"]
+    volumes:
+      - neo4j-traversal-data:/data
+
+  # Experiment 2: Dense Supernode (Pointer Chasing & Lock Contention)
+  supernode:
+    <<: *neo4j-base
+    profiles: ["supernode"]
+    volumes:
+      - neo4j-supernode-data:/data
+
+  # Experiment 3: Multi-Hop Cypher vs Recursive SQL (Neo4j + PostgreSQL)
+  compare-sql:
+    <<: *neo4j-base
+    profiles: ["compare-sql"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - neo4j-compare-data:/data
+
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:18.6}
+    profiles: ["compare-sql"]
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: lab_db
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lab_db"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    volumes:
+      - neo4j-pg-data:/var/lib/postgresql
+
+volumes:
+  neo4j-traversal-data:
+  neo4j-supernode-data:
+  neo4j-compare-data:
+  neo4j-pg-data:

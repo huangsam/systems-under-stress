@@ -1,0 +1,113 @@
+x-cassandra-base: &cassandra-base
+  image: ${CASSANDRA_IMAGE:-cassandra:5.0.9}
+  restart: unless-stopped
+  ports:
+    - "127.0.0.1:9042:9042"
+  deploy:
+    resources:
+      limits:
+        cpus: '1.5'
+        memory: 1280M
+  environment:
+    - MAX_HEAP_SIZE=512M
+  healthcheck:
+    test: ["CMD-SHELL", "cqlsh -e \"DESCRIBE KEYSPACES\" || nodetool status | grep -q \"UN\" || exit 1"]
+    interval: 5s
+    timeout: 5s
+    retries: 25
+    start_period: 30s
+
+services:
+  # Experiment 01: Tombstone failure threshold (10,000 tombstones)
+  cassandra-tombstones:
+    <<: *cassandra-base
+    container_name: cassandra-tombstones
+    profiles: ["tombstones", "default"]
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TombstoneCluster
+      - MAX_HEAP_SIZE=512M
+    volumes:
+      - cassandra-tombstone-data:/var/lib/cassandra
+
+  # Experiment 02: PACELC Tunable Consistency (3-node mini-cluster)
+  cassandra-node1:
+    <<: *cassandra-base
+    container_name: cassandra-node1
+    profiles: ["cluster-consistency"]
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 896M
+    environment:
+      - CASSANDRA_CLUSTER_NAME=LabCluster
+      - CASSANDRA_SEEDS=cassandra-node1
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_RACK=rack1
+      - MAX_HEAP_SIZE=384M
+    ports:
+      - "127.0.0.1:9042:9042"
+    volumes:
+      - cassandra-n1-data:/var/lib/cassandra
+
+  cassandra-node2:
+    <<: *cassandra-base
+    container_name: cassandra-node2
+    profiles: ["cluster-consistency"]
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 896M
+    environment:
+      - CASSANDRA_CLUSTER_NAME=LabCluster
+      - CASSANDRA_SEEDS=cassandra-node1
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_RACK=rack1
+      - MAX_HEAP_SIZE=384M
+    ports: []
+    volumes:
+      - cassandra-n2-data:/var/lib/cassandra
+    depends_on:
+      cassandra-node1:
+        condition: service_healthy
+
+  cassandra-node3:
+    <<: *cassandra-base
+    container_name: cassandra-node3
+    profiles: ["cluster-consistency"]
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 896M
+    environment:
+      - CASSANDRA_CLUSTER_NAME=LabCluster
+      - CASSANDRA_SEEDS=cassandra-node1
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_RACK=rack1
+      - MAX_HEAP_SIZE=384M
+    ports: []
+    volumes:
+      - cassandra-n3-data:/var/lib/cassandra
+    depends_on:
+      cassandra-node1:
+        condition: service_healthy
+
+  # Experiment 03: Wide partitions & Hot-spotting
+  cassandra-wide:
+    <<: *cassandra-base
+    container_name: cassandra-wide
+    profiles: ["wide-partitions"]
+    environment:
+      - CASSANDRA_CLUSTER_NAME=WidePartitionCluster
+      - MAX_HEAP_SIZE=512M
+    volumes:
+      - cassandra-wide-data:/var/lib/cassandra
+
+volumes:
+  cassandra-tombstone-data:
+  cassandra-n1-data:
+  cassandra-n2-data:
+  cassandra-n3-data:
+  cassandra-wide-data:
