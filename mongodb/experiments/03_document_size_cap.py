@@ -18,13 +18,14 @@ Demonstrates:
    - Grouping events into fixed-count sub-documents (e.g. 500 events per bucket),
      keeping write latency flat and avoiding the 16MB cliff.
 """
+
 from __future__ import annotations
 
 import sys
 import time
+
 from pymongo import MongoClient
 from pymongo.errors import DocumentTooLarge, OperationFailure, WriteError
-
 
 MONGO_URI = "mongodb://127.0.0.1:27017/"
 BSON_MAX_BYTES = 16 * 1024 * 1024  # 16,777,216 bytes
@@ -93,9 +94,7 @@ def main() -> None:
                     )
                 )[0]
                 print(
-                    f"    Batch {batch_num:>2}: Events={stats['count']:>5,} | "
-                    f"BSON Size={format_bytes(stats['size']):>9} | "
-                    f"Write Latency={elapsed_ms:>6.2f}ms"
+                    f"    Batch {batch_num:>2}: Events={stats['count']:>5,} | BSON Size={format_bytes(stats['size']):>9} | Write Latency={elapsed_ms:>6.2f}ms"
                 )
         except (DocumentTooLarge, WriteError, OperationFailure) as err:
             stats = list(

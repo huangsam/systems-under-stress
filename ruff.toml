@@ -1,0 +1,14 @@
+target-version = "py312"
+line-length = 160
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (unused imports/vars, syntax issues)
+    "I",   # isort (import ordering)
+    "UP",  # pyupgrade (modern Python 3.12 syntax)
+]
+ignore = [
+    "E501", # line-too-long
+]

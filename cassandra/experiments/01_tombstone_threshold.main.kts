@@ -5,14 +5,14 @@
 @file:DependsOn("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 
 import com.datastax.oss.driver.api.core.CqlSession
-import com.datastax.oss.driver.api.core.cql.SimpleStatement
 import com.datastax.oss.driver.api.core.DefaultConsistencyLevel
+import com.datastax.oss.driver.api.core.cql.SimpleStatement
 import com.datastax.oss.driver.api.core.servererrors.ReadFailureException
 import com.datastax.oss.driver.api.core.servererrors.ReadTimeoutException
 import kotlinx.coroutines.*
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.future.await
 import java.net.InetSocketAddress
 import java.time.Instant
 import java.time.ZoneOffset

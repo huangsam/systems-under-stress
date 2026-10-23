@@ -24,12 +24,9 @@ import errno
 import os
 import platform
 import resource
-import sys
-import time
-from typing import Dict, List
 
 
-def inspect_proc_self_fd() -> Dict[int, str]:
+def inspect_proc_self_fd() -> dict[int, str]:
     """Inspect and resolve all open file descriptors for the current process."""
     fd_dir = "/proc/self/fd"
     if not os.path.exists(fd_dir):
@@ -57,7 +54,7 @@ def read_sysfs_safe(path: str) -> str:
     """Read a kernel sysctl/sysfs file."""
     if os.path.exists(path):
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 return f.read().strip()
         except Exception as e:
             return f"Error: {e}"
@@ -94,14 +91,14 @@ def run_experiment() -> None:
 
     # 4. Descriptor Exhaustion Loop
     print(f"\n--- Phase 2: Opening Descriptors Until Limit ({TARGET_LIMIT}) ---")
-    opened_files: List[object] = []
+    opened_files: list[object] = []
     hit_emfile = False
 
     try:
         for iteration in range(1, 100):
             try:
                 target_path = "/dev/null"
-                f = open(target_path, "r")
+                f = open(target_path)
                 opened_files.append(f)
                 fd_num = f.fileno()
 
@@ -149,7 +146,7 @@ def run_experiment() -> None:
             file_max = read_sysfs_safe("/proc/sys/fs/file-max")
             print("\n--- Phase 4: Kernel System-Wide Limits (/proc/sys/fs/) ---")
             print(f"[*] /proc/sys/fs/file-nr  : {file_nr}")
-            print(f"    (Format: <allocated_handles>  <allocated_unused>  <max_handles>)")
+            print("    (Format: <allocated_handles>  <allocated_unused>  <max_handles>)")
             print(f"[*] /proc/sys/fs/file-max : {file_max}")
 
     finally:
@@ -165,7 +162,7 @@ def run_experiment() -> None:
         opened_files.clear()
 
         restored_fds = inspect_proc_self_fd()
-        print(f"[*] Successfully closed remaining leaked file descriptors.")
+        print("[*] Successfully closed remaining leaked file descriptors.")
         print(f"[*] Restored open descriptors in /proc/self/fd: {len(restored_fds)} active")
 
     # 8. Systems Takeaways & Interview Angles

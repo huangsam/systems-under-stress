@@ -18,11 +18,13 @@ Demonstrates:
    - At the `max_ttl` boundary, renewal calls are rejected by Vault.
    - Once expired, the token is permanently revoked from Vault's storage.
 """
+
 from __future__ import annotations
 
 import os
 import sys
 import time
+
 import hvac
 from hvac import exceptions
 
@@ -60,7 +62,7 @@ def test_token_renewal_lifecycle() -> None:
     initial_duration = token_resp["auth"]["lease_duration"]
     renewable = token_resp["auth"]["renewable"]
 
-    print(f"\033[1;32m[+] Child Token Created Successfully:\033[0m")
+    print("\033[1;32m[+] Child Token Created Successfully:\033[0m")
     print(f"    - Token String    : s.{child_token[:8]}...[REDACTED]")
     print(f"    - Lease Duration  : {initial_duration}s")
     print(f"    - Renewable       : {renewable}")
@@ -97,22 +99,12 @@ def test_token_renewal_lifecycle() -> None:
             except Exception:
                 exact_ttl = current_ttl
 
-            print(
-                f"{elapsed:6.2f}s    "
-                f"{'Renew Pulse #' + str(cycle):<22} "
-                f"{str(exact_ttl) + 's':<16} "
-                f"\033[1;32mRENEWED (Capped by Max TTL)\033[0m"
-            )
+            print(f"{elapsed:6.2f}s    {'Renew Pulse #' + str(cycle):<22} {str(exact_ttl) + 's':<16} \033[1;32mRENEWED (Capped by Max TTL)\033[0m")
 
         except (exceptions.InvalidRequest, exceptions.VaultError, exceptions.Forbidden) as exc:
             err_msg = str(exc).strip().replace("\n", " ")
-            print(
-                f"{elapsed:6.2f}s    "
-                f"{'Renew Pulse #' + str(cycle):<22} "
-                f"{'0s':<16} "
-                f"\033[1;31mREJECTED: Ceiling Hit\033[0m"
-            )
-            print(f"\n\033[1;33m[*] Vault Renewal Rejection Signature:\033[0m")
+            print(f"{elapsed:6.2f}s    {'Renew Pulse #' + str(cycle):<22} {'0s':<16} \033[1;31mREJECTED: Ceiling Hit\033[0m")
+            print("\n\033[1;33m[*] Vault Renewal Rejection Signature:\033[0m")
             print(f"    \033[1;31m{err_msg}\033[0m")
             max_ttl_hit = True
             break
@@ -139,6 +131,8 @@ def test_token_renewal_lifecycle() -> None:
         token_purged = True
         print("\033[1;32m[+] Token successfully purged and rejected by Vault:\033[0m")
         print(f"    - Error: {exc}")
+
+    assert token_purged, "Expired token was not invalidated by Vault"
 
     # Also verify from root client lookup
     try:

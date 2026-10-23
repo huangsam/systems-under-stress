@@ -1,9 +1,9 @@
 @file:Repository("https://repo1.maven.org/maven2/")
 @file:DependsOn("org.mongodb:mongodb-driver-sync:5.1.0")
 
+import com.mongodb.WriteConcern
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
-import com.mongodb.WriteConcern
 import org.bson.Document
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean

@@ -22,6 +22,7 @@ Execution flow:
 7. Execute remediation: Query with clustering key slice past the tombstones,
    demonstrating sub-millisecond retrieval.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -30,11 +31,12 @@ import sys
 import time
 from pathlib import Path
 
-from cassandra import ConsistencyLevel, ReadFailure, ReadTimeout
-from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
+from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.query import SimpleStatement
+
+from cassandra import ConsistencyLevel, ReadFailure, ReadTimeout
 
 COMPOSE_DIR = Path(__file__).resolve().parent.parent
 HOST = "127.0.0.1"
@@ -83,7 +85,7 @@ def wait_for_cassandra() -> Cluster:
             session.execute("SELECT release_version FROM system.local")
             log(f"Connected to Cassandra cluster successfully (attempt {attempt}).", "\033[1;32m")
             return cluster
-        except Exception as err:
+        except Exception:
             time.sleep(2)
     log("Failed to connect to Cassandra after 30 attempts. Is 'make up EXP=tombstones' running?", "\033[1;31m")
     sys.exit(1)
@@ -126,7 +128,7 @@ def run_experiment() -> None:
         # ---------------------------------------------------------
         # Phase 1: Insert 15,000 rows
         # ---------------------------------------------------------
-        base_time = datetime.datetime(2026, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+        base_time = datetime.datetime(2026, 1, 1, 0, 0, 0, tzinfo=datetime.UTC)
         log(f"Phase 1: Inserting {TOTAL_ROWS:,} sensor readings into partition '{SENSOR_ID}'...", "\033[1;36m")
 
         insert_stmt = session.prepare(f"""
@@ -136,13 +138,7 @@ def run_experiment() -> None:
         insert_stmt.consistency_level = ConsistencyLevel.ONE
 
         insert_params = [
-            (
-                SENSOR_ID,
-                base_time + datetime.timedelta(seconds=i),
-                float(i * 1.5),
-                f"payload_metric_reading_packet_{i:06d}"
-            )
-            for i in range(TOTAL_ROWS)
+            (SENSOR_ID, base_time + datetime.timedelta(seconds=i), float(i * 1.5), f"payload_metric_reading_packet_{i:06d}") for i in range(TOTAL_ROWS)
         ]
 
         t0 = time.perf_counter()
@@ -166,13 +162,7 @@ def run_experiment() -> None:
         """)
         delete_stmt.consistency_level = ConsistencyLevel.ONE
 
-        delete_params = [
-            (
-                SENSOR_ID,
-                base_time + datetime.timedelta(seconds=i)
-            )
-            for i in range(DELETE_ROWS)
-        ]
+        delete_params = [(SENSOR_ID, base_time + datetime.timedelta(seconds=i)) for i in range(DELETE_ROWS)]
 
         t0 = time.perf_counter()
         del_results = execute_concurrent_with_args(session, delete_stmt, delete_params, concurrency=100)
@@ -248,7 +238,7 @@ def run_experiment() -> None:
         t1 = time.perf_counter()
 
         log(f"Remediated query returned {len(healthy_rows)} live rows in {(t1 - t0) * 1000:.2f} ms!", "\033[1;32m")
-        log(f"Tombstones scanned: 0 (bypassed via SSTable clustering key index block).", "\033[32m")
+        log("Tombstones scanned: 0 (bypassed via SSTable clustering key index block).", "\033[32m")
 
         # ---------------------------------------------------------
         # Summary & Systems Insights
@@ -258,7 +248,7 @@ def run_experiment() -> None:
         print("=" * 70)
         print(f"  Rows Inserted               : {TOTAL_ROWS:,}")
         print(f"  Rows Deleted (Tombstones)   : {DELETE_ROWS:,}")
-        print(f"  Cassandra Safety Threshold  : 10,000 tombstones (tombstone_failure_threshold)")
+        print("  Cassandra Safety Threshold  : 10,000 tombstones (tombstone_failure_threshold)")
         print(f"  Unbounded Scan Result       : {'ABORTED (ReadFailureException)' if read_failed else 'PASSED'}")
         print(f"  Clustering Key Slice Latency: {(t1 - t0) * 1000:.2f} ms (Bypassed tombstones)")
         print("=" * 70 + "\n")

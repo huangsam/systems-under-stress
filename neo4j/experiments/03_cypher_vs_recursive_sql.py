@@ -16,13 +16,15 @@ Demonstrates:
    - Neo4j: MATCH (root:Service {id: 0})-[:DEPENDS_ON*1..d]->(dep) using index-free adjacency.
 3. Observing the crossover point where pointer-chasing beats relational join materialization.
 """
+
 from __future__ import annotations
 
 import sys
 import time
-from neo4j import GraphDatabase
+
 import psycopg
 
+from neo4j import GraphDatabase
 
 NEO4J_URI = "bolt://127.0.0.1:7687"
 NEO4J_AUTH = ("neo4j", "password123")

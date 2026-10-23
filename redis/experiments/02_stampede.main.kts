@@ -4,9 +4,9 @@
 @file:DependsOn("org.slf4j:slf4j-nop:2.0.13")
 @file:DependsOn("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 
+import kotlinx.coroutines.*
 import redis.clients.jedis.JedisPool
 import redis.clients.jedis.params.SetParams
-import kotlinx.coroutines.*
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 

@@ -16,11 +16,13 @@ Demonstrates:
 3. The Global Lock Ordering Fix: Acquiring locks in consistent primary key order
    eliminates circular wait cycles completely under heavy bidirectional concurrency.
 """
+
 from __future__ import annotations
 
 import concurrent.futures
 import threading
 import time
+
 import psycopg
 from psycopg import errors
 
@@ -65,8 +67,8 @@ def test_hot_row_contention() -> None:
     duration = time.perf_counter() - start_time
     final_balance = get_balance(1)
 
-    print(f"    Initial Balance  : $1,000.00")
-    print(f"    Expected Balance : $1,050.00")
+    print("    Initial Balance  : $1,000.00")
+    print("    Expected Balance : $1,050.00")
     print(f"    Final Balance    : \033[1;32m${final_balance:,.2f}\033[0m")
     print(f"    Total Time       : {duration * 1000:.1f}ms ({NUM_WORKERS} updates serialized)")
 

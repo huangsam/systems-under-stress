@@ -30,10 +30,9 @@ import os
 import platform
 import sys
 import time
-from typing import Dict, Optional, Tuple
 
 
-def get_cgroup_memory_paths() -> Tuple[Optional[str], Optional[str], Optional[str]]:
+def get_cgroup_memory_paths() -> tuple[str | None, str | None, str | None]:
     """Locate cgroup v2 (or v1) memory controller files."""
     # Check cgroup v2 directly in container root
     v2_max = "/sys/fs/cgroup/memory.max"
@@ -45,7 +44,7 @@ def get_cgroup_memory_paths() -> Tuple[Optional[str], Optional[str], Optional[st
     # Inspect /proc/self/cgroup for nested cgroup path
     if os.path.exists("/proc/self/cgroup"):
         try:
-            with open("/proc/self/cgroup", "r") as f:
+            with open("/proc/self/cgroup") as f:
                 for line in f:
                     parts = line.strip().split(":")
                     if len(parts) == 3:
@@ -68,24 +67,24 @@ def get_cgroup_memory_paths() -> Tuple[Optional[str], Optional[str], Optional[st
     return None, None, None
 
 
-def read_file_safe(path: Optional[str]) -> str:
+def read_file_safe(path: str | None) -> str:
     """Read a sysfs file safely."""
     if not path or not os.path.exists(path):
         return "N/A"
     try:
-        with open(path, "r") as f:
+        with open(path) as f:
             return f.read().strip()
     except Exception as e:
         return f"Error: {e}"
 
 
-def parse_memory_events(events_path: Optional[str]) -> Dict[str, int]:
+def parse_memory_events(events_path: str | None) -> dict[str, int]:
     """Parse cgroups v2 memory.events file into a dictionary."""
-    results: Dict[str, int] = {}
+    results: dict[str, int] = {}
     if not events_path or not os.path.exists(events_path):
         return results
     try:
-        with open(events_path, "r") as f:
+        with open(events_path) as f:
             for line in f:
                 parts = line.strip().split()
                 if len(parts) == 2 and parts[1].isdigit():
@@ -125,7 +124,7 @@ def allocate_until_oom(chunk_size_bytes: int = 4 * 1024 * 1024) -> None:
         status_path = f"/proc/{pid}/status"
         if os.path.exists(status_path):
             try:
-                with open(status_path, "r") as f:
+                with open(status_path) as f:
                     for line in f:
                         if line.startswith("VmRSS:"):
                             rss_str = f" | {line.strip()}"

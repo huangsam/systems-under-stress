@@ -16,12 +16,13 @@ Demonstrates:
      CODEC(Gorilla, ZSTD) on gauges, and LowCardinality(String) dictionary encoding.
 3. Inspecting exact byte footprints via 'system.columns'.
 """
+
 from __future__ import annotations
 
 import sys
 import time
-import clickhouse_connect
 
+import clickhouse_connect
 
 NUM_ROWS = 500_000
 
@@ -104,7 +105,7 @@ def main() -> None:
         t0 = time.perf_counter()
         client.command(f"INSERT INTO {tbl} {seed_sql}")
         client.command(f"OPTIMIZE TABLE {tbl} FINAL")
-        print(f"    Completed in {(time.perf_counter() - t0)*1000:.0f}ms")
+        print(f"    Completed in {(time.perf_counter() - t0) * 1000:.0f}ms")
 
     # 3. Query system.columns for exact physical vs uncompressed disk sizes
     print("\n\033[1;34m[*] Auditing Disk Storage via system.columns:\033[0m\n")

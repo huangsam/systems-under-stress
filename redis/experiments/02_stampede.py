@@ -12,6 +12,7 @@ Simulates 100 concurrent requests arriving right as a hot key expires:
 2. Distributed Lock (SET NX PX): Only 1 worker hits the DB; others wait for cache.
 3. Probabilistic Early Refresh (XFetch): Refreshes in background before hard expiry.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -19,8 +20,8 @@ import math
 import random
 import time
 import uuid
-import redis.asyncio as aioredis
 
+import redis.asyncio as aioredis
 
 HOT_KEY = "product:trending:42"
 DB_COMPUTE_DELAY = 0.05  # 50ms simulated database query latency
@@ -155,7 +156,7 @@ async def run_scenario(name: str, worker_fn, client: aioredis.Redis, pre_seed: b
 
     print(f"    Total Client Requests : {CONCURRENT_REQUESTS}")
     print(f"    Elapsed Time          : {duration * 1000:.1f}ms")
-    print(f"    Database Query Count  : \033[1;{ '31' if db_hits > 10 else '32' }m{db_hits}\033[0m")
+    print(f"    Database Query Count  : \033[1;{'31' if db_hits > 10 else '32'}m{db_hits}\033[0m")
     print(f"    Served from Cache     : {cache_hits}")
 
 

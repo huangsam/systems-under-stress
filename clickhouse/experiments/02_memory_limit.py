@@ -18,6 +18,7 @@ Demonstrates:
    thresholds are reached, enabling queries to succeed under constrained resources.
 4. Algorithmic Tradeoffs: Comparing uniqExact (exact in-memory set) vs uniq (HyperLogLog).
 """
+
 from __future__ import annotations
 
 import sys
@@ -131,7 +132,7 @@ def run_in_memory_aggregation(client: clickhouse_connect.driver.Client) -> None:
         elapsed = time.perf_counter() - start_time
         err_msg = str(err)
         print(f"\n  \033[1;31m[!] QUERY TERMINATED BY ENGINE (Elapsed: {elapsed:.2f}s)\033[0m")
-        print(f"      ClickHouse Error Code : 241 (MEMORY_LIMIT_EXCEEDED)")
+        print("      ClickHouse Error Code : 241 (MEMORY_LIMIT_EXCEEDED)")
         print(f"      Engine Diagnostics    : {err_msg.strip()}")
         print("\n  \033[1;32m[✓] Failure Verified:\033[0m ClickHouse protected host OS by aborting before")
         print("      the 1,000,000-key aggregation hash table could trigger container OOM (Exit 137).")
@@ -165,7 +166,7 @@ def run_spill_to_disk_aggregation(client: clickhouse_connect.driver.Client) -> N
     result = client.query(query).result_rows[0]
     elapsed = time.perf_counter() - start_time
 
-    print(f"\n    Query Status          : \033[1;32mSUCCESSFUL COMPLETION\033[0m")
+    print("\n    Query Status          : \033[1;32mSUCCESSFUL COMPLETION\033[0m")
     print(f"    Aggregated Groups     : \033[1;32m{result[0]:,}\033[0m user UUIDs processed")
     print(f"    Grand Total Events    : {result[1]:,} clicks verified")
     print(f"    Total Execution Time  : {elapsed:.2f} seconds")
@@ -208,9 +209,7 @@ def main() -> None:
     client = get_client()
 
     # Verify server baseline setting
-    configured_limit = client.query(
-        "SELECT value FROM system.settings WHERE name = 'max_memory_usage'"
-    ).result_rows[0][0]
+    configured_limit = client.query("SELECT value FROM system.settings WHERE name = 'max_memory_usage'").result_rows[0][0]
     print(f"[*] Engine Baseline Setting: max_memory_usage = {int(configured_limit) / 1024 / 1024:.2f} MiB ({configured_limit} bytes)")
 
     # Prepare dataset

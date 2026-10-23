@@ -23,10 +23,9 @@ import os
 import platform
 import sys
 import time
-from typing import Optional, Tuple
 
 
-def get_cgroup_pids_paths() -> Tuple[Optional[str], Optional[str]]:
+def get_cgroup_pids_paths() -> tuple[str | None, str | None]:
     """Locate cgroup v2 or v1 pids controller files."""
     # Check cgroup v2 directly in container root
     v2_max = "/sys/fs/cgroup/pids.max"
@@ -37,7 +36,7 @@ def get_cgroup_pids_paths() -> Tuple[Optional[str], Optional[str]]:
     # Inspect /proc/self/cgroup for nested cgroup path
     if os.path.exists("/proc/self/cgroup"):
         try:
-            with open("/proc/self/cgroup", "r") as f:
+            with open("/proc/self/cgroup") as f:
                 for line in f:
                     parts = line.strip().split(":")
                     if len(parts) == 3:
@@ -58,12 +57,12 @@ def get_cgroup_pids_paths() -> Tuple[Optional[str], Optional[str]]:
     return None, None
 
 
-def read_file_safe(path: Optional[str]) -> str:
+def read_file_safe(path: str | None) -> str:
     """Read a sysfs file safely."""
     if not path or not os.path.exists(path):
         return "N/A"
     try:
-        with open(path, "r") as f:
+        with open(path) as f:
             return f.read().strip()
     except Exception as e:
         return f"Error: {e}"

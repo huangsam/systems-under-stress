@@ -20,19 +20,17 @@ Production Best Practice:
 - Partition Key: ((tenant_id, date_bucket), event_id)
 - Result: Partitions stay < 100MB, sub-millisecond point reads, even token distribution.
 """
+
 from __future__ import annotations
 
 import datetime
-import subprocess
 import sys
 import time
 from pathlib import Path
 
-from cassandra import ConsistencyLevel
-from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
+from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.policies import WhiteListRoundRobinPolicy
-from cassandra.query import SimpleStatement
 
 COMPOSE_DIR = Path(__file__).resolve().parent.parent
 HOST = "127.0.0.1"
@@ -125,10 +123,7 @@ def run_experiment() -> None:
         # Ingest into Bucketed table (10 distinct date/tenant buckets)
         log(f"Ingesting {NUM_RECORDS:,} events evenly distributed across 10 buckets (Best Practice)...", "\033[1;32m")
         bucket_stmt = session.prepare(f"INSERT INTO {KEYSPACE}.bucketed_feed (tenant_id, date_bucket, event_id, payload) VALUES (?, ?, ?, ?)")
-        bucket_params = [
-            (f"tenant_{i % 10}", "2026-10-22", uuid.uuid1(), f"payload_data_{i}")
-            for i in range(NUM_RECORDS)
-        ]
+        bucket_params = [(f"tenant_{i % 10}", "2026-10-22", uuid.uuid1(), f"payload_data_{i}") for i in range(NUM_RECORDS)]
 
         t0 = time.perf_counter()
         execute_concurrent_with_args(session, bucket_stmt, bucket_params, concurrency=50)
@@ -139,12 +134,12 @@ def run_experiment() -> None:
 
         # Monolithic read
         t0 = time.perf_counter()
-        rows_mono = list(session.execute(f"SELECT * FROM {KEYSPACE}.monolithic_feed WHERE partition_key = 'ALL' LIMIT 1000"))
+        _rows_mono = list(session.execute(f"SELECT * FROM {KEYSPACE}.monolithic_feed WHERE partition_key = 'ALL' LIMIT 1000"))
         t_mono_read = (time.perf_counter() - t0) * 1000
 
         # Bucketed read
         t0 = time.perf_counter()
-        rows_bucket = list(session.execute(f"SELECT * FROM {KEYSPACE}.bucketed_feed WHERE tenant_id = 'tenant_0' AND date_bucket = '2026-10-22' LIMIT 1000"))
+        _rows_bucket = list(session.execute(f"SELECT * FROM {KEYSPACE}.bucketed_feed WHERE tenant_id = 'tenant_0' AND date_bucket = '2026-10-22' LIMIT 1000"))
         t_bucket_read = (time.perf_counter() - t0) * 1000
 
         print("\n" + "=" * 70)
@@ -153,7 +148,7 @@ def run_experiment() -> None:
         print(f"  Ingestion Strategy        : {'Monolithic (1 Partition)':<25} vs {'Bucketed (10 Partitions)':<25}")
         print(f"  Write Duration            : {t_mono_write:.3f}s                   vs {t_bucket_write:.3f}s")
         print(f"  Query Read Latency        : {t_mono_read:.2f} ms                  vs {t_bucket_read:.2f} ms")
-        print(f"  Partition Size Risk       : \033[31mCRITICAL (>100MB bloat)\033[0m   vs \033[32mSAFE (<10MB per bucket)\033[0m")
+        print("  Partition Size Risk       : \033[31mCRITICAL (>100MB bloat)\033[0m   vs \033[32mSAFE (<10MB per bucket)\033[0m")
         print("=" * 70 + "\n")
 
         print("\033[1mCassandra Partitioning Guardrails:\033[0m")

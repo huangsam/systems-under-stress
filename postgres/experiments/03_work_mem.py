@@ -17,10 +17,12 @@ Demonstrates:
 3. Production Sizing Dilemma:
    - Why setting global work_mem too high causes catastrophic server-wide OOM kills.
 """
+
 from __future__ import annotations
 
 import re
 import time
+
 import psycopg
 
 DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
@@ -51,7 +53,7 @@ def seed_data() -> None:
             cur.execute("""
             TRUNCATE TABLE analytics_events;
             INSERT INTO analytics_events (user_id, event_name, payload, created_at)
-            SELECT 
+            SELECT
                 (random() * 50000)::INT,
                 'page_view_' || (random() * 10)::INT,
                 md5(g::TEXT) || repeat('DATA_PAYLOAD_PADDING_', 2),

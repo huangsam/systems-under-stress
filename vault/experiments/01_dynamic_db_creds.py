@@ -19,11 +19,13 @@ Demonstrates:
    - PostgreSQL rejects subsequent connection attempts with password authentication failure
      or missing role error.
 """
+
 from __future__ import annotations
 
 import os
 import sys
 import time
+
 import hvac
 import psycopg
 from psycopg import errors
@@ -110,7 +112,7 @@ def configure_vault_database_engine(client: hvac.Client) -> None:
     print("\033[1;32m[+] Database connection 'postgresql' configured in Vault.\033[0m")
 
     creation_statements = [
-        'CREATE ROLE "{{name}}" WITH LOGIN PASSWORD \'{{password}}\' VALID UNTIL \'{{expiration}}\';',
+        "CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';",
         'GRANT SELECT ON ALL TABLES IN SCHEMA public TO "{{name}}";',
         'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO "{{name}}";',
     ]
@@ -180,13 +182,13 @@ def test_dynamic_credentials_lifecycle() -> None:
         with conn.cursor() as cur:
             cur.execute("SELECT current_user, session_user;")
             curr_user, sess_user = cur.fetchone()
-            print(f"\033[1;32m[+] Authenticated successfully to PostgreSQL!\033[0m")
+            print("\033[1;32m[+] Authenticated successfully to PostgreSQL!\033[0m")
             print(f"    - Current DB User : {curr_user}")
             print(f"    - Session User    : {sess_user}")
 
             cur.execute("SELECT classification_level, secret_payload FROM vault_classified_vault;")
             level, payload = cur.fetchone()
-            print(f"\033[1;32m[+] Query Execution Succeeded:\033[0m")
+            print("\033[1;32m[+] Query Execution Succeeded:\033[0m")
             print(f"    - Classification  : {level}")
             print(f"    - Secret Payload  : {payload}")
 

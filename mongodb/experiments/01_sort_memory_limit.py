@@ -20,12 +20,14 @@ Demonstrates:
    - Creating an index on the sort field completely eliminates the blocking SORT stage.
    - Results are streamed via B-Tree index traversal (IXSCAN) with 0 memory allocated to sorting.
 """
+
 from __future__ import annotations
 
 import argparse
 import sys
 import time
 from typing import Any
+
 import pymongo
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure
@@ -127,7 +129,7 @@ def run_experiment() -> None:
     print("\033[1;32m  Experiment 01: MongoDB 100MB In-Memory Sort Ceiling\033[0m")
     print(f"  Target DB      : {DB_NAME}")
     print(f"  Collection     : {COLL_NAME}")
-    print(f"  Default Cap    : 104,857,600 bytes (100MB internalQueryMaxBlockingSortMemoryUsage)")
+    print("  Default Cap    : 104,857,600 bytes (100MB internalQueryMaxBlockingSortMemoryUsage)")
     print("\033[1;34m" + "=" * 70 + "\033[0m\n")
 
     # Ensure any previous index on timestamp is dropped
@@ -151,25 +153,29 @@ def run_experiment() -> None:
         _ = list(cursor)
         elapsed_ms = (time.perf_counter() - t0) * 1000
         print("  \033[1;31mUnexpected: Query succeeded!\033[0m")
-        results_table.append({
-            "mode": "Unindexed (allow_disk_use=False)",
-            "status": "SUCCEEDED (Unexpected)",
-            "sort_stage": "SORT",
-            "disk_spill": "No",
-            "time_ms": f"{elapsed_ms:.1f}ms",
-        })
+        results_table.append(
+            {
+                "mode": "Unindexed (allow_disk_use=False)",
+                "status": "SUCCEEDED (Unexpected)",
+                "sort_stage": "SORT",
+                "disk_spill": "No",
+                "time_ms": f"{elapsed_ms:.1f}ms",
+            }
+        )
     except OperationFailure as err:
         elapsed_ms = (time.perf_counter() - t0) * 1000
         print(f"  \033[1;31m[EXPECTED FAILURE CAUGHT]\033[0m in {elapsed_ms:.1f}ms:")
         print(f"    Error Code    : {err.code}")
         print(f"    Error Details : {err.details.get('errmsg', str(err))}")
-        results_table.append({
-            "mode": "Unindexed (allow_disk_use=False)",
-            "status": f"FAILED (Code {err.code})",
-            "sort_stage": "SORT (Aborted)",
-            "disk_spill": "No (Disallowed)",
-            "time_ms": f"{elapsed_ms:.1f}ms",
-        })
+        results_table.append(
+            {
+                "mode": "Unindexed (allow_disk_use=False)",
+                "status": f"FAILED (Code {err.code})",
+                "sort_stage": "SORT (Aborted)",
+                "disk_spill": "No (Disallowed)",
+                "time_ms": f"{elapsed_ms:.1f}ms",
+            }
+        )
 
     # -------------------------------------------------------------
     # Scenario 2: Unindexed Sort with allowDiskUse=True (Spills to Disk)
@@ -189,13 +195,15 @@ def run_experiment() -> None:
         print(f"    Docs Examined : {details['totalDocsExamined']:,}")
         print(f"    Used Disk     : {details['usedDisk']} (Spilled temporary sort run to disk)")
         print(f"    Top Doc ID    : {top5[0]['order_id']} (ts={top5[0]['timestamp']})")
-        results_table.append({
-            "mode": "Unindexed (allowDiskUse)",
-            "status": "SUCCEEDED",
-            "sort_stage": "SORT (External)",
-            "disk_spill": str(details["usedDisk"]),
-            "time_ms": f"{elapsed_ms:.1f}ms",
-        })
+        results_table.append(
+            {
+                "mode": "Unindexed (allowDiskUse)",
+                "status": "SUCCEEDED",
+                "sort_stage": "SORT (External)",
+                "disk_spill": str(details["usedDisk"]),
+                "time_ms": f"{elapsed_ms:.1f}ms",
+            }
+        )
     except Exception as err:
         print(f"  \033[1;31mError during allowDiskUse: {err}\033[0m")
 
@@ -220,15 +228,17 @@ def run_experiment() -> None:
     print(f"  \033[1;32m[SUCCESS]\033[0m Completed in {elapsed_ms:.1f}ms (Explain: {details['executionTimeMillis']}ms)")
     print(f"    Sort Stage    : {'Eliminated (IXSCAN only)' if not details['has_sort_stage'] else 'SORT'}")
     print(f"    Index Used    : {details['has_ixscan_stage']} (B-Tree backward traversal)")
-    print(f"    Sort Memory   : 0 bytes (Streaming pipeline)")
+    print("    Sort Memory   : 0 bytes (Streaming pipeline)")
     print(f"    Top Doc ID    : {top5[0]['order_id']} (ts={top5[0]['timestamp']})")
-    results_table.append({
-        "mode": "Indexed Sort (B-Tree)",
-        "status": "SUCCEEDED",
-        "sort_stage": "None (IXSCAN)",
-        "disk_spill": "No (0 bytes RAM)",
-        "time_ms": f"{elapsed_ms:.1f}ms",
-    })
+    results_table.append(
+        {
+            "mode": "Indexed Sort (B-Tree)",
+            "status": "SUCCEEDED",
+            "sort_stage": "None (IXSCAN)",
+            "disk_spill": "No (0 bytes RAM)",
+            "time_ms": f"{elapsed_ms:.1f}ms",
+        }
+    )
 
     # -------------------------------------------------------------
     # Summary Comparison Table

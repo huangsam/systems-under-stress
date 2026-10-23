@@ -16,12 +16,14 @@ Execution:
 Fires rapid writes, issues 'docker compose kill -s SIGKILL' mid-stream,
 restarts the container, and verifies how many acknowledged writes survived.
 """
+
 from __future__ import annotations
 
 import subprocess
 import sys
 import time
 from pathlib import Path
+
 import redis
 
 COMPOSE_DIR = Path(__file__).resolve().parent.parent
@@ -65,7 +67,7 @@ def main() -> None:
     label, profile_name = get_active_profile(client)
 
     print("\033[1;34m" + "=" * 65 + "\033[0m")
-    print(f"\033[1;32mExperiment 03: Redis Persistence & Crash Recovery\033[0m")
+    print("\033[1;32mExperiment 03: Redis Persistence & Crash Recovery\033[0m")
     print(f"  Active Mode    : \033[1;33m{label}\033[0m")
     print(f"  Profile Name   : {profile_name}")
     print("\033[1;34m" + "=" * 65 + "\033[0m\n")
@@ -100,7 +102,7 @@ def main() -> None:
     print(f"    Acknowledged {acknowledged:,} writes ({rate:,.0f} writes/sec).")
 
     # Phase 2: Ungraceful crash (SIGKILL / kill -9)
-    print(f"\n\033[1;31m[*] Phase 2: Killing container with SIGKILL (simulating ungraceful power loss)...\033[0m")
+    print("\n\033[1;31m[*] Phase 2: Killing container with SIGKILL (simulating ungraceful power loss)...\033[0m")
     run_cmd(["docker", "compose", "--profile", profile_name, "kill", "-s", "SIGKILL"])
     client.close()
 

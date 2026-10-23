@@ -18,27 +18,28 @@ fun formatBytes(bytes: Long): String {
     return "${"%.1f".format(b)}TB"
 }
 
-fun parseInfo(rawInfo: String): Map<String, String> {
-    return rawInfo.lines()
+fun parseInfo(rawInfo: String): Map<String, String> =
+    rawInfo
+        .lines()
         .filter { it.contains(":") }
         .associate {
             val parts = it.split(":", limit = 2)
             parts[0].trim() to parts[1].trim()
         }
-}
 
-val jedis = try {
-    val j = Jedis(HOST, PORT)
-    j.ping()
-    j
-} catch (e: Exception) {
-    println("\u001B[1;31mError: Cannot connect to Redis on $HOST:$PORT.\u001B[0m")
-    println("Please start an experiment container first:")
-    println("  make up EXP=eviction-lru")
-    println("  make up EXP=eviction-noeviction")
-    System.exit(1)
-    throw e
-}
+val jedis =
+    try {
+        val j = Jedis(HOST, PORT)
+        j.ping()
+        j
+    } catch (e: Exception) {
+        println("\u001B[1;31mError: Cannot connect to Redis on $HOST:$PORT.\u001B[0m")
+        println("Please start an experiment container first:")
+        println("  make up EXP=eviction-lru")
+        println("  make up EXP=eviction-noeviction")
+        System.exit(1)
+        throw e
+    }
 
 jedis.use { client ->
     val infoMem = parseInfo(client.info("memory"))

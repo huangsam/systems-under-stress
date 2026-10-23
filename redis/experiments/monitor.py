@@ -5,10 +5,12 @@
 # ]
 # ///
 """Live Redis memory and eviction monitor."""
+
 from __future__ import annotations
 
 import sys
 import time
+
 import redis
 
 
@@ -44,7 +46,7 @@ def main() -> None:
 
             used = mem.get("used_memory", 0)
             max_mem = mem.get("maxmemory", 0)
-            policy = mem.get("maxmemory_policy", "none")
+            _policy = mem.get("maxmemory_policy", "none")
             evicted = stats.get("evicted_keys", 0)
             hits = stats.get("keyspace_hits", 0)
             misses = stats.get("keyspace_misses", 0)
@@ -61,12 +63,7 @@ def main() -> None:
             evict_str = f"{evicted:,} (+{evict_diff})" if evict_diff > 0 else f"{evicted:,}"
 
             print(
-                f"{format_bytes(used):>10} | "
-                f"{format_bytes(max_mem):>10} | "
-                f"{usage_pct:>7.1f}% | "
-                f"{evict_str:>14} | "
-                f"{total_keys:>12,} | "
-                f"{hit_ratio:>9.1f}%",
+                f"{format_bytes(used):>10} | {format_bytes(max_mem):>10} | {usage_pct:>7.1f}% | {evict_str:>14} | {total_keys:>12,} | {hit_ratio:>9.1f}%",
                 end="\r",
                 flush=True,
             )

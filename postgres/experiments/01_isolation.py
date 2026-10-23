@@ -16,10 +16,12 @@ Demonstrates:
    - Under SERIALIZABLE: PostgreSQL Serializable Snapshot Isolation (SSI) detects
      the read/write dependency cycle and aborts one transaction with SQLSTATE 40001.
 """
+
 from __future__ import annotations
 
 import threading
 import time
+
 import psycopg
 from psycopg import errors
 

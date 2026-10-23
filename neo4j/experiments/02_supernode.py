@@ -22,6 +22,7 @@ Demonstrates:
      transactions block and serialize on the supernode's exclusive lock.
    - Contrasts concurrent writes targeting a single supernode vs partitioned target nodes.
 """
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -30,7 +31,7 @@ import sys
 import time
 from typing import Any
 
-from neo4j import GraphDatabase, Driver
+from neo4j import Driver, GraphDatabase
 
 URI = "bolt://127.0.0.1:7687"
 AUTH = ("neo4j", "password123")
@@ -69,14 +70,8 @@ def reset_and_seed_supernode(driver: Driver, supernode_edges: int = 50000, spars
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
 
-        session.run(
-            "CREATE CONSTRAINT hub_id_uniq IF NOT EXISTS "
-            "FOR (h:Hub) REQUIRE h.id IS UNIQUE"
-        )
-        session.run(
-            "CREATE CONSTRAINT follower_id_uniq IF NOT EXISTS "
-            "FOR (f:Follower) REQUIRE f.id IS UNIQUE"
-        )
+        session.run("CREATE CONSTRAINT hub_id_uniq IF NOT EXISTS FOR (h:Hub) REQUIRE h.id IS UNIQUE")
+        session.run("CREATE CONSTRAINT follower_id_uniq IF NOT EXISTS FOR (f:Follower) REQUIRE f.id IS UNIQUE")
 
         # Create Hub nodes
         session.run(
@@ -112,12 +107,8 @@ def reset_and_seed_supernode(driver: Driver, supernode_edges: int = 50000, spars
             {"sparse_edges": sparse_edges},
         )
 
-        super_deg = session.run(
-            "MATCH (:Hub {id: 'supernode'})<-[r:FOLLOWS]-() RETURN count(r) AS cnt"
-        ).single()["cnt"]
-        sparse_deg = session.run(
-            "MATCH (:Hub {id: 'sparse_node'})<-[r:FOLLOWS]-() RETURN count(r) AS cnt"
-        ).single()["cnt"]
+        super_deg = session.run("MATCH (:Hub {id: 'supernode'})<-[r:FOLLOWS]-() RETURN count(r) AS cnt").single()["cnt"]
+        sparse_deg = session.run("MATCH (:Hub {id: 'sparse_node'})<-[r:FOLLOWS]-() RETURN count(r) AS cnt").single()["cnt"]
         print(f"[\033[1;32m+\033[0m] Supernode degree: {super_deg:,} edges | Sparse node degree: {sparse_deg} edges.")
 
 
@@ -126,30 +117,20 @@ def test_traversal_degradation(driver: Driver) -> None:
 
     with driver.session() as session:
         # 1. Query through Sparse Node (degree = 10)
-        query_sparse = (
-            "PROFILE "
-            "MATCH (h:Hub {id: 'sparse_node'})<-[:FOLLOWS]-(f:Follower) "
-            "WHERE f.id = 50005 "
-            "RETURN f.name AS name"
-        )
+        query_sparse = "PROFILE MATCH (h:Hub {id: 'sparse_node'})<-[:FOLLOWS]-(f:Follower) WHERE f.id = 50005 RETURN f.name AS name"
         t0 = time.perf_counter()
         res_sparse = session.run(query_sparse)
-        rec_sparse = res_sparse.single()
+        _rec_sparse = res_sparse.single()
         sum_sparse = res_sparse.consume()
         wall_sparse_ms = (time.perf_counter() - t0) * 1000.0
         hits_sparse = extract_total_db_hits(sum_sparse.profile)
 
         # 2. Query through Supernode (degree = 50,000)
         # Filters for a leaf near the tail of the relationship linked list
-        query_super = (
-            "PROFILE "
-            "MATCH (h:Hub {id: 'supernode'})<-[:FOLLOWS]-(f:Follower) "
-            "WHERE f.id = 49995 "
-            "RETURN f.name AS name"
-        )
+        query_super = "PROFILE MATCH (h:Hub {id: 'supernode'})<-[:FOLLOWS]-(f:Follower) WHERE f.id = 49995 RETURN f.name AS name"
         t1 = time.perf_counter()
         res_super = session.run(query_super)
-        rec_super = res_super.single()
+        _rec_super = res_super.single()
         sum_super = res_super.consume()
         wall_super_ms = (time.perf_counter() - t1) * 1000.0
         hits_super = extract_total_db_hits(sum_super.profile)

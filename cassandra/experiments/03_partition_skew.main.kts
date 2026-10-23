@@ -5,12 +5,12 @@
 @file:DependsOn("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 
 import com.datastax.oss.driver.api.core.CqlSession
-import com.datastax.oss.driver.api.core.cql.SimpleStatement
 import com.datastax.oss.driver.api.core.DefaultConsistencyLevel
+import com.datastax.oss.driver.api.core.cql.SimpleStatement
 import kotlinx.coroutines.*
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.future.await
 import java.net.InetSocketAddress
 import java.time.Instant
 import java.time.ZoneOffset
@@ -86,7 +86,7 @@ runBlocking {
             async(Dispatchers.IO) {
                 sem.withPermit {
                     val timestamp = baseInstant.plusSeconds(i.toLong())
-                    val bound = monoInsertStmt.bind("ALL", timestamp, "telemetry_data_packet_${i}")
+                    val bound = monoInsertStmt.bind("ALL", timestamp, "telemetry_data_packet_$i")
                         .setConsistencyLevel(DefaultConsistencyLevel.ONE)
                     sess.executeAsync(bound).await()
                 }
@@ -108,7 +108,7 @@ runBlocking {
                 sem.withPermit {
                     val timestamp = baseInstant.plusSeconds(i.toLong())
                     val bucket = i % NUM_BUCKETS
-                    val bound = bucketInsertStmt.bind("DEVICE-01", bucket, timestamp, "telemetry_data_packet_${i}")
+                    val bound = bucketInsertStmt.bind("DEVICE-01", bucket, timestamp, "telemetry_data_packet_$i")
                         .setConsistencyLevel(DefaultConsistencyLevel.ONE)
                     sess.executeAsync(bound).await()
                 }

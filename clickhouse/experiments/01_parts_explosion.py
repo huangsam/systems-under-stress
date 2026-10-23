@@ -18,6 +18,7 @@ Demonstrates:
 3. The Vectorized Solution (Batched Inserts): Inserting 2,000 rows in a single batch
    creates exactly 1 active data part, executing in sub-second time.
 """
+
 from __future__ import annotations
 
 import sys
@@ -114,7 +115,7 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
                 active_parts = get_active_parts(client, TABLE_NAME)
                 print(f"\n  \033[1;31m[!] WRITE REJECTED AT INSERT #{inserted_count + 1}!\033[0m")
                 print(f"      Active parts in system.parts : \033[1;31m{len(active_parts)}\033[0m")
-                print(f"      ClickHouse Error Code         : 252 (TOO_MANY_PARTS)")
+                print("      ClickHouse Error Code         : 252 (TOO_MANY_PARTS)")
                 print(f"      Engine Message                : {err_msg.strip()}")
                 break
             else:
@@ -148,7 +149,7 @@ def run_batched_insert(client: clickhouse_connect.driver.Client) -> None:
     active_parts = get_active_parts(client, TABLE_NAME)
     total_rows = client.command(f"SELECT count() FROM {TABLE_NAME}")
 
-    print(f"\n    Batch Status          : \033[1;32mSUCCESS\033[0m")
+    print("\n    Batch Status          : \033[1;32mSUCCESS\033[0m")
     print(f"    Total Rows in Table   : {total_rows:,}")
     print(f"    Active Parts Created  : \033[1;32m{len(active_parts)}\033[0m (Entire batch written as 1 contiguous part)")
     print(f"    Duration              : {elapsed * 1000:.2f} ms ({batch_size / max(elapsed, 0.001):,.0f} rows/sec)")

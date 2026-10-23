@@ -17,13 +17,14 @@ Demonstrates:
    - Upgrading legacy `vault:v1:...` ciphertexts to `vault:v2:...` via `rewrap_data`
      on the server without ever decrypting plaintext back to the application!
 """
+
 from __future__ import annotations
 
 import base64
 import sys
 import time
-import hvac
 
+import hvac
 
 VAULT_URL = "http://127.0.0.1:8200"
 VAULT_TOKEN = "root"
@@ -95,7 +96,7 @@ def main() -> None:
     print(f"    Batch Throughput Gain       : \033[1;32m{speedup:.1f}x Faster\033[0m")
 
     # 3. Part 2: Zero-Downtime Key Rotation & Server-Side Rewrap
-    print(f"\n\033[1;34m[*] Part 2: Zero-Downtime Key Rotation (v1 -> v2) & Rewrapping...\033[0m")
+    print("\n\033[1;34m[*] Part 2: Zero-Downtime Key Rotation (v1 -> v2) & Rewrapping...\033[0m")
     sample_v1 = batch_ciphertexts[0]
     print(f"    Original v1 Ciphertext : \033[1;33m{sample_v1[:45]}...\033[0m")
 

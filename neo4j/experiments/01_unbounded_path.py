@@ -20,13 +20,14 @@ Demonstrates:
    - Contrasts exhaustive variable-length matching against Neo4j's bidirectional BFS
      shortestPath((a)-[*]-(b)), demonstrating orders-of-magnitude reduction in DB hits.
 """
+
 from __future__ import annotations
 
 import sys
 import time
 from typing import Any
 
-from neo4j import GraphDatabase, Driver
+from neo4j import Driver, GraphDatabase
 
 URI = "bolt://127.0.0.1:7687"
 AUTH = ("neo4j", "password123")
@@ -70,10 +71,7 @@ def reset_and_seed_graph(driver: Driver, num_nodes: int = 2000, branching: int =
         session.run("MATCH (n) DETACH DELETE n")
 
         # Create unique constraint on Node(id)
-        session.run(
-            "CREATE CONSTRAINT node_id_uniq IF NOT EXISTS "
-            "FOR (n:Node) REQUIRE n.id IS UNIQUE"
-        )
+        session.run("CREATE CONSTRAINT node_id_uniq IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE")
 
         # Batch create nodes
         session.run(
@@ -113,11 +111,7 @@ def test_depth_explosion(driver: Driver, max_depth: int = 6) -> None:
 
     with driver.session() as session:
         for depth in range(1, max_depth + 1):
-            query = (
-                f"PROFILE "
-                f"MATCH p = (a:Node {{id: 0}})-[*1..{depth}]->(b:Node) "
-                f"RETURN count(p) AS path_count"
-            )
+            query = f"PROFILE MATCH p = (a:Node {{id: 0}})-[*1..{depth}]->(b:Node) RETURN count(p) AS path_count"
 
             wall_start = time.perf_counter()
             result = session.run(query)
@@ -132,10 +126,7 @@ def test_depth_explosion(driver: Driver, max_depth: int = 6) -> None:
             growth = f"{path_count / prev_paths:.1f}x" if prev_paths and prev_paths > 0 else "-"
             prev_paths = path_count
 
-            print(
-                f"{depth:<8}{path_count:<16,}{db_hits:<14,}{server_time_ms:<18.2f}"
-                f"{wall_elapsed_ms:<16.2f}{growth:<10}"
-            )
+            print(f"{depth:<8}{path_count:<16,}{db_hits:<14,}{server_time_ms:<18.2f}{wall_elapsed_ms:<16.2f}{growth:<10}")
 
 
 def test_shortest_path_comparison(driver: Driver, target_id: int = 500) -> None:
@@ -144,11 +135,7 @@ def test_shortest_path_comparison(driver: Driver, target_id: int = 500) -> None:
 
     with driver.session() as session:
         # 1. Exhaustive variable-length traversal (depth 1..6)
-        query_exhaustive = (
-            "PROFILE "
-            "MATCH p = (a:Node {id: 0})-[*1..6]->(b:Node {id: $target_id}) "
-            "RETURN count(p) AS paths"
-        )
+        query_exhaustive = "PROFILE MATCH p = (a:Node {id: 0})-[*1..6]->(b:Node {id: $target_id}) RETURN count(p) AS paths"
         t0 = time.perf_counter()
         res_ex = session.run(query_exhaustive, {"target_id": target_id})
         rec_ex = res_ex.single()
@@ -158,12 +145,7 @@ def test_shortest_path_comparison(driver: Driver, target_id: int = 500) -> None:
         ex_db_hits = extract_total_db_hits(sum_ex.profile)
 
         # 2. shortestPath (Fast bidirectional BFS)
-        query_shortest = (
-            "PROFILE "
-            "MATCH (a:Node {id: 0}), (b:Node {id: $target_id}) "
-            "MATCH p = shortestPath((a)-[*..15]->(b)) "
-            "RETURN length(p) AS path_len"
-        )
+        query_shortest = "PROFILE MATCH (a:Node {id: 0}), (b:Node {id: $target_id}) MATCH p = shortestPath((a)-[*..15]->(b)) RETURN length(p) AS path_len"
         t1 = time.perf_counter()
         res_sp = session.run(query_shortest, {"target_id": target_id})
         rec_sp = res_sp.single()

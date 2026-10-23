@@ -12,13 +12,16 @@ Demonstrates:
 2. Behavior under 'noeviction' (OOM error) vs 'allkeys-lru' (seamless eviction).
 3. Hit ratios under skewed (Zipfian-like 80/20) access patterns.
 """
+
 from __future__ import annotations
 
 import random
 import sys
 import time
+
+from redis.exceptions import OutOfMemoryError, ResponseError
+
 import redis
-from redis.exceptions import ResponseError, OutOfMemoryError
 
 
 def format_bytes(b: int) -> str:
@@ -47,7 +50,7 @@ def main() -> None:
     policy = info_mem.get("maxmemory_policy", "unknown")
 
     print("\033[1;34m" + "=" * 65 + "\033[0m")
-    print(f"\033[1;32mRedis Eviction Lab: Current Configuration\033[0m")
+    print("\033[1;32mRedis Eviction Lab: Current Configuration\033[0m")
     print(f"  Max Memory Limit : {format_bytes(max_memory)} ({max_memory:,} bytes)")
     print(f"  Eviction Policy  : \033[1;33m{policy}\033[0m")
     print("\033[1;34m" + "=" * 65 + "\033[0m\n")
@@ -86,12 +89,7 @@ def main() -> None:
             curr_mem = client.info("memory").get("used_memory", 0)
             stats = client.info("stats")
             evicted = stats.get("evicted_keys", 0)
-            print(
-                f"    Progress: {i+1:>5}/{TOTAL_ITEMS} | "
-                f"Used Mem: {format_bytes(curr_mem):>8} | "
-                f"Evicted: {evicted:>5} | "
-                f"OOM Errors: {oom_errors:>4}"
-            )
+            print(f"    Progress: {i + 1:>5}/{TOTAL_ITEMS} | Used Mem: {format_bytes(curr_mem):>8} | Evicted: {evicted:>5} | OOM Errors: {oom_errors:>4}")
 
     duration = time.time() - start_time
     print(f"\nPhase 1 Completed in {duration:.2f}s:")

@@ -19,6 +19,7 @@ Tests data durability across MongoDB Write Concerns during an ungraceful crash:
    - Mongod blocks acknowledgment until the write is flushed and fsynced to the on-disk journal.
    - On SIGKILL, WiredTiger journal recovery replays all committed writes: 0 lost acknowledged writes.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -70,7 +71,7 @@ def test_write_concern_durability(
     target_writes: int = 2500,
     kill_after: int = 1200,
 ) -> dict[str, Any]:
-    print(f"\n\033[1;34m" + "-" * 70 + "\033[0m")
+    print("\n\033[1;34m" + "-" * 70 + "\033[0m")
     w_val = write_concern.document.get("w", 1)
     j_val = write_concern.document.get("j", False)
     print(f"\033[1;33mTesting Mode: {mode_name}\033[0m (w={w_val}, j={j_val})")

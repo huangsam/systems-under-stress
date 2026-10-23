@@ -31,6 +31,7 @@ Scenarios tested:
 4. Cluster Healing:
    - Restart nodes and verify full consistency recovery.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -39,10 +40,11 @@ import sys
 import time
 from pathlib import Path
 
-from cassandra import ConsistencyLevel, Unavailable
-from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
+from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.query import SimpleStatement
+
+from cassandra import ConsistencyLevel, Unavailable
 
 COMPOSE_DIR = Path(__file__).resolve().parent.parent
 HOST = "127.0.0.1"

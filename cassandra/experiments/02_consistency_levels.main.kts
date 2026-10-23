@@ -4,8 +4,8 @@
 @file:DependsOn("org.slf4j:slf4j-nop:2.0.13")
 
 import com.datastax.oss.driver.api.core.CqlSession
-import com.datastax.oss.driver.api.core.cql.SimpleStatement
 import com.datastax.oss.driver.api.core.DefaultConsistencyLevel
+import com.datastax.oss.driver.api.core.cql.SimpleStatement
 import com.datastax.oss.driver.api.core.servererrors.UnavailableException
 import java.net.InetSocketAddress
 import java.time.Instant
