@@ -1,5 +1,8 @@
 # Systems Under Stress
 
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/huangsam/systems-under-stress/ci.yml)](https://github.com/huangsam/systems-under-stress/actions)
+[![License](https://img.shields.io/github/license/huangsam/systems-under-stress)](https://github.com/huangsam/systems-under-stress/blob/main/LICENSE)
+
 A hands-on, empirical systems engineering lab suite exploring the **hard operational boundaries, failure modes, and internal mechanics** of 8 foundational infrastructure technologies using Docker containers and Python/Kotlin workloads.
 
 > **Philosophy**: Instead of generating terabytes of data to observe how systems break, we **squeeze the container and engine resource limits** (`mem_limit`, `pids.max`, `work_mem`, `maxmemory`, `max_memory_usage`) so we can deterministically reproduce production failure signatures—OOM kills, cache stampedes, write skew, tombstone aborts, and parts explosions—in seconds on a laptop.
