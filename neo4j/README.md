@@ -63,7 +63,7 @@ make clean
 
 | Traversal Depth ($d$) | Total Paths Enumerated | Engine DB Hits | Server Execution Time (ms) | Client Wall Time (ms) | Growth Factor |
 |---|---|---|---|---|---|
-| **1 hop** | 4 | 9 | 0.8 ms | 1.9 ms | — |
+| **1 hop** | 4 | 9 | 0.8 ms | 1.9 ms | - |
 | **2 hops** | 16 | 37 | 1.2 ms | 2.4 ms | **4.0x** |
 | **3 hops** | 64 | 149 | 2.1 ms | 4.1 ms | **4.0x** |
 | **4 hops** | 256 | 597 | 5.8 ms | 9.3 ms | **4.0x** |

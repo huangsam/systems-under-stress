@@ -138,7 +138,7 @@ def run_write_skew_simulation(isolation_level: psycopg.IsolationLevel, label: st
     if remaining == 0:
         print("  \033[1;31m[!] WRITE SKEW ANOMALY OCCURRED!\033[0m")
         print("      Both transactions read overlapping snapshots, updated non-overlapping rows,")
-        print("      and committed successfully—violating the global system invariant.")
+        print("      and committed successfully - violating the global system invariant.")
     else:
         print("  \033[1;32m[✓] INVARIANT PRESERVED BY SERIALIZABLE SNAPSHOT ISOLATION (SSI)!\033[0m")
         print("      PostgreSQL detected the rw-antidependency cycle and aborted one transaction.")
