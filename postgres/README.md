@@ -15,13 +15,14 @@ postgres/
 ├── initdb.d/
 │   └── init.sql             # Automatic schema initialization
 ├── experiments/
-│   ├── 01_isolation.py      # Dirty reads & Write Skew (Repeatable Read vs Serializable)
-│   ├── 02_locks.py          # Hot row lock queues & deadlock detection
-│   └── 03_work_mem.py       # Sort spill-to-disk on low work_mem
+│   ├── 00_crash_course.py / .main.kts  # Baseline connectivity, CRUD & transactional rollback
+│   ├── 01_isolation.py / .main.kts     # Dirty reads & Write Skew (Repeatable Read vs Serializable)
+│   ├── 02_locks.py / .main.kts         # Hot row lock queues & deadlock detection
+│   └── 03_work_mem.py / .main.kts      # Sort spill-to-disk on low work_mem
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run friction-free with `uv run`.
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
 
 ---
 
@@ -104,6 +105,15 @@ make clean
 ### 3. Production & Systems Takeaways
 1. **The `work_mem` Multiplier Dilemma**: `work_mem` is **NOT** a global server-wide ceiling. It is allocated *per sort or hash node per query per connection*. A complex analytical query with 3 joins and 2 sorts can consume $5 \times \text{work\_mem}$. If 50 connections execute simultaneously, memory usage spikes to $250 \times \text{work\_mem}$, risking kernel OOM kills.
 2. **Best Practice**: Keep global `work_mem` conservative (4MB–16MB) in `postgresql.conf`, and elevate it dynamically for specific batch jobs or reporting queries using `SET LOCAL work_mem = '128MB'`.
+
+---
+
+## Primary Sources & Deep-Dive References
+
+- [PostgreSQL Documentation: Chapter 13 – Concurrency Control & Isolation Levels](https://www.postgresql.org/docs/current/transaction-iso.html) – Official specification for dirty read immunity, repeatable read snapshot guarantees, and SSI serialization failures.
+- Cahill, Rohm, Fekete (ACM SIGMOD 2008): [*Serializable Isolation for Snapshot Databases*](https://courses.cs.washington.edu/courses/cse544/11wi/papers/cahill-sigmod08.pdf) – Foundational paper behind SSI, accompanied by [Ports & Grittner (VLDB 2012): Serializable Snapshot Isolation in PostgreSQL](https://vldb.org/pvldb/vol5/p1850_danrkports_vldb2012.pdf) and the [PostgreSQL SSI Internal Architecture Wiki](https://wiki.postgresql.org/wiki/SSI).
+- [PostgreSQL Documentation: Explicit Locking & Deadlock Detection](https://www.postgresql.org/docs/current/explicit-locking.html) – Granular explanation of row-level exclusive locks (`FOR UPDATE`), lock queues, and `deadlock_timeout` detection cycles.
+- [PostgreSQL Documentation: Resource Consumption (`work_mem`)](https://www.postgresql.org/docs/current/runtime-config-resource.html#GUC-WORK-MEM) – Official documentation on memory limits for internal sort operations and hash tables before spilling to temporary disk files.
 
 ---
 

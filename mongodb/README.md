@@ -13,12 +13,14 @@ mongodb/
 ├── docker-compose.yml       # Pinned image (mongo:9.0.4), cgroups limits, profiles
 ├── Makefile                 # One-touch runner targets
 ├── experiments/
-│   ├── 01_sort_memory_limit.py    # 100MB in-memory sort limit vs allowDiskUse & B-Tree index
-│   └── 02_write_concern_crash.py  # Write durability & crash recovery across w:0, w:1, j:True
+│   ├── 00_crash_course.py / .main.kts        # BSON documents, aggregation pipelines & serverStatus
+│   ├── 01_sort_memory_limit.py / .main.kts   # 100MB in-memory sort limit vs allowDiskUse & B-Tree index
+│   ├── 02_write_concern_crash.py / .main.kts # Write durability & crash recovery across w:0, w:1, j:True
+│   └── 03_document_size_cap.py / .main.kts   # Document growth, 16MB BSON ceiling & bucket pattern
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run friction-free with `uv run`.
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
 
 ---
 
@@ -135,3 +137,21 @@ make down EXP=document-limits
 2. **Standalone vs Replica Set Write Concern Defaults**:
    - In a standalone MongoDB instance, the default write concern is `w: 1, j: false`. Acknowledged writes are held in RAM and are not guaranteed to survive a power outage or kernel panic.
    - For mission-critical transactional data (financial ledgers, order confirmations), applications must explicitly enforce `j: True` or utilize replica sets with `w: "majority"` and journaled durability.
+
+---
+
+## Primary Sources & Deep-Dive References
+
+- [MongoDB Manual: Sort Operations & In-Memory Limits](https://www.mongodb.com/docs/manual/reference/limits/#mongodb-limit-Sort-Operations) – Specification for the 100MB internal blocking sort limit and `allowDiskUse` semantics.
+- [MongoDB Manual: Write Concern Architecture](https://www.mongodb.com/docs/manual/core/replica-set-write-concern/) – Mechanical differences between unacknowledged (`w:0`), acknowledged (`w:1`), and journal-committed (`j:true`) writes.
+- [MongoDB Manual: BSON Document Size Limit (16MB)](https://www.mongodb.com/docs/manual/reference/limits/#mongodb-limit-BSON-Document-Size) – Explains the hard 16MB document boundary, WiredTiger reallocation overhead, and the Bucket Pattern.
+- [MongoDB Engineering: The Equality, Sort, Range (ESR) Rule](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-rule/) – Index optimization guidelines to eliminate blocking `SORT` query plan stages.
+
+---
+
+## Clean Reset & Teardown
+
+```bash
+# Wipe all containers and named volumes for this lab:
+make clean
+```

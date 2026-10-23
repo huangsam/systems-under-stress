@@ -11,14 +11,16 @@ This lab uses a single [`docker-compose.yml`](./docker-compose.yml) with **Docke
 ```text
 neo4j/
 ├── docker-compose.yml       # Pinned image, cgroups limits (512MB RAM), JVM heap caps (384MB), profiles
-├── Makefile                 # One-touch runner targets (up, run, soft-reset, cypher-shell, clean)
+├── Makefile                 # One-touch runner targets (up, run, run-kt, soft-reset, cypher-shell, clean)
 ├── experiments/
-│   ├── 01_unbounded_path.py # Combinatorial path explosion: variable-length hops vs shortestPath
-│   └── 02_supernode.py      # Dense supernodes (50k edges): pointer chasing & write lock contention
+│   ├── 00_crash_course.py / .main.kts            # Property graphs, Cypher traversals & dbms.components
+│   ├── 01_unbounded_path.py / .main.kts          # Combinatorial path explosion: variable-length hops vs shortestPath
+│   ├── 02_supernode.py / .main.kts               # Dense supernodes (50k edges): pointer chasing & write lock contention
+│   └── 03_cypher_vs_recursive_sql.py / .main.kts # Native index-free adjacency vs recursive CTE in PostgreSQL
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run friction-free with `uv run`.
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
 
 ### Host Safety & Resource Caps
 - **Docker Image**: `neo4j:5.26.32-community`
@@ -163,6 +165,15 @@ make down EXP=compare-sql
 - **Relationship Bucketing / Intermediate Tree Grouping**: Rather than attaching 500,000 orders directly to a single `Customer` node, bucket relationships by month or year: `(c:Customer)-[:HAS_YEAR]->(y:Year)-[:HAS_MONTH]->(m:Month)-[:PLACED]->(o:Order)`.
 - **Fanout on Read vs Fanout on Write**: For celebrity / high-fanout entities (e.g. social feeds), decouple relationship graph storage from live feed fanout using message queues (Kafka) and caching (Redis).
 - **Node Labels & Relationship Types**: Segregate high-cardinality edges into specialized relationship types (`:FOLLOWS_CELEBRITY` vs `:FOLLOWS_FRIEND`) so the Cypher planner avoids scanning irrelevant relationship record sub-chains.
+
+---
+
+## Primary Sources & Deep-Dive References
+
+- [Neo4j Manual: Cypher Query Tuning & Execution Plans](https://neo4j.com/docs/cypher-manual/current/planning-and-tuning/) – Details on DB hits, pipeline operators (`Expand(All)` vs `ShortestPath`), and cardinality estimation.
+- [Neo4j Architecture: Index-Free Adjacency Under the Hood](https://neo4j.com/docs/operations-manual/current/performance/) – Record store format (nodes, relationships, relationship chains) and pointer-based traversal mechanics.
+- [Neo4j Engineering: The Supernode Challenge in Graph Databases](https://neo4j.com/blog/dark-side-neo4j-worst-practices/) – Anatomy of dense node chains, record locking during concurrent edge insertions, and relationship bucketing patterns.
+- [Neo4j Graph Data Science: Path Finding Algorithms](https://neo4j.com/docs/graph-data-science/current/algorithms/pathfinding/) – Bidirectional BFS vs Dijkstra vs single-source shortest path performance comparisons.
 
 ---
 

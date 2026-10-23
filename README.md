@@ -63,4 +63,3 @@ Every database lab (`redis`, `postgres`, `clickhouse`, `mongodb`, `cassandra`, `
 - **Docker** (Docker Desktop, OrbStack, or Colima) with Compose v2
 - **[`uv`](https://docs.astral.sh/uv/)** (`brew install uv`) for zero-setup Python script execution
 - **[`kotlin`](https://kotlinlang.org/)** (`brew install kotlin`) for optional Kotlin `.main.kts` dual execution (JDK 21+)
-

@@ -11,16 +11,18 @@ This lab uses a single [`docker-compose.yml`](./docker-compose.yml) with **Docke
 ```text
 clickhouse/
 ├── docker-compose.yml       # Pinned image, cgroups limits (512M RAM, 1.0 CPU), profiles
-├── Makefile                 # One-touch runner targets (up, run, down, clean, client)
+├── Makefile                 # One-touch runner targets (up, run, run-kt, down, clean, client)
 ├── users.d/
 │   └── memory-limit.xml     # User profile override for max_memory_usage=64MB
 ├── experiments/
-│   ├── 01_parts_explosion.py # Un-batched single-row inserts vs batched ingestion
-│   └── 02_memory_limit.py    # Analytical RAM ceiling & external group-by disk spill
+│   ├── 00_crash_course.py / .main.kts      # Columnar ingestion, MergeTree basics & system.parts
+│   ├── 01_parts_explosion.py / .main.kts   # Un-batched single-row inserts vs batched ingestion
+│   ├── 02_memory_limit.py / .main.kts      # Analytical RAM ceiling & external group-by disk spill
+│   └── 03_codec_compression.py / .main.kts # Columnar codecs (DoubleDelta, Gorilla, ZSTD) vs NONE
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (`clickhouse-connect>=0.7.0`) and run friction-free with `uv run`.
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (`clickhouse-connect>=0.7.0`, run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
 
 ---
 
@@ -173,4 +175,22 @@ LIMIT 5;
 -- 3. Check active queries and current RAM consumption
 SELECT query_id, user, elapsed, memory_usage, query
 FROM system.processes;
+```
+
+---
+
+## Primary Sources & Deep-Dive References
+
+- [ClickHouse Documentation: The MergeTree Table Engine](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree) – Mechanics of data parts, background compaction (`optimize`), and the `parts_to_delay_insert` / `parts_to_throw_insert` backpressure limits.
+- [ClickHouse Documentation: Memory Management Settings (`max_memory_usage`)](https://clickhouse.com/docs/en/operations/settings/query-complexity#max-memory-usage) – Query memory limits, peak RAM tracking, and two-level aggregation spilling (`max_bytes_before_external_group_by`).
+- [ClickHouse Documentation: Column Compression Codecs](https://clickhouse.com/docs/en/sql-reference/statements/create/table#codecs) – Technical specifications for `DoubleDelta`, `T64`, `Gorilla`, and dictionary-encoded `LowCardinality` types.
+- [ClickHouse Architecture: Sparse Primary Indexes](https://clickhouse.com/docs/en/guides/best-practices/sparse-primary-indexes) – Why small unbatched inserts cause part fragmentation and how sparse primary indexes operate.
+
+---
+
+## Clean Reset & Teardown
+
+```bash
+# Wipe all containers and named volumes for this lab:
+make clean
 ```

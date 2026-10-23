@@ -14,6 +14,7 @@ linux/
 ├── docker-compose.yml       # Cgroups v2 controllers, ulimits, swap constraints
 ├── Makefile                 # One-touch runner targets (up, run, down, clean, sh, logs)
 ├── experiments/
+│   ├── 00_crash_course.py      # Kernel runtime, /proc/self/status, POSIX limits & cgroups v2
 │   ├── 01_fork_bomb_cgroup.py  # Spawns recursive processes under pids.max: 40
 │   ├── 02_fd_limits.py         # Sets ulimit -n 64 and saturates /proc/self/fd/
 │   └── 03_oom_killer.py        # Allocates 4MB chunks under 32M RAM to trip OOM 137
@@ -246,3 +247,22 @@ Containers are not virtual machines; they are standard Linux processes partition
    - `memory`: Hard memory ceilings (`memory.max`), swap limits, and OOM kills.
    - `pids`: Maximum concurrent task/thread count (`pids.max`).
    - `io`: Block I/O read/write bandwidth and IOPS limits.
+
+---
+
+## Primary Sources & Deep-Dive References
+
+- [Linux Kernel Documentation: Control Group v2 (cgroups-v2)](https://docs.kernel.org/admin-guide/cgroup-v2.html) – The definitive Linux kernel specification for `pids.max`, `memory.max`, `memory.events`, and unified hierarchical controllers.
+- [Linux Kernel Documentation: The Out-Of-Memory (OOM) Killer](https://docs.kernel.org/admin-guide/sysctl/vm.html) – Heuristics behind `oom_score`, `oom_score_adj`, and memory threshold overcommit behavior.
+- [Linux Programmer's Manual: `getrlimit` / `setrlimit`](https://man7.org/linux/man-pages/man2/getrlimit.2.html) – POSIX resource limit specifications for `RLIMIT_NOFILE`, `RLIMIT_NPROC`, and `RLIMIT_AS`.
+- [Linux Programmer's Manual: `proc(5)`](https://man7.org/linux/man-pages/man5/proc.5.html) – File descriptor table inspection via `/proc/[pid]/fd`, process status metrics via `/proc/[pid]/status`, and memory maps.
+- Kerrisk, Michael: *The Linux Programming Interface (TLPI)* – The canonical reference on Linux process lifecycle, file descriptor tables, and IPC signals.
+
+---
+
+## Clean Reset & Teardown
+
+```bash
+# Wipe all containers and networks for this lab:
+make clean
+```

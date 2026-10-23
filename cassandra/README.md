@@ -13,12 +13,10 @@ cassandra/
 ├── docker-compose.yml             # Base anchor &cassandra-base, cgroups limits, profiles
 ├── Makefile                       # One-touch runner targets (up, run, run-kt, down, clean, soft-reset, cqlsh)
 ├── experiments/
-│   ├── 01_tombstone_threshold.py  # Python PEP 723 runner
-│   ├── 01_tombstone_threshold.main.kts # Kotlin / DataStax Java Driver 4.x runner
-│   ├── 02_consistency_levels.py   # Python runner (3-node cluster PACELC)
-│   ├── 02_consistency_levels.main.kts  # Kotlin runner
-│   ├── 03_partition_skew.py       # Python runner (Monolithic vs Bucketed)
-│   └── 03_partition_skew.main.kts # Kotlin runner
+│   ├── 00_crash_course.py / .main.kts  # Cluster introspection, CQL basics & partition key routing
+│   ├── 01_tombstone_threshold.py / .main.kts # Tombstone accumulation, safety limits & failure abort
+│   ├── 02_consistency_levels.py / .main.kts  # 3-node cluster PACELC trade-offs under node failure
+│   └── 03_partition_skew.py / .main.kts      # Wide partition hotspots vs compound key bucketing
 └── README.md
 ```
 
@@ -147,12 +145,12 @@ make run SCRIPT=02_consistency_levels
 ======================================================================
   PACELC AVAILABILITY MATRIX UNDER NODE DEGRADATION
 ======================================================================
-  Cluster State                  | ONE (req 1)  | QUORUM (req 2) | ALL (req 3) 
+  Cluster State                  | ONE (req 1)  | QUORUM (req 2) | ALL (req 3)
   ------------------------------------------------------------------
-  3 Nodes Alive (Healthy)        | PASS         | PASS           | PASS        
+  3 Nodes Alive (Healthy)        | PASS         | PASS           | PASS
   2 Nodes Alive (node3 DOWN)     | PASS         | PASS           | FAIL (Unavailable)
   1 Node Alive (node2/3 DOWN)    | PASS         | FAIL           | FAIL (Unavailable)
-  Cluster Healed (3 Nodes)       | PASS         | PASS           | PASS        
+  Cluster Healed (3 Nodes)       | PASS         | PASS           | PASS
 ======================================================================
 ```
 
@@ -228,3 +226,21 @@ Because writes only hit sequential disk log (`CommitLog`) and memory (`Memtable`
 1. **Ad-hoc Analytical Queries**: Queries without the partition key require scanning the entire token ring across all nodes.
 2. **ACID Multi-Row Transactions**: Cassandra supports LightWeight Transactions (LWT via Paxos) for single partitions, but not distributed multi-table ACID transactions.
 3. **Queue / Churn Workloads**: As proven in Experiment 01, frequent deletes trigger `tombstone_failure_threshold` and cause GC death spirals.
+
+---
+
+## Primary Sources & Deep-Dive References
+
+- [Apache Cassandra Documentation: Tombstones & Compaction](https://cassandra.apache.org/doc/latest/cassandra/managing/operating/compaction/index.html) – The mechanics of delete markers, `gc_grace_seconds`, and `tombstone_failure_threshold`.
+- DeCandia et al. (ACM SOSP 2007): [*Dynamo: Amazon's Highly Available Key-value Store*](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) – The foundational paper behind Cassandra's peer-to-peer ring architecture, consistent hashing (Murmur3), and tunable quorum consistency ($R + W > N$).
+- Abadi, Daniel (IEEE Computer 2012): [*Consistency Tradeoffs in Modern Distributed Database System Design (CAP is only half the story / PACELC)*](https://www.cs.umd.edu/~abadi/papers/abadi-pacelc.pdf) – Formal proof of the PACELC theorem tested in Experiment 02.
+- [DataStax Documentation: Cassandra Data Modeling & Partition Sizing](https://docs.datastax.com/en/cql-oss/3.x/cql/cql_using/useCreateTable.html) – Guidelines on why partitions must be kept strictly under 100MB / 100,000 cells.
+
+---
+
+## Clean Reset & Teardown
+
+```bash
+# Wipe all containers and named volumes across all profiles:
+make clean
+```

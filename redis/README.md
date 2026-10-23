@@ -14,13 +14,14 @@ redis/
 ├── Makefile                 # One-touch runner targets
 ├── experiments/
 │   ├── monitor.py           # Real-time memory & eviction terminal stream
-│   ├── 01_eviction.py       # Stress memory limits & compare eviction policies
-│   ├── 02_stampede.py       # Cache stampede & locking fixes
-│   └── 03_persistence.py    # AOF vs RDB crash durability
+│   ├── 00_crash_course.py / .main.kts  # Core data structures, pipelining & INFO diagnostics
+│   ├── 01_eviction.py / .main.kts      # Stress memory limits & compare eviction policies
+│   ├── 02_stampede.py / .main.kts      # Cache stampede & locking fixes
+│   └── 03_persistence.py / .main.kts   # AOF vs RDB crash durability
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run friction-free with `uv run`.
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
 
 ---
 
@@ -124,6 +125,15 @@ We fired rapid pipelined writes, issued `docker compose kill -s SIGKILL` mid-str
 1. **Never rely on RDB alone for critical state**: RDB snapshots are great for cold backups and fast replica initialization, but fatal for disaster recovery because point-in-time snapshots lose up to 60+ seconds of confirmed user writes.
 2. **`appendfsync everysec` is the industry golden mean**: It delivers almost 85% of the raw in-memory write performance of RDB while bounding the worst-case disaster recovery blast radius to at most 1 second of transactions.
 3. **`appendfsync always` turns Redis into a disk engine**: Synchronous `fsync` slashes throughput from ~80k writes/sec to ~36k writes/sec even on fast Apple NVMe SSDs.
+
+---
+
+## Primary Sources & Deep-Dive References
+
+- [Redis Documentation: Key Eviction & Memory Management](https://redis.io/docs/latest/develop/reference/eviction/) – Detailed breakdown of `maxmemory`, eviction policies (`volatile-lru`, `allkeys-lru`, `allkeys-lfu`), and sampling precision.
+- Sanfilippo, Salvatore (Antirez): [*Random Notes on Redis 4.0 Memory Usage & LFU Eviction*](http://antirez.com/news/109) – Architecture behind approximated LRU vs 24-bit logarithmic counter LFU.
+- [Redis Documentation: Redis Persistence Demystified](https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/) – RDB snapshotting semantics, AOF write buffers, and OS `fork()` Copy-On-Write (COW) memory amplification.
+- Vattani, Chierichetti, Lowenstein (VLDB 2015): [*Optimal Probabilistic Cache Stampede Prevention*](https://vldb.org/pvldb/vol8/p886-vattani.pdf) – Mathematical analysis of the XFetch algorithm to prevent thundering herd / stampede conditions.
 
 ---
 

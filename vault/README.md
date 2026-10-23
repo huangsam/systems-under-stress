@@ -11,14 +11,16 @@ This lab uses a single [`docker-compose.yml`](./docker-compose.yml) with **Docke
 ```text
 vault/
 ├── docker-compose.yml       # Pinned image, cgroups limits (128M RAM, 0.5 CPU), profiles
-├── Makefile                 # One-touch runner targets (up, run, down, clean, vault-cli, logs)
+├── Makefile                 # One-touch runner targets (up, run, run-kt, down, clean, vault-cli, logs)
 ├── experiments/
-│   ├── 01_dynamic_db_creds.py # Dynamic PostgreSQL credentials & instant lease revocation
-│   └── 02_token_renewal.py    # Renewable child tokens & explicit_max_ttl boundary enforcement
+│   ├── 00_crash_course.py / .main.kts      # KV v2 secrets, token leases & system health
+│   ├── 01_dynamic_db_creds.py / .main.kts  # Dynamic PostgreSQL credentials & instant lease revocation
+│   ├── 02_token_renewal.py / .main.kts     # Renewable child tokens & explicit_max_ttl boundary enforcement
+│   └── 03_transit_throughput.py / .main.kts # Transit EaaS encryption, batching & key rotation
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (`hvac>=2.1.0`, `psycopg[binary]>=3.1.0`) and run friction-free with `uv run`.
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (`hvac>=2.1.0`, `psycopg[binary]>=3.1.0`, run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
 
 ---
 
@@ -193,3 +195,22 @@ make down EXP=transit-crypto
 - When Vault initializes, the Master Key is split into $N$ key shares (unseal keys) using **Shamir's Secret Sharing Scheme**, requiring a threshold $T$ (e.g., 3 of 5) to reconstruct.
 - When Vault reboots, it starts in a **Sealed** state: it can access storage but cannot decrypt the data encryption keys. Once $T$ unseal keys are submitted, Vault reconstructs the Master Key in memory, unseals itself, and begins serving requests.
 - Modern production setups use **Auto-Unseal** backed by AWS KMS, GCP Cloud KMS, Azure Key Vault, or PKCS#11 HSMs to eliminate human unseal rituals during container reboots.
+
+---
+
+## Primary Sources & Deep-Dive References
+
+- [HashiCorp Vault Documentation: Token Concepts & Lifecycle](https://developer.hashicorp.com/vault/docs/concepts/tokens) – Complete architecture of service tokens, child tokens, TTL renewal, and hard `explicit_max_ttl` ceilings.
+- [HashiCorp Vault Documentation: Dynamic Database Secrets Engine](https://developer.hashicorp.com/vault/docs/secrets/databases) – Role-based credential generation, dynamic role statements, and automated lease revocation mechanisms.
+- [HashiCorp Vault Documentation: KV Secrets Engine v2](https://developer.hashicorp.com/vault/docs/secrets/kv/kv-v2) – Versioning semantics, metadata storage, and soft delete vs permanent destroy (`destroy_secret_versions`).
+- [HashiCorp Vault Documentation: Transit Secrets Engine](https://developer.hashicorp.com/vault/docs/secrets/transit) – Encryption-as-a-Service, cryptographic key rotation, batch encryption APIs, and `rewrap` workflows.
+- Shamir, Adi (Communications of the ACM, 1979): [*How to Share a Secret*](https://web.mit.edu/6.857/OldStuff/Fall03/ref/Shamir-HowToShareASecret.pdf) – The mathematical polynomial interpolation foundation used in Vault's unseal ceremony.
+
+---
+
+## Clean Reset & Teardown
+
+```bash
+# Wipe all containers and named volumes for this lab:
+make clean
+```
