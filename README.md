@@ -1,6 +1,6 @@
-# Systems Under Stress (`systems-under-stress`)
+# Systems Under Stress
 
-A hands-on, empirical systems engineering lab suite exploring the **hard operational boundaries, failure modes, and internal mechanics** of 8 foundational infrastructure technologies using strictly bounded Docker containers and self-contained Python workloads.
+A hands-on, empirical systems engineering lab suite exploring the **hard operational boundaries, failure modes, and internal mechanics** of 8 foundational infrastructure technologies using Docker containers and Python/Kotlin workloads.
 
 > **Philosophy**: Instead of generating terabytes of data to observe how systems break, we **squeeze the container and engine resource limits** (`mem_limit`, `pids.max`, `work_mem`, `maxmemory`, `max_memory_usage`) so we can deterministically reproduce production failure signatures—OOM kills, cache stampedes, write skew, tombstone aborts, and parts explosions—in seconds on a laptop.
 
@@ -8,7 +8,7 @@ A hands-on, empirical systems engineering lab suite exploring the **hard operati
 
 ## Lab Matrix (24 Reproducible Experiments Across 8 Engines)
 
-| Engine | Experiments (`01`, `02`, `03`) | Primary Failure Signatures Reproduced |
+| Engine | Experiments | Primary Failure Signatures Reproduced |
 | :--- | :--- | :--- |
 | [**Redis**](./redis/) | Eviction (`maxmemory`), Cache Stampede, Crash Durability | `OOM command not allowed`, Thundering herd (100x), `SIGKILL` data loss |
 | [**PostgreSQL**](./postgres/) | Isolation Levels, Row Lock Contention, Sort `work_mem` | Write skew under `REPEATABLE READ`, Deadlock `40P01`, Disk spill |
@@ -18,21 +18,6 @@ A hands-on, empirical systems engineering lab suite exploring the **hard operati
 | [**Neo4j**](./neo4j/) | Unbounded Traversal, Supernodes, Cypher vs Recursive SQL | $\mathcal{O}(b^d)$ path explosion, 50k-edge lock contention, Recursive joins |
 | [**Vault**](./vault/) | Dynamic DB Credentials, Token Leases, Transit EaaS | Synchronous `DROP ROLE` cascade, `max_ttl` expiration, Crypto HTTP batching |
 | [**Linux**](./linux/) | Fork Bomb (`pids.max`), File Descriptors, OOM Killer | `EAGAIN` (`pids.max: 40`), `EMFILE` fd exhaustion, Exit Code 137 (`SIGKILL`) |
-
----
-
-## Architecture & Operational Invariants
-
-All labs strictly enforce the guardrails defined in [`AGENTS.md`](./AGENTS.md):
-
-1. **Zero Host Pollution ([PEP 723](https://peps.python.org/pep-0723/) + `uv`)**:
-   - Every Python workload declares its own dependencies inline at the top of the file.
-   - No `requirements.txt`, no manual `venv` activation—`uv run` resolves and caches isolated environments in milliseconds.
-2. **Single Compose with Isolated Profiles & Named Volumes**:
-   - Each technology directory uses a single `docker-compose.yml` with YAML anchors (`&base`) and dedicated per-experiment `profiles`.
-   - Every stateful profile mounts its own distinct named volume so experiments never cross-contaminate disk state.
-3. **Deterministic Readiness & Cgroups Safety**:
-   - Every service defines explicit `deploy.resources.limits` (`memory` and `cpus`), binds exclusively to loopback `127.0.0.1`, and uses native `healthcheck` blocks with `docker compose up -d --wait`.
 
 ---
 
@@ -60,7 +45,7 @@ make soft-reset
 make clean
 ```
 
-### Dual Runner Architecture (Python & Kotlin Scripting)
+### Dual Runner Architecture (Python & Kotlin)
 
 Every database lab (`redis`, `postgres`, `clickhouse`, `mongodb`, `cassandra`, `neo4j`, `vault`) supports dual first-class implementations:
 1. **Python (`.py`) via `uv`**: Zero-overhead execution with inline PEP 723 metadata.
