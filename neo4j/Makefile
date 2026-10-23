@@ -40,7 +40,6 @@ run:
 run-kt:
 	kotlin experiments/$(SCRIPT).main.kts
 
-
 cypher-shell:
 	docker compose exec -it $(EXP) cypher-shell -u neo4j -p password123
 

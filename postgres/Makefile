@@ -40,7 +40,6 @@ run:
 run-kt:
 	kotlin experiments/$(SCRIPT).main.kts
 
-
 psql:
 	docker compose exec -it $(EXP) psql -U postgres -d lab_db
 

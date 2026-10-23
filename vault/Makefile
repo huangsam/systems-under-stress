@@ -44,7 +44,6 @@ run:
 run-kt:
 	kotlin experiments/$(SCRIPT).main.kts
 
-
 vault-cli:
 	docker compose exec -it $(SERVICE) vault $(CMD)
 

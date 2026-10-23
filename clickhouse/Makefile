@@ -40,7 +40,6 @@ run:
 run-kt:
 	kotlin experiments/$(SCRIPT).main.kts
 
-
 client:
 	docker compose exec -it $(EXP) clickhouse-client
 

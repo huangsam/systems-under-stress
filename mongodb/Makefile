@@ -40,7 +40,6 @@ run:
 run-kt:
 	kotlin experiments/$(SCRIPT).main.kts
 
-
 mongosh:
 	docker compose exec -it $(EXP) mongosh lab_db
 
