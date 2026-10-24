@@ -1,18 +1,36 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.neo4j.driver:neo4j-java-driver:5.20.0")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import org.neo4j.driver.AuthTokens
 import org.neo4j.driver.GraphDatabase
 import kotlin.system.exitProcess
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val URI = "bolt://127.0.0.1:7687"
 val AUTH = AuthTokens.basic("neo4j", "password123")
 
 fun main() {
-    println("\n\u001B[1;36m" + "=".repeat(70) + "\u001B[0m")
-    println("\u001B[1;32mNeo4j Crash Course (Kotlin / Java Driver): Property Graphs & Cypher\u001B[0m")
-    println("\u001B[1;36m" + "=".repeat(70) + "\u001B[0m\n")
+    println("\n" + boldCyan("=".repeat(70)))
+    println(boldGreen("Neo4j Crash Course (Kotlin / Java Driver): Property Graphs & Cypher"))
+    println(boldCyan("=".repeat(70)) + "\n")
 
     val driver =
         try {
@@ -20,7 +38,7 @@ fun main() {
             d.verifyConnectivity()
             d
         } catch (e: Exception) {
-            println("\u001B[1;31m[!] Connection failed: ${e.message}\u001B[0m")
+            println(boldRed("[!] Connection failed: ${e.message}"))
             println("Start the lab container first: cd neo4j && make up EXP=traversal-depth")
             exitProcess(1)
         }
@@ -28,7 +46,7 @@ fun main() {
     driver.use { d ->
         d.session().use { session ->
             // 1. Version check
-            println("\u001B[1;34m[*] 1. Server Connectivity & Component Introspection\u001B[0m")
+            println(boldBlue("[*] 1. Server Connectivity & Component Introspection"))
             val compResult =
                 session.run(
                     "CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition;",
@@ -42,7 +60,7 @@ fun main() {
             session.run("MATCH (n:CrashCourse) DETACH DELETE n;")
 
             // 2. Nodes
-            println("\n\u001B[1;34m[*] 2. Creating Labeled Nodes with Properties\u001B[0m")
+            println("\n" + boldBlue("[*] 2. Creating Labeled Nodes with Properties"))
             val createNodesCypher =
                 """
                 CREATE (a:CrashCourse:Developer {id: 1, name: 'Alice', seniority: 'Principal'})
@@ -56,7 +74,7 @@ fun main() {
             println("    Created 3 Developer nodes and 2 Service nodes.")
 
             // 3. Relationships
-            println("\n\u001B[1;34m[*] 3. Creating Directed Relationships with Edge Attributes\u001B[0m")
+            println("\n" + boldBlue("[*] 3. Creating Directed Relationships with Edge Attributes"))
             val createEdgesCypher =
                 """
                 MATCH (a:CrashCourse:Developer {name: 'Alice'}), (b:CrashCourse:Developer {name: 'Bob'}),
@@ -72,7 +90,7 @@ fun main() {
             println("    Created 4 :MAINTAINS edges and 1 :DEPENDS_ON service-to-service edge.")
 
             // 4. Traversals
-            println("\n\u001B[1;34m[*] 4. Cypher Pattern Matching & Multi-Hop Traversal\u001B[0m")
+            println("\n" + boldBlue("[*] 4. Cypher Pattern Matching & Multi-Hop Traversal"))
             val queryDirect =
                 """
                 MATCH (d:CrashCourse:Developer)-[m:MAINTAINS]->(s:CrashCourse:Service)
@@ -100,7 +118,7 @@ fun main() {
             }
 
             // 5. Diagnostics
-            println("\n\u001B[1;34m[*] 5. Graph Diagnostics & Node Counts\u001B[0m")
+            println("\n" + boldBlue("[*] 5. Graph Diagnostics & Node Counts"))
             val countsRes =
                 session.run(
                     """
@@ -120,7 +138,7 @@ fun main() {
         }
     }
 
-    println("\n\u001B[1;32m[✓] Neo4j Crash Course completed successfully!\u001B[0m\n")
+    println("\n" + boldGreen("[✓] Neo4j Crash Course completed successfully!") + "\n")
 }
 
 main()

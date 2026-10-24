@@ -1,6 +1,16 @@
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.mongodb:mongodb-driver-sync:5.1.0")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.mongodb.MongoWriteException
 import com.mongodb.client.MongoClients
 import com.mongodb.client.model.Filters
@@ -10,6 +20,14 @@ import org.bson.Document
 val MONGO_URI = "mongodb://127.0.0.1:27017/"
 val DB_NAME = "lab_db"
 val BSON_MAX_BYTES = 16 * 1024 * 1024
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 fun formatBytes(bytes: Long): String {
     var b = bytes.toDouble()
@@ -21,17 +39,17 @@ fun formatBytes(bytes: Long): String {
 }
 
 fun main() {
-    println("\u001b[1;36m======================================================================\u001b[0m")
-    println("\u001b[1;36mExperiment 03 (Kotlin): Unbounded Array Growth & 16MB BSON Limit\u001b[0m")
+    println(boldCyan("=".repeat(70)))
+    println(boldCyan("Experiment 03 (Kotlin): Unbounded Array Growth & 16MB BSON Limit"))
     println("Demonstrating reallocation latency degradation and the hard 16MB ceiling.")
-    println("\u001b[1;36m======================================================================\u001b[0m\n")
+    println(boldCyan("=".repeat(70)) + "\n")
 
     val client = try {
         val c = MongoClients.create(MONGO_URI)
         c.getDatabase("admin").runCommand(Document("ping", 1))
         c
     } catch (e: Exception) {
-        println("\u001b[1;31mError: Cannot connect to MongoDB on 127.0.0.1:27017: ${e.message}\u001b[0m")
+        println(boldRed("Error: Cannot connect to MongoDB on 127.0.0.1:27017: ${e.message}"))
         println("Start the container first: cd mongodb && make up EXP=document-limits")
         return
     }
@@ -43,7 +61,7 @@ fun main() {
     bucketed.drop()
 
     // Part 1: Unbounded array push until 16MB failure
-    println("\u001b[1;34m[*] Part 1: Appending 256KB event batches via \$push until 16MB crash...\u001b[0m")
+    println(boldBlue("[*] Part 1: Appending 256KB event batches via \$push until 16MB crash..."))
     unbounded.insertOne(Document("_id", "device_001").append("events", emptyList<Document>()))
 
     val chunkSize = 256 * 1024
@@ -67,16 +85,16 @@ fun main() {
         } catch (e: Exception) {
             val elapsed = System.currentTimeMillis() - t0
             val msg = e.message ?: ""
-            println("\n  \u001b[1;31m[!] WRITE FAILED AT APPEND #$step (Document Size: ~${formatBytes(totalAppended)})!\u001b[0m")
+            println("\n  ${boldRed("[!] WRITE FAILED AT APPEND #$step (Document Size: ~${formatBytes(totalAppended)})!")}")
             println("      Latency on Crash Attempt : ${elapsed}ms")
             println("      Engine Error Diagnostics : ${msg.lines().firstOrNull() ?: msg}")
-            println("\n  \u001b[1;32m[✓] Failure Reproduced:\u001b[0m Hard BSON limit (16,777,216 bytes) enforced.")
+            println("\n  ${boldGreen("[✓] Failure Reproduced:")} Hard BSON limit (16,777,216 bytes) enforced.")
             break
         }
     }
 
     // Part 2: Bucket Pattern Remediation
-    println("\n\u001b[1;34m[*] Part 2: Bucket Pattern (Fixed capacity per document container)...\u001b[0m")
+    println("\n" + boldBlue("[*] Part 2: Bucket Pattern (Fixed capacity per document container)..."))
     val eventsToWrite = 1000
     val bucketSize = 100
     val smallPayload = "x".repeat(500)
@@ -96,19 +114,19 @@ fun main() {
     val bucketElapsed = System.currentTimeMillis() - tStart
     val countBuckets = bucketed.countDocuments()
 
-    println("    Status          : \u001b[1;32mSUCCESS\u001b[0m")
+    println("    Status          : ${boldGreen("SUCCESS")}")
     println("    Events Written  : ${"%,d".format(eventsToWrite)}")
     println("    Buckets Created : $countBuckets (Each bucket capped at $bucketSize events)")
     println("    Total Duration  : ${bucketElapsed}ms (%.2f ms/write)".format(bucketElapsed.toDouble() / eventsToWrite))
 
-    println("\n\u001b[1;32m=================================================================")
+    println("\n" + boldGreen("=".repeat(65)))
     println("DATA MODELING TAKEAWAYS")
-    println("=================================================================\u001b[0m")
+    println(boldGreen("=".repeat(65)))
     println("1. Growing arrays via \$push forces WiredTiger to repeatedly reallocate and rewrite the entire doc.")
     println("2. The 16MB BSON hard ceiling cannot be increased via configuration.")
     println("3. The Bucket Pattern bounds document sizes, guarantees O(1) write latency, and avoids")
     println("   catastrophic production document overflows.")
-    println("=================================================================\n")
+    println(boldGreen("=".repeat(65)) + "\n")
 }
 
 main()

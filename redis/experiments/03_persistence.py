@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "redis>=5.0.0",
 # ]
 # ///
@@ -24,9 +25,14 @@ import sys
 import time
 from pathlib import Path
 
+from rich.console import Console
+
 import redis
 
 COMPOSE_DIR = Path(__file__).resolve().parent.parent
+
+
+console = Console()
 
 
 def run_cmd(cmd: list[str]) -> subprocess.CompletedProcess:
@@ -57,7 +63,7 @@ def main() -> None:
     try:
         client.ping()
     except redis.ConnectionError:
-        print("\033[1;31mError: Cannot connect to Redis on 127.0.0.1:6379.\033[0m")
+        console.print("[bold red]Error: Cannot connect to Redis on 127.0.0.1:6379.[/]")
         print("Please start a persistence profile first:")
         print("  make up EXP=persistence-rdb     # Test RDB crash data loss")
         print("  make up EXP=persistence-aof     # Test AOF everysec durability")
@@ -66,11 +72,11 @@ def main() -> None:
 
     label, profile_name = get_active_profile(client)
 
-    print("\033[1;34m" + "=" * 65 + "\033[0m")
-    print("\033[1;32mExperiment 03: Redis Persistence & Crash Recovery\033[0m")
-    print(f"  Active Mode    : \033[1;33m{label}\033[0m")
+    console.print("[bold blue]" + "=" * 65 + "[/]")
+    console.print("[bold green]Experiment 03: Redis Persistence & Crash Recovery[/]")
+    console.print(f"  Active Mode    : [bold yellow]{label}[/]")
     print(f"  Profile Name   : {profile_name}")
-    print("\033[1;34m" + "=" * 65 + "\033[0m\n")
+    console.print("[bold blue]" + "=" * 65 + "[/]\n")
 
     # Clean existing data in-memory
     print("Flushing database for a clean test run...")
@@ -102,7 +108,7 @@ def main() -> None:
     print(f"    Acknowledged {acknowledged:,} writes ({rate:,.0f} writes/sec).")
 
     # Phase 2: Ungraceful crash (SIGKILL / kill -9)
-    print("\n\033[1;31m[*] Phase 2: Killing container with SIGKILL (simulating ungraceful power loss)...\033[0m")
+    console.print("\n[bold red][*] Phase 2: Killing container with SIGKILL (simulating ungraceful power loss)...[/]")
     run_cmd(["docker", "compose", "--profile", profile_name, "kill", "-s", "SIGKILL"])
     client.close()
 
@@ -137,18 +143,18 @@ def main() -> None:
     loss_pct = (lost_writes / acknowledged * 100) if acknowledged > 0 else 0
 
     # Summary Report
-    print("\n\033[1;32m" + "=" * 65)
+    console.print("\n[bold green]" + "=" * 65)
     print("EXPERIMENT 03 SUMMARY REPORT")
-    print("=" * 65 + "\033[0m")
-    print(f"Persistence Configuration   : \033[1;33m{label}\033[0m")
+    console.print("=" * 65 + "[/]")
+    console.print(f"Persistence Configuration   : [bold yellow]{label}[/]")
     print(f"Writes Acknowledged by Redis : {acknowledged:,}")
-    print(f"Writes Recovered After Crash : \033[1;32m{survived:,}\033[0m")
+    console.print(f"Writes Recovered After Crash : [bold green]{survived:,}[/]")
     print(f"Highest Key Recovered        : seq:{highest_survived:06d}")
-    print(f"Total Lost Writes            : \033[1;31m{lost_writes:,}\033[0m ({loss_pct:.1f}%)")
+    console.print(f"Total Lost Writes            : [bold red]{lost_writes:,}[/] ({loss_pct:.1f}%)")
     print("=" * 65)
 
     if lost_writes > 0:
-        print(f"\n\033[1;31m[!] DATA LOSS OBSERVED:\033[0m {lost_writes:,} confirmed writes disappeared on crash.")
+        console.print(f"\n[bold red][!] DATA LOSS OBSERVED:[/] {lost_writes:,} confirmed writes disappeared on crash.")
         if "RDB" in label:
             print("Why? RDB only snapshots periodically (e.g. every 60s). All in-memory writes")
             print("since the last snapshot were completely lost when the process was killed.")
@@ -156,7 +162,7 @@ def main() -> None:
             print("Why? AOF 'everysec' buffers writes in an OS buffer and fsyncs once per second.")
             print("Writes from the final incomplete 1-second fsync window were lost.")
     else:
-        print("\n\033[1;32m[✓] ZERO DATA LOSS:\033[0m 100% of acknowledged writes were successfully recovered from disk!")
+        console.print("\n[bold green][✓] ZERO DATA LOSS:[/] 100% of acknowledged writes were successfully recovered from disk!")
         print("Every single command was synchronously fsync'd before returning to the client.")
 
     client.close()

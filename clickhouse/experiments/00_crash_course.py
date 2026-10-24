@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "clickhouse-connect>=0.7.0",
 # ]
 # ///
@@ -21,31 +22,35 @@ import sys
 from datetime import UTC, datetime
 
 import clickhouse_connect
+from rich.console import Console
 
 HOST = "127.0.0.1"
 PORT = 8123
 TABLE_NAME = "crash_course_telemetry"
 
 
+console = Console()
+
+
 def main() -> None:
-    print("\n\033[1;36m" + "=" * 70 + "\033[0m")
-    print("\033[1;32mClickHouse Crash Course: Columnar Engine & Vectorized Analytics\033[0m")
-    print("\033[1;36m" + "=" * 70 + "\033[0m\n")
+    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
+    console.print("[bold green]ClickHouse Crash Course: Columnar Engine & Vectorized Analytics[/]")
+    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
 
     try:
         client = clickhouse_connect.get_client(host=HOST, port=PORT, username="default", password="")
     except Exception as e:
-        print(f"\033[1;31m[!] Connection failed: {e}\033[0m")
+        console.print(f"[bold red][!] Connection failed: {e}[/]")
         print("Start the lab container first: cd clickhouse && make up EXP=parts-limit")
         sys.exit(1)
 
     # 1. Connectivity & Version
-    print("\033[1;34m[*] 1. Server Version & Connectivity\033[0m")
+    console.print("[bold blue][*] 1. Server Version & Connectivity[/]")
     version = client.command("SELECT version()")
     print(f"    ClickHouse Version: {version}")
 
     # 2. Table Creation
-    print("\n\033[1;34m[*] 2. Creating MergeTree Engine Table\033[0m")
+    console.print("\n[bold blue][*] 2. Creating MergeTree Engine Table[/]")
     client.command(f"DROP TABLE IF EXISTS {TABLE_NAME}")
     client.command(f"""
         CREATE TABLE {TABLE_NAME} (
@@ -59,7 +64,7 @@ def main() -> None:
     print(f"    Created table '{TABLE_NAME}' with specialized codecs (DoubleDelta, Gorilla, LowCardinality).")
 
     # 3. Columnar Batch Insert
-    print("\n\033[1;34m[*] 3. Columnar Batch Insert (Block Append)\033[0m")
+    console.print("\n[bold blue][*] 3. Columnar Batch Insert (Block Append)[/]")
     base_time = int(datetime.now(UTC).timestamp())
     column_data = []
     devices = ["sensor-alpha", "sensor-beta", "sensor-gamma"]
@@ -79,7 +84,7 @@ def main() -> None:
     print(f"    Appended {len(column_data):,} rows in a single compressed columnar block.")
 
     # 4. Vectorized Analytical Aggregation
-    print("\n\033[1;34m[*] 4. Vectorized Analytical Aggregations\033[0m")
+    console.print("\n[bold blue][*] 4. Vectorized Analytical Aggregations[/]")
     query = f"""
         SELECT
             metric_type,
@@ -98,7 +103,7 @@ def main() -> None:
         print(f"      - {row[0]}: count={row[1]}, min={row[2]}, avg={row[3]}, max={row[4]}, p95={row[5]}")
 
     # 5. Diagnostics: system.parts
-    print("\n\033[1;34m[*] 5. Storage Introspection (system.parts)\033[0m")
+    console.print("\n[bold blue][*] 5. Storage Introspection (system.parts)[/]")
     parts_query = f"""
         SELECT
             name,
@@ -117,7 +122,7 @@ def main() -> None:
     client.command(f"DROP TABLE IF EXISTS {TABLE_NAME}")
     print(f"    Cleaned up demo table '{TABLE_NAME}'.")
 
-    print("\n\033[1;32m[✓] ClickHouse Crash Course completed successfully!\033[0m\n")
+    console.print("\n[bold green][✓] ClickHouse Crash Course completed successfully![/]\n")
 
 
 if __name__ == "__main__":

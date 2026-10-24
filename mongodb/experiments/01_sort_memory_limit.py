@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "pymongo>=4.6.0",
 # ]
 # ///
@@ -31,6 +32,7 @@ from typing import Any
 import pymongo
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure
+from rich.console import Console
 
 MONGO_URI = "mongodb://127.0.0.1:27017/"
 DB_NAME = "lab_db"
@@ -39,12 +41,15 @@ TARGET_DOCS = 100_000
 PAYLOAD_SIZE = 1_100  # ~1.1 KB payload per doc -> 100,000 docs ≈ 115 MB BSON
 
 
+console = Console()
+
+
 def get_client() -> MongoClient:
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2500)
     try:
         client.admin.command("ping")
     except ConnectionFailure:
-        print("\033[1;31m[ERROR] Cannot connect to MongoDB on 127.0.0.1:27017.\033[0m")
+        console.print("[bold red][ERROR] Cannot connect to MongoDB on 127.0.0.1:27017.[/]")
         print("\nPlease start the 'unindexed-sort' container first:")
         print("  cd mongodb && make up EXP=unindexed-sort\n")
         sys.exit(1)
@@ -125,12 +130,12 @@ def run_experiment() -> None:
     db = client[DB_NAME]
     coll = db[COLL_NAME]
 
-    print("\033[1;34m" + "=" * 70 + "\033[0m")
-    print("\033[1;32m  Experiment 01: MongoDB 100MB In-Memory Sort Ceiling\033[0m")
+    console.print("[bold blue]" + "=" * 70 + "[/]")
+    console.print("[bold green]  Experiment 01: MongoDB 100MB In-Memory Sort Ceiling[/]")
     print(f"  Target DB      : {DB_NAME}")
     print(f"  Collection     : {COLL_NAME}")
     print("  Default Cap    : 104,857,600 bytes (100MB internalQueryMaxBlockingSortMemoryUsage)")
-    print("\033[1;34m" + "=" * 70 + "\033[0m\n")
+    console.print("[bold blue]" + "=" * 70 + "[/]\n")
 
     # Ensure any previous index on timestamp is dropped
     for idx_name in coll.index_information():
@@ -145,14 +150,14 @@ def run_experiment() -> None:
     # -------------------------------------------------------------
     # Scenario 1: Unindexed Sort with allow_disk_use(False) (Strict In-Memory)
     # -------------------------------------------------------------
-    print("\n\033[1;33m[Scenario 1] Unindexed Sort with allow_disk_use(False) (In-Memory Only)\033[0m")
+    console.print("\n[bold yellow][Scenario 1] Unindexed Sort with allow_disk_use(False) (In-Memory Only)[/]")
     print("  Query: db.orders.find().sort('timestamp', -1).allow_disk_use(False)")
     t0 = time.perf_counter()
     try:
         cursor = coll.find({}).sort("timestamp", -1).allow_disk_use(False)
         _ = list(cursor)
         elapsed_ms = (time.perf_counter() - t0) * 1000
-        print("  \033[1;31mUnexpected: Query succeeded!\033[0m")
+        console.print("  [bold red]Unexpected: Query succeeded![/]")
         results_table.append(
             {
                 "mode": "Unindexed (allow_disk_use=False)",
@@ -164,7 +169,7 @@ def run_experiment() -> None:
         )
     except OperationFailure as err:
         elapsed_ms = (time.perf_counter() - t0) * 1000
-        print(f"  \033[1;31m[EXPECTED FAILURE CAUGHT]\033[0m in {elapsed_ms:.1f}ms:")
+        console.print(f"  [bold red][EXPECTED FAILURE CAUGHT][/] in {elapsed_ms:.1f}ms:")
         print(f"    Error Code    : {err.code}")
         print(f"    Error Details : {err.details.get('errmsg', str(err))}")
         results_table.append(
@@ -180,7 +185,7 @@ def run_experiment() -> None:
     # -------------------------------------------------------------
     # Scenario 2: Unindexed Sort with allowDiskUse=True (Spills to Disk)
     # -------------------------------------------------------------
-    print("\n\033[1;33m[Scenario 2] Unindexed Sort WITH allowDiskUse=True (Spill to Disk)\033[0m")
+    console.print("\n[bold yellow][Scenario 2] Unindexed Sort WITH allowDiskUse=True (Spill to Disk)[/]")
     print("  Query: db.orders.find().sort('timestamp', -1).allow_disk_use(True)")
     t0 = time.perf_counter()
     try:
@@ -191,7 +196,7 @@ def run_experiment() -> None:
         top5 = list(cursor)
         elapsed_ms = (time.perf_counter() - t0) * 1000
 
-        print(f"  \033[1;32m[SUCCESS]\033[0m Completed in {elapsed_ms:.1f}ms (Explain: {details['executionTimeMillis']}ms)")
+        console.print(f"  [bold green][SUCCESS][/] Completed in {elapsed_ms:.1f}ms (Explain: {details['executionTimeMillis']}ms)")
         print(f"    Docs Examined : {details['totalDocsExamined']:,}")
         print(f"    Used Disk     : {details['usedDisk']} (Spilled temporary sort run to disk)")
         print(f"    Top Doc ID    : {top5[0]['order_id']} (ts={top5[0]['timestamp']})")
@@ -205,12 +210,12 @@ def run_experiment() -> None:
             }
         )
     except Exception as err:
-        print(f"  \033[1;31mError during allowDiskUse: {err}\033[0m")
+        console.print(f"  [bold red]Error during allowDiskUse: {err}[/]")
 
     # -------------------------------------------------------------
     # Scenario 3: Indexed Sort (B-Tree Index Scan - 0 Sort Memory)
     # -------------------------------------------------------------
-    print("\n\033[1;33m[Scenario 3] Indexed Sort (B-Tree Index on {'timestamp': -1})\033[0m")
+    console.print("\n[bold yellow][Scenario 3] Indexed Sort (B-Tree Index on {'timestamp': -1})[/]")
     print("  Creating index: db.orders.create_index([('timestamp', -1)])...")
     idx_t0 = time.perf_counter()
     coll.create_index([("timestamp", -1)], name="idx_timestamp_desc")
@@ -225,7 +230,7 @@ def run_experiment() -> None:
     top5 = list(cursor)
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
-    print(f"  \033[1;32m[SUCCESS]\033[0m Completed in {elapsed_ms:.1f}ms (Explain: {details['executionTimeMillis']}ms)")
+    console.print(f"  [bold green][SUCCESS][/] Completed in {elapsed_ms:.1f}ms (Explain: {details['executionTimeMillis']}ms)")
     print(f"    Sort Stage    : {'Eliminated (IXSCAN only)' if not details['has_sort_stage'] else 'SORT'}")
     print(f"    Index Used    : {details['has_ixscan_stage']} (B-Tree backward traversal)")
     print("    Sort Memory   : 0 bytes (Streaming pipeline)")
@@ -243,14 +248,14 @@ def run_experiment() -> None:
     # -------------------------------------------------------------
     # Summary Comparison Table
     # -------------------------------------------------------------
-    print("\n\033[1;34m" + "=" * 80 + "\033[0m")
-    print("\033[1;37mExecution Summary & Engine Behavior:\033[0m")
-    print("\033[1;34m" + "-" * 80 + "\033[0m")
+    console.print("\n[bold blue]" + "=" * 80 + "[/]")
+    console.print("[bold white]Execution Summary & Engine Behavior:[/]")
+    console.print("[bold blue]" + "-" * 80 + "[/]")
     print(f"{'Strategy':<26} | {'Outcome':<18} | {'Sort Stage':<16} | {'Spill Disk':<10} | {'Latency':<8}")
     print("-" * 80)
     for row in results_table:
         print(f"{row['mode']:<26} | {row['status']:<18} | {row['sort_stage']:<16} | {row['disk_spill']:<10} | {row['time_ms']:<8}")
-    print("\033[1;34m" + "=" * 80 + "\033[0m\n")
+    console.print("[bold blue]" + "=" * 80 + "[/]\n")
 
 
 def main() -> None:

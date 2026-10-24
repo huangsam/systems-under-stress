@@ -1,5 +1,6 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("com.datastax.oss:java-driver-core:4.17.0")
 @file:DependsOn("org.slf4j:slf4j-nop:2.0.13")
 
@@ -7,10 +8,27 @@ import com.datastax.oss.driver.api.core.CqlSession
 import com.datastax.oss.driver.api.core.DefaultConsistencyLevel
 import com.datastax.oss.driver.api.core.cql.SimpleStatement
 import com.datastax.oss.driver.api.core.servererrors.UnavailableException
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import java.net.InetSocketAddress
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val HOST = "127.0.0.1"
 val PORT = 9042
@@ -18,9 +36,9 @@ val DC = "datacenter1"
 val KEYSPACE = "lab_consistency"
 val TABLE = "accounts"
 
-fun log(msg: String, color: String = "\u001B[0m") {
+fun log(msg: String, style: (String) -> String = { it }) {
     val time = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneOffset.UTC).format(Instant.now())
-    println("\u001B[2m[$time]\u001B[0m $color$msg\u001B[0m")
+    println("${dim("[$time]")} ${style(msg)}")
 }
 
 fun dockerCmd(vararg args: String): Int {
@@ -37,13 +55,13 @@ fun testConsistency(session: CqlSession, cl: DefaultConsistencyLevel, accountId:
 
     return try {
         session.execute(stmt)
-        log("  Write with $cl: SUCCESS", "\u001B[32m")
+        log("  Write with $cl: SUCCESS", green)
         true
     } catch (e: UnavailableException) {
-        log("  Write with $cl: REJECTED (UnavailableException - Required: ${e.required}, Alive: ${e.alive})", "\u001B[1;31m")
+        log("  Write with $cl: REJECTED (UnavailableException - Required: ${e.required}, Alive: ${e.alive})", boldRed)
         false
     } catch (e: Exception) {
-        log("  Write with $cl: FAILED (${e::class.simpleName}: ${e.message})", "\u001B[33m")
+        log("  Write with $cl: FAILED (${e::class.simpleName}: ${e.message})", yellow)
         false
     }
 }
@@ -73,37 +91,37 @@ session.use { sess ->
     """.trimIndent())
 
     sess.execute("TRUNCATE $KEYSPACE.$TABLE;")
-    log("Keyspace $KEYSPACE provisioned with RF=3.", "\u001B[32m")
+    log("Keyspace $KEYSPACE provisioned with RF=3.", green)
 
     // State 1: 3/3 Nodes Alive
-    log("\n[State 1] All 3 Nodes Alive (Full Cluster Topology)", "\u001B[1;36m")
+    log("\n[State 1] All 3 Nodes Alive (Full Cluster Topology)", boldCyan)
     testConsistency(sess, DefaultConsistencyLevel.ONE, "acc_1", 100.0)
     testConsistency(sess, DefaultConsistencyLevel.QUORUM, "acc_1", 200.0)
     testConsistency(sess, DefaultConsistencyLevel.ALL, "acc_1", 300.0)
 
     // State 2: 2/3 Nodes Alive (Stop node3)
-    log("\n[State 2] Simulating Node 3 Outage (docker stop cassandra-node3)...", "\u001B[1;36m")
+    log("\n[State 2] Simulating Node 3 Outage (docker stop cassandra-node3)...", boldCyan)
     dockerCmd("stop", "cassandra-node3")
     Thread.sleep(2000)
-    log("Testing consistency with 2/3 nodes online:", "\u001B[33m")
+    log("Testing consistency with 2/3 nodes online:", yellow)
     testConsistency(sess, DefaultConsistencyLevel.ONE, "acc_2", 100.0)
     testConsistency(sess, DefaultConsistencyLevel.QUORUM, "acc_2", 200.0)
     testConsistency(sess, DefaultConsistencyLevel.ALL, "acc_2", 300.0)
 
     // State 3: 1/3 Nodes Alive (Stop node2)
-    log("\n[State 3] Simulating Node 2 Outage (docker stop cassandra-node2)...", "\u001B[1;36m")
+    log("\n[State 3] Simulating Node 2 Outage (docker stop cassandra-node2)...", boldCyan)
     dockerCmd("stop", "cassandra-node2")
     Thread.sleep(2000)
-    log("Testing consistency with 1/3 nodes online (Majority Lost):", "\u001B[33m")
+    log("Testing consistency with 1/3 nodes online (Majority Lost):", yellow)
     testConsistency(sess, DefaultConsistencyLevel.ONE, "acc_3", 100.0)
     testConsistency(sess, DefaultConsistencyLevel.QUORUM, "acc_3", 200.0)
     testConsistency(sess, DefaultConsistencyLevel.ALL, "acc_3", 300.0)
 
     // State 4: Heal Cluster
-    log("\n[State 4] Healing Cluster (Restarting nodes)...", "\u001B[1;36m")
+    log("\n[State 4] Healing Cluster (Restarting nodes)...", boldCyan)
     dockerCmd("start", "cassandra-node2")
     dockerCmd("start", "cassandra-node3")
-    log("Cluster nodes restarted.", "\u001B[32m")
+    log("Cluster nodes restarted.", green)
 
     println("\n" + "=".repeat(75))
     println("  PACELC THEOREM RECAP")

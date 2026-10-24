@@ -1,14 +1,32 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("redis.clients:jedis:5.1.2")
 @file:DependsOn("org.slf4j:slf4j-nop:2.0.13")
 @file:DependsOn("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import kotlinx.coroutines.*
 import redis.clients.jedis.JedisPool
 import redis.clients.jedis.params.SetParams
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val HOST = "127.0.0.1"
 val PORT = 6379
@@ -75,10 +93,10 @@ suspend fun runWithLock(db: MockDatabase): String = withContext(Dispatchers.IO) 
 }
 
 runBlocking {
-    println("\n\u001B[1;34m" + "=".repeat(75) + "\u001B[0m")
-    println("\u001B[1;32mExperiment 02 (Kotlin / Jedis + Coroutines): Cache Stampede Simulation\u001B[0m")
+    println("\n" + boldBlue("=".repeat(75)))
+    println(boldGreen("Experiment 02 (Kotlin / Jedis + Coroutines): Cache Stampede Simulation"))
     println("Simulating $CONCURRENT_REQUESTS concurrent coroutine requests arriving at key expiry...")
-    println("\u001B[1;34m" + "=".repeat(75) + "\u001B[0m\n")
+    println(boldBlue("=".repeat(75)) + "\n")
 
     // Strategy 1: Naive
     pool.resource.use { it.del(HOT_KEY) }
@@ -93,7 +111,7 @@ runBlocking {
     val naiveDbHits = naiveResults.count { it == "database" }
     val naiveCacheHits = naiveResults.count { it == "cache" }
     println("  Total Duration : ${durNaive}ms")
-    println("  Database Hits  : \u001B[1;31m$naiveDbHits / $CONCURRENT_REQUESTS (Stampede!)\u001B[0m")
+    println("  Database Hits  : ${boldRed("$naiveDbHits / $CONCURRENT_REQUESTS (Stampede!)")}")
     println("  Cache Hits     : $naiveCacheHits")
 
     // Strategy 2: Mutex Lock
@@ -109,14 +127,14 @@ runBlocking {
     val lockDbHits = lockResults.count { it == "database" }
     val lockCacheHits = lockResults.count { it == "cache" }
     println("  Total Duration : ${durLock}ms")
-    println("  Database Hits  : \u001B[1;32m$lockDbHits / $CONCURRENT_REQUESTS (Deflected 99%)\u001B[0m")
+    println("  Database Hits  : ${boldGreen("$lockDbHits / $CONCURRENT_REQUESTS (Deflected 99%)")}")
     println("  Cache Hits     : $lockCacheHits")
 
-    println("\n\u001B[1;34m" + "=".repeat(75) + "\u001B[0m")
+    println("\n" + boldBlue("=".repeat(75)))
     println("SYSTEMS TAKEAWAYS:")
     println("1. Without mutex locks, 100 concurrent cache misses cause 100 identical DB queries.")
     println("2. Distributed locks ensure only 1 thread recomputes, protecting PostgreSQL/MySQL.")
-    println("\u001B[1;34m" + "=".repeat(75) + "\u001B[0m\n")
+    println(boldBlue("=".repeat(75)) + "\n")
 
     pool.close()
 }

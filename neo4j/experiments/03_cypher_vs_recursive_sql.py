@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "neo4j>=5.15.0",
 #     "psycopg[binary]>=3.1.0",
 # ]
@@ -23,6 +24,7 @@ import sys
 import time
 
 import psycopg
+from rich.console import Console
 
 from neo4j import GraphDatabase
 
@@ -32,6 +34,9 @@ PG_DSN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
 
 NUM_NODES = 1500
 BRANCHING = 3
+
+
+console = Console()
 
 
 def build_edges() -> list[tuple[int, int]]:
@@ -123,14 +128,14 @@ def main() -> None:
         driver.verify_connectivity()
         pg_conn = psycopg.connect(PG_DSN, autocommit=True)
     except Exception as e:
-        print(f"\033[1;31mError connecting to Neo4j or PostgreSQL ({e})\033[0m")
+        console.print(f"[bold red]Error connecting to Neo4j or PostgreSQL ({e})[/]")
         print("Start the dual-engine profile first: make up EXP=compare-sql")
         sys.exit(1)
 
-    print("\033[1;36m======================================================================\033[0m")
-    print("\033[1;36mExperiment 03: Multi-Hop Cypher (Neo4j) vs WITH RECURSIVE (PostgreSQL)\033[0m")
+    console.print("[bold cyan]======================================================================[/]")
+    console.print("[bold cyan]Experiment 03: Multi-Hop Cypher (Neo4j) vs WITH RECURSIVE (PostgreSQL)[/]")
     print(f"Graph Topology: {NUM_NODES:,} services, branching factor = {BRANCHING}")
-    print("\033[1;36m======================================================================\033[0m\n")
+    console.print("[bold cyan]======================================================================[/]\n")
 
     edges = build_edges()
     seed_postgres(edges)
@@ -141,7 +146,7 @@ def main() -> None:
         query_neo4j_depth(session, 2)
         query_postgres_depth(pg_conn, 2)
 
-        print("\n\033[1;34m[*] Benchmarking Multi-Hop Traversal Latency (Depths 1 to 7):\033[0m\n")
+        console.print("\n[bold blue][*] Benchmarking Multi-Hop Traversal Latency (Depths 1 to 7):[/]\n")
         header = f"{'Hop Depth':>9} | {'Distinct Reachable':>18} | {'Postgres CTE (ms)':>18} | {'Neo4j Cypher (ms)':>18}"
         print(header)
         print("-" * len(header))
@@ -152,9 +157,9 @@ def main() -> None:
             assert pg_cnt == neo_cnt, f"Mismatch at depth {depth}: PG={pg_cnt} vs Neo4j={neo_cnt}"
             print(f"{depth:>9} | {neo_cnt:>18,} | {pg_ms:>16.2f}ms | {neo_ms:>16.2f}ms")
 
-    print("\n\033[1;32m======================================================================")
+    console.print("\n[bold green]======================================================================")
     print("SYSTEMS TAKEAWAYS")
-    print("======================================================================\033[0m")
+    console.print("======================================================================[/]")
     print("1. Shallow Joins (1-3 hops): PostgreSQL B-Tree indexes are remarkably fast")
     print("   and often beat or match a graph database without adding operational complexity.")
     print("2. Deep / Variable Traversals (5+ hops): Relational WITH RECURSIVE must materialize")

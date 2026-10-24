@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "psycopg[binary]>=3.1.0",
 # ]
 # ///
@@ -24,8 +25,12 @@ import re
 import time
 
 import psycopg
+from rich.console import Console
 
 DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
+
+
+console = Console()
 
 
 def seed_data() -> None:
@@ -104,43 +109,43 @@ def main() -> None:
         with psycopg.connect(DB_CONN, connect_timeout=3):
             pass
     except Exception:
-        print("\033[1;31mError: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.\033[0m")
+        console.print("[bold red]Error: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.[/]")
         print("Please start the work-mem container first:")
         print("  cd postgres && make up EXP=work-mem")
         return
 
-    print("\033[1;36m=================================================================\033[0m")
-    print("\033[1;36mExperiment 03: PostgreSQL Memory Limits (work_mem) & Disk Spill\033[0m")
+    console.print("[bold cyan]=================================================================[/]")
+    console.print("[bold cyan]Experiment 03: PostgreSQL Memory Limits (work_mem) & Disk Spill[/]")
     print("Measuring sort performance across in-memory vs disk-spill boundaries.")
-    print("\033[1;36m=================================================================\033[0m\n")
+    console.print("[bold cyan]=================================================================[/]\n")
 
     seed_data()
 
     # 1. Run with container default work_mem (4MB)
-    print("\n\033[1;34m[*] Test 1: Sorting with default work_mem (4MB)...\033[0m")
+    console.print("\n[bold blue][*] Test 1: Sorting with default work_mem (4MB)...[/]")
     res1 = run_explain_sort(None)
     print(f"    Effective work_mem  : {res1['work_mem']}")
-    print(f"    Sort Method         : \033[1;31m{res1['sort_method']}\033[0m")
+    console.print(f"    Sort Method         : [bold red]{res1['sort_method']}[/]")
     print(f"    Engine Execution    : {res1['plan_time_ms']:.1f}ms")
 
     # 2. Run with tuned session work_mem (64MB)
-    print("\n\033[1;34m[*] Test 2: Sorting with tuned session work_mem (64MB)...\033[0m")
+    console.print("\n[bold blue][*] Test 2: Sorting with tuned session work_mem (64MB)...[/]")
     res2 = run_explain_sort("64MB")
     print(f"    Effective work_mem  : {res2['work_mem']}")
-    print(f"    Sort Method         : \033[1;32m{res2['sort_method']}\033[0m")
+    console.print(f"    Sort Method         : [bold green]{res2['sort_method']}[/]")
     print(f"    Engine Execution    : {res2['plan_time_ms']:.1f}ms")
 
     speedup = res1["plan_time_ms"] / res2["plan_time_ms"] if res2["plan_time_ms"] > 0 else 1.0
 
-    print("\n\033[1;32m" + "=" * 65)
+    console.print("\n[bold green]" + "=" * 65)
     print("EXPERIMENT 03 SUMMARY REPORT")
-    print("=" * 65 + "\033[0m")
+    console.print("=" * 65 + "[/]")
     print(f"With work_mem = 4MB  : {res1['sort_method']} ({res1['plan_time_ms']:.1f}ms)")
     print(f"With work_mem = 64MB : {res2['sort_method']} ({res2['plan_time_ms']:.1f}ms)")
-    print(f"Performance Gain     : \033[1;32m{speedup:.1f}x Faster\033[0m in pure RAM")
+    console.print(f"Performance Gain     : [bold green]{speedup:.1f}x Faster[/] in pure RAM")
     print("=" * 65)
 
-    print("\n\033[1;33m[Systems Takeaway - The work_mem Multiplier Dilemma]\033[0m")
+    console.print("\n[bold yellow][Systems Takeaway - The work_mem Multiplier Dilemma][/]")
     print("Why not set work_mem = 1GB globally on your database server?")
     print("work_mem is NOT a server-wide cap. It is allocated PER SORT/HASH NODE per query.")
     print("If 100 concurrent queries each contain 3 joins/sorts:")

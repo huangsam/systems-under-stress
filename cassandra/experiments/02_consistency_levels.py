@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "cassandra-driver>=3.29.0",
 # ]
 # ///
@@ -43,6 +44,7 @@ from pathlib import Path
 from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.query import SimpleStatement
+from rich.console import Console
 
 from cassandra import ConsistencyLevel, Unavailable
 
@@ -53,9 +55,12 @@ KEYSPACE = "lab_consistency"
 TABLE = "accounts"
 
 
-def log(msg: str, color: str = "\033[0m") -> None:
+console = Console()
+
+
+def log(msg: str, color: str = "[/]") -> None:
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"\033[2m[{timestamp}]\033[0m {color}{msg}\033[0m", flush=True)
+    console.print(f"[dim][{timestamp}][/] {color}{msg}[/]", flush=True)
 
 
 def docker_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -64,7 +69,7 @@ def docker_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def wait_for_coordinator() -> Cluster:
-    log("Connecting to coordinator cassandra-node1 on 127.0.0.1:9042...", "\033[1;36m")
+    log("Connecting to coordinator cassandra-node1 on 127.0.0.1:9042...", "[bold cyan]")
     profile = ExecutionProfile(
         request_timeout=15.0,
         load_balancing_policy=WhiteListRoundRobinPolicy([HOST]),
@@ -79,16 +84,16 @@ def wait_for_coordinator() -> Cluster:
             )
             session = cluster.connect()
             session.execute("SELECT release_version FROM system.local")
-            log(f"Connected to Cassandra coordinator successfully (attempt {attempt}).", "\033[1;32m")
+            log(f"Connected to Cassandra coordinator successfully (attempt {attempt}).", "[bold green]")
             return cluster
         except Exception:
             time.sleep(2)
-    log("Failed to connect to Cassandra. Make sure 'make up EXP=cluster-consistency' is running.", "\033[1;31m")
+    log("Failed to connect to Cassandra. Make sure 'make up EXP=cluster-consistency' is running.", "[bold red]")
     sys.exit(1)
 
 
 def setup_cluster_schema(session) -> None:
-    log(f"Setting up keyspace '{KEYSPACE}' with RF=3 and table '{TABLE}'...", "\033[1;36m")
+    log(f"Setting up keyspace '{KEYSPACE}' with RF=3 and table '{TABLE}'...", "[bold cyan]")
     session.execute(f"""
         CREATE KEYSPACE IF NOT EXISTS {KEYSPACE}
         WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 3}};
@@ -103,7 +108,7 @@ def setup_cluster_schema(session) -> None:
     """)
 
     session.execute(f"TRUNCATE {KEYSPACE}.{TABLE};")
-    log("Keyspace and table ready with RF=3.", "\033[32m")
+    log("Keyspace and table ready with RF=3.", "[green]")
 
 
 def test_write_read(session, cl: ConsistencyLevel, account_id: int, label: str) -> tuple[bool, float, str]:
@@ -148,7 +153,7 @@ def evaluate_levels(session, scenario_name: str, base_id: int) -> dict[str, str]
     print(f"\n--- Testing Scenario: {scenario_name} ---")
     for name, cl in levels:
         success, elapsed, msg = test_write_read(session, cl, base_id, name)
-        status = "\033[32m[PASS]\033[0m" if success else "\033[31m[FAIL]\033[0m"
+        status = "[green][PASS][/]" if success else "[red][FAIL][/]"
         results[name] = "PASS" if success else "FAIL"
         print(f"  {name:7s} | {status} {msg}")
         base_id += 1
@@ -172,14 +177,14 @@ def run_experiment() -> None:
         # ---------------------------------------------------------
         # Scenario 1: All 3 Nodes UP (Healthy Baseline)
         # ---------------------------------------------------------
-        log("Phase 1: Testing baseline consistency with 3/3 nodes healthy...", "\033[1;36m")
+        log("Phase 1: Testing baseline consistency with 3/3 nodes healthy...", "[bold cyan]")
         res1 = evaluate_levels(session, "3 Nodes Alive (node1, node2, node3)", 100)
         matrix.append(("3 Nodes Alive (Healthy)", res1["ONE"], res1["QUORUM"], res1["ALL"]))
 
         # ---------------------------------------------------------
         # Scenario 2: Stop 1 Node (cassandra-node3)
         # ---------------------------------------------------------
-        log("\nPhase 2: Stopping cassandra-node3 (2 of 3 nodes remain)...", "\033[1;33m")
+        log("\nPhase 2: Stopping cassandra-node3 (2 of 3 nodes remain)...", "[bold yellow]")
         docker_cmd(["stop", "cassandra-node3"])
         time.sleep(4)  # Allow gossip failure detector to mark node3 DOWN
 
@@ -189,7 +194,7 @@ def run_experiment() -> None:
         # ---------------------------------------------------------
         # Scenario 3: Stop 2nd Node (cassandra-node2)
         # ---------------------------------------------------------
-        log("\nPhase 3: Stopping cassandra-node2 (Only 1 of 3 nodes remains)...", "\033[1;31m")
+        log("\nPhase 3: Stopping cassandra-node2 (Only 1 of 3 nodes remains)...", "[bold red]")
         docker_cmd(["stop", "cassandra-node2"])
         time.sleep(4)  # Allow gossip failure detector to mark node2 DOWN
 
@@ -199,17 +204,17 @@ def run_experiment() -> None:
         # ---------------------------------------------------------
         # Scenario 4: Healing & Recovery
         # ---------------------------------------------------------
-        log("\nPhase 4: Restarting cassandra-node2 and cassandra-node3...", "\033[1;34m")
+        log("\nPhase 4: Restarting cassandra-node2 and cassandra-node3...", "[bold blue]")
         docker_cmd(["start", "cassandra-node2"])
         docker_cmd(["start", "cassandra-node3"])
 
-        log("Waiting for nodes to rejoin gossip ring...", "\033[2m")
+        log("Waiting for nodes to rejoin gossip ring...", "[dim]")
         for _ in range(15):
             time.sleep(3)
             # Test if ALL can pass again
             success, _, _ = test_write_read(session, ConsistencyLevel.ALL, 999, "ALL")
             if success:
-                log("Cluster fully recovered! All 3 replicas responding.", "\033[1;32m")
+                log("Cluster fully recovered! All 3 replicas responding.", "[bold green]")
                 break
 
         res4 = evaluate_levels(session, "3 Nodes Alive (After Healing)", 400)
@@ -224,13 +229,13 @@ def run_experiment() -> None:
         print(f"  {'Cluster State':<30} | {'ONE (req 1)':<12} | {'QUORUM (req 2)':<14} | {'ALL (req 3)':<12}")
         print("  " + "-" * 66)
         for state, one_res, q_res, all_res in matrix:
-            c_one = f"\033[32m{one_res}\033[0m" if one_res == "PASS" else f"\033[31m{one_res}\033[0m"
-            c_q = f"\033[32m{q_res}\033[0m" if q_res == "PASS" else f"\033[31m{q_res}\033[0m"
-            c_all = f"\033[32m{all_res}\033[0m" if all_res == "PASS" else f"\033[31m{all_res}\033[0m"
+            c_one = f"[green]{one_res}[/]" if one_res == "PASS" else f"[red]{one_res}[/]"
+            c_q = f"[green]{q_res}[/]" if q_res == "PASS" else f"[red]{q_res}[/]"
+            c_all = f"[green]{all_res}[/]" if all_res == "PASS" else f"[red]{all_res}[/]"
             print(f"  {state:<30} | {c_one:<21} | {c_q:<23} | {c_all:<21}")
         print("=" * 70 + "\n")
 
-        print("\033[1mPACELC & Cassandra Distributed Systems Takeaways:\033[0m")
+        console.print("[bold]PACELC & Cassandra Distributed Systems Takeaways:[/]")
         print("1. In PACELC: if Partitioned (P): trade-off between Availability (A) and Consistency (C).")
         print("2. When 1 node dies (2 alive):")
         print("   - QUORUM still succeeds because floor(3/2) + 1 = 2 live replicas.")

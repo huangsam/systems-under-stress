@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "cassandra-driver>=3.29.0",
 # ]
 # ///
@@ -22,6 +23,7 @@ import uuid
 
 from cassandra.cluster import Cluster
 from cassandra.query import SimpleStatement
+from rich.console import Console
 
 HOST = "127.0.0.1"
 PORT = 9042
@@ -29,28 +31,31 @@ KEYSPACE = "lab_crash_course"
 TABLE_NAME = "users_by_country"
 
 
+console = Console()
+
+
 def main() -> None:
-    print("\n\033[1;36m" + "=" * 70 + "\033[0m")
-    print("\033[1;32mApache Cassandra Crash Course: Partition Keys & CQL Mechanics\033[0m")
-    print("\033[1;36m" + "=" * 70 + "\033[0m\n")
+    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
+    console.print("[bold green]Apache Cassandra Crash Course: Partition Keys & CQL Mechanics[/]")
+    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
 
     try:
         cluster = Cluster([HOST], port=PORT)
         session = cluster.connect()
     except Exception as e:
-        print(f"\033[1;31m[!] Connection failed: {e}\033[0m")
+        console.print(f"[bold red][!] Connection failed: {e}[/]")
         print("Start the lab container first: cd cassandra && make up EXP=tombstones")
         sys.exit(1)
 
     try:
         # 1. Cluster Metadata & Connectivity
-        print("\033[1;34m[*] 1. Node Metadata & System Introspection\033[0m")
+        console.print("[bold blue][*] 1. Node Metadata & System Introspection[/]")
         row = session.execute("SELECT cluster_name, data_center, release_version FROM system.local").one()
         print(f"    Cluster Name: {row.cluster_name}")
         print(f"    Datacenter: {row.data_center}, Cassandra Version: {row.release_version}")
 
         # 2. Keyspace & Table Creation
-        print("\n\033[1;34m[*] 2. Creating Keyspace & Table Schema\033[0m")
+        console.print("\n[bold blue][*] 2. Creating Keyspace & Table Schema[/]")
         session.execute(f"""
             CREATE KEYSPACE IF NOT EXISTS {KEYSPACE}
             WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}};
@@ -72,7 +77,7 @@ def main() -> None:
         print("    Schema Notes: 'country' is Partition Key (token hash); 'user_id' is Clustering Column.")
 
         # 3. Prepared Statements & Inserts
-        print("\n\033[1;34m[*] 3. Prepared Statements & Partition-Targeted Writes\033[0m")
+        console.print("\n[bold blue][*] 3. Prepared Statements & Partition-Targeted Writes[/]")
         insert_stmt = session.prepare(f"""
             INSERT INTO {TABLE_NAME} (country, user_id, username, email, score)
             VALUES (?, ?, ?, ?, ?);
@@ -91,7 +96,7 @@ def main() -> None:
         print(f"    Inserted {len(records)} users across 3 distinct country partitions (US, CA, DE).")
 
         # 4. Partition-bounded reads
-        print("\n\033[1;34m[*] 4. Querying by Partition Key (O(1) Token Routing)\033[0m")
+        console.print("\n[bold blue][*] 4. Querying by Partition Key (O(1) Token Routing)[/]")
         query = SimpleStatement(f"SELECT country, username, email, score FROM {TABLE_NAME} WHERE country = 'US';")
         rows = session.execute(query)
         print("    Querying partition 'country = US':")
@@ -99,7 +104,7 @@ def main() -> None:
             print(f"      - [{r.country}] {r.username} ({r.email}) -> Score: {r.score}")
 
         # 5. Schema Introspection
-        print("\n\033[1;34m[*] 5. Schema Introspection (system_schema.columns)\033[0m")
+        console.print("\n[bold blue][*] 5. Schema Introspection (system_schema.columns)[/]")
         schema_query = f"""
             SELECT column_name, kind, type
             FROM system_schema.columns
@@ -117,7 +122,7 @@ def main() -> None:
     finally:
         cluster.shutdown()
 
-    print("\n\033[1;32m[✓] Apache Cassandra Crash Course completed successfully!\033[0m\n")
+    console.print("\n[bold green][✓] Apache Cassandra Crash Course completed successfully![/]\n")
 
 
 if __name__ == "__main__":

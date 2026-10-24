@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "neo4j>=5.18.0",
 # ]
 # ///
@@ -19,28 +20,33 @@ from __future__ import annotations
 
 import sys
 
+from rich.console import Console
+
 from neo4j import GraphDatabase
 
 URI = "bolt://127.0.0.1:7687"
 AUTH = ("neo4j", "password123")
 
 
+console = Console()
+
+
 def main() -> None:
-    print("\n\033[1;36m" + "=" * 70 + "\033[0m")
-    print("\033[1;32mNeo4j Crash Course: Property Graphs, Cypher & Traversals\033[0m")
-    print("\033[1;36m" + "=" * 70 + "\033[0m\n")
+    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
+    console.print("[bold green]Neo4j Crash Course: Property Graphs, Cypher & Traversals[/]")
+    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
 
     try:
         driver = GraphDatabase.driver(URI, auth=AUTH)
         driver.verify_connectivity()
     except Exception as e:
-        print(f"\033[1;31m[!] Connection failed: {e}\033[0m")
+        console.print(f"[bold red][!] Connection failed: {e}[/]")
         print("Start the lab container first: cd neo4j && make up EXP=traversal-depth")
         sys.exit(1)
 
     with driver:
         # 1. Connectivity & Version
-        print("\033[1;34m[*] 1. Server Connectivity & Component Introspection\033[0m")
+        console.print("[bold blue][*] 1. Server Connectivity & Component Introspection[/]")
         records, _, _ = driver.execute_query("CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition;")
         for r in records:
             print(f"    Product: {r['name']} v{r['version']} ({r['edition']})")
@@ -49,7 +55,7 @@ def main() -> None:
         driver.execute_query("MATCH (n:CrashCourse) DETACH DELETE n;")
 
         # 2. Creating Nodes with Labels & Properties
-        print("\n\033[1;34m[*] 2. Creating Labeled Nodes with Properties\033[0m")
+        console.print("\n[bold blue][*] 2. Creating Labeled Nodes with Properties[/]")
         create_nodes_cypher = """
             CREATE (a:CrashCourse:Developer {id: 1, name: 'Alice', seniority: 'Principal'})
             CREATE (b:CrashCourse:Developer {id: 2, name: 'Bob', seniority: 'Senior'})
@@ -62,7 +68,7 @@ def main() -> None:
         print("    Created 3 Developer nodes and 2 Service nodes.")
 
         # 3. Directed Relationships with Edge Properties
-        print("\n\033[1;34m[*] 3. Creating Directed Relationships with Edge Attributes\033[0m")
+        console.print("\n[bold blue][*] 3. Creating Directed Relationships with Edge Attributes[/]")
         create_edges_cypher = """
             MATCH (a:CrashCourse:Developer {name: 'Alice'}), (b:CrashCourse:Developer {name: 'Bob'}),
                   (c:CrashCourse:Developer {name: 'Charlie'}),
@@ -77,7 +83,7 @@ def main() -> None:
         print("    Created 4 :MAINTAINS edges and 1 :DEPENDS_ON service-to-service edge.")
 
         # 4. Pattern Match Traversals
-        print("\n\033[1;34m[*] 4. Cypher Pattern Matching & Multi-Hop Traversal\033[0m")
+        console.print("\n[bold blue][*] 4. Cypher Pattern Matching & Multi-Hop Traversal[/]")
         query_direct = """
             MATCH (d:CrashCourse:Developer)-[m:MAINTAINS]->(s:CrashCourse:Service)
             RETURN d.name AS dev, m.role AS role, s.name AS service
@@ -99,7 +105,7 @@ def main() -> None:
             print(f"      - {r['dev1']} & {r['dev2']} collaborate on '{r['shared_service']}'")
 
         # 5. Graph Diagnostics
-        print("\n\033[1;34m[*] 5. Graph Diagnostics & Node Counts\033[0m")
+        console.print("\n[bold blue][*] 5. Graph Diagnostics & Node Counts[/]")
         counts_res, _, _ = driver.execute_query("""
             MATCH (n:CrashCourse)
             OPTIONAL MATCH (n)-[r]->()
@@ -113,7 +119,7 @@ def main() -> None:
         driver.execute_query("MATCH (n:CrashCourse) DETACH DELETE n;")
         print("    Cleaned up demo graph nodes and relationships.")
 
-    print("\n\033[1;32m[✓] Neo4j Crash Course completed successfully!\033[0m\n")
+    console.print("\n[bold green][✓] Neo4j Crash Course completed successfully![/]\n")
 
 
 if __name__ == "__main__":

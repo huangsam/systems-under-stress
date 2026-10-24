@@ -1,13 +1,31 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.postgresql:postgresql:42.7.3")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import java.sql.Connection
 import java.sql.DriverManager
 
 val DB_URL = "jdbc:postgresql://127.0.0.1:5432/lab_db"
 val DB_USER = "postgres"
 val DB_PASS = "postgres"
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 fun getConn(): Connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)
 
@@ -52,7 +70,7 @@ fun seedData() {
 }
 
 fun explainSort(workMem: String, label: String) {
-    println("\n\u001B[1;34m[*] $label: Setting work_mem = '$workMem'...\u001B[0m")
+    println("\n" + boldBlue("[*] $label: Setting work_mem = '$workMem'..."))
     getConn().use { conn ->
         conn.createStatement().use { stmt ->
             stmt.execute("SET work_mem = '$workMem';")
@@ -65,28 +83,28 @@ fun explainSort(workMem: String, label: String) {
 
             for (line in lines) {
                 if (line.contains("Sort Method:")) {
-                    val color = if (line.contains("external merge")) "\u001B[1;31m" else "\u001B[1;32m"
-                    println("    $color$line\u001B[0m")
+                    val styledLine = if (line.contains("external merge")) boldRed(line) else boldGreen(line)
+                    println("    $styledLine")
                 }
                 if (line.contains("Execution Time:")) {
-                    println("    \u001B[1;33m$line\u001B[0m")
+                    println("    ${boldYellow(line)}")
                 }
             }
         }
     }
 }
 
-println("\n\u001B[1;36m" + "=".repeat(70) + "\u001B[0m")
-println("\u001B[1;32mExperiment 03 (Kotlin / JDBC): PostgreSQL work_mem & Disk Spill\u001B[0m")
-println("\u001B[1;36m" + "=".repeat(70) + "\u001B[0m\n")
+println("\n" + boldCyan("=".repeat(70)))
+println(boldGreen("Experiment 03 (Kotlin / JDBC): PostgreSQL work_mem & Disk Spill"))
+println(boldCyan("=".repeat(70)) + "\n")
 
 seedData()
 explainSort("4MB", "Part 1: Constrained Memory (Spill to Disk)")
 explainSort("64MB", "Part 2: Sufficient Memory (In-Memory Quicksort)")
 
-println("\n\u001B[1;34m" + "=".repeat(70) + "\u001B[0m")
+println("\n" + boldBlue("=".repeat(70)))
 println("SYSTEMS TAKEAWAYS:")
 println("1. With work_mem = 4MB, sorting 150k rows exceeds RAM and spills to temporary disk files.")
 println("2. Bumping work_mem = 64MB flips the algorithm from external merge to in-memory quicksort.")
 println("3. High global work_mem multiplied by max_connections can trigger container OOM kills.")
-println("\u001B[1;34m" + "=".repeat(70) + "\u001B[0m\n")
+println(boldBlue("=".repeat(70)) + "\n")

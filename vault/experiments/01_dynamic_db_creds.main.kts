@@ -1,7 +1,17 @@
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.json:json:20240303")
 @file:DependsOn("org.postgresql:postgresql:42.7.3")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import org.json.JSONObject
 import java.net.URI
 import java.net.http.HttpClient
@@ -9,6 +19,14 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.sql.DriverManager
 import java.sql.SQLException
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val VAULT_ADDR = System.getenv("VAULT_ADDR") ?: "http://127.0.0.1:8200"
 val VAULT_TOKEN = System.getenv("VAULT_TOKEN") ?: "root"
@@ -55,20 +73,20 @@ fun setupPostgresSeed() {
 }
 
 fun main() {
-    println("\u001b[1;36m=================================================================\u001b[0m")
-    println("\u001b[1;36mExperiment 01 (Kotlin): HashiCorp Vault Dynamic DB Credentials\u001b[0m")
+    println(boldCyan("=".repeat(65)))
+    println(boldCyan("Experiment 01 (Kotlin): HashiCorp Vault Dynamic DB Credentials"))
     println("Investigating on-demand credential generation and instantaneous lease revocation.")
-    println("\u001b[1;36m=================================================================\u001b[0m")
+    println(boldCyan("=".repeat(65)))
 
     // Verify connectivity
     try {
         val health = vaultRequest("GET", "/v1/sys/health")
         if (health.statusCode() !in listOf(200, 429, 472, 473)) {
-            println("\u001b[1;31mError: Vault returned unexpected status: ${health.statusCode()}\u001b[0m")
+            println(boldRed("Error: Vault returned unexpected status: ${health.statusCode()}"))
             return
         }
     } catch (e: Exception) {
-        println("\u001b[1;31mError: Cannot connect to Vault at $VAULT_ADDR (${e.message})\u001b[0m")
+        println(boldRed("Error: Cannot connect to Vault at $VAULT_ADDR (${e.message})"))
         println("Start container first: cd vault && make up EXP=dynamic-creds")
         return
     }
@@ -105,7 +123,7 @@ fun main() {
     vaultRequest("POST", "/v1/database/roles/dev-readonly", roleConfig)
 
     // 4. Generate dynamic credentials
-    println("\n\u001b[1;34m[*] Requesting dynamic credentials from Vault for role 'dev-readonly'...\u001b[0m")
+    println("\n" + boldBlue("[*] Requesting dynamic credentials from Vault for role 'dev-readonly'..."))
     val credsResp = vaultRequest("GET", "/v1/database/creds/dev-readonly")
     val credsJson = JSONObject(credsResp.body())
     val data = credsJson.getJSONObject("data")
@@ -114,50 +132,50 @@ fun main() {
     val dynPass = data.getString("password")
     val leaseDuration = credsJson.getInt("lease_duration")
 
-    println("    Generated Username : \u001b[1;32m$dynUser\u001b[0m")
+    println("    Generated Username : ${boldGreen("$dynUser")}")
     println("    Lease ID           : $leaseId")
     println("    Lease Duration     : ${leaseDuration}s")
 
     // 5. Connect to Postgres with dynamic credentials
-    println("\n\u001b[1;34m[*] Connecting to PostgreSQL using dynamic role ($dynUser)...\u001b[0m")
+    println("\n" + boldBlue("[*] Connecting to PostgreSQL using dynamic role ($dynUser)..."))
     val dynUrl = "jdbc:postgresql://$PG_HOST:$PG_PORT/$PG_DB?user=$dynUser&password=$dynPass"
     DriverManager.getConnection(dynUrl).use { conn ->
         conn.createStatement().use { stmt ->
             val rs = stmt.executeQuery("SELECT classification_level, secret_payload FROM vault_classified_vault LIMIT 1")
             if (rs.next()) {
                 println("    Query Result: level=${rs.getString(1)}, payload=${rs.getString(2)}")
-                println("    Authentication Status: \u001b[1;32mSUCCESS (Granted via dynamic ephemeral role)\u001b[0m")
+                println("    Authentication Status: ${boldGreen("SUCCESS (Granted via dynamic ephemeral role)")}")
             }
         }
     }
 
     // 6. Explicitly revoke lease
-    println("\n\u001b[1;34m[*] Revoking lease via Vault API: $leaseId...\u001b[0m")
+    println("\n" + boldBlue("[*] Revoking lease via Vault API: $leaseId..."))
     val revokePayload = JSONObject().put("lease_id", leaseId)
     val revokeResp = vaultRequest("PUT", "/v1/sys/leases/revoke", revokePayload)
     println("    Vault Revocation Response: ${revokeResp.statusCode()} OK")
 
     // 7. Verify subsequent connection is rejected
-    println("\n\u001b[1;34m[*] Attempting reconnect to PostgreSQL using revoked role ($dynUser)...\u001b[0m")
+    println("\n" + boldBlue("[*] Attempting reconnect to PostgreSQL using revoked role ($dynUser)..."))
     try {
         DriverManager.getConnection(dynUrl).use { it.createStatement().execute("SELECT 1") }
         println("    Unexpected: connection succeeded with revoked role.")
     } catch (e: SQLException) {
-        println("  \u001b[1;31m[!] CONNECTION REJECTED AS EXPECTED!\u001b[0m")
+        println("  ${boldRed("[!] CONNECTION REJECTED AS EXPECTED!")}")
         println("      SQLState : ${e.sqlState}")
         println("      Message  : ${e.message?.trim()}")
-        println("\n  \u001b[1;32m[✓] Failure Verified:\u001b[0m Vault executed DROP ROLE cascade on PostgreSQL,")
+        println("\n  ${boldGreen("[✓] Failure Verified:")} Vault executed DROP ROLE cascade on PostgreSQL,")
         println("      instantly terminating access without manual operator intervention.")
     }
 
-    println("\n\u001b[1;32m=================================================================")
+    println("\n" + boldGreen("=".repeat(65)))
     println("DYNAMIC SECRETS TAKEAWAYS")
-    println("=================================================================\u001b[0m")
+    println(boldGreen("=".repeat(65)))
     println("1. Static shared passwords violate zero-trust and risk credential leaks.")
     println("2. Vault issues unique, time-bounded credentials per process/job.")
     println("3. Revoking the Vault lease immediately triggers DDL statements on the target database,")
     println("   guaranteeing cryptographic lease revocation.")
-    println("=================================================================\n")
+    println(boldGreen("=".repeat(65)) + "\n")
 }
 
 main()

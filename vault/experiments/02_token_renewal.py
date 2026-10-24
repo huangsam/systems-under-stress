@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "hvac>=2.1.0",
 # ]
 # ///
@@ -27,6 +28,7 @@ import time
 
 import hvac
 from hvac import exceptions
+from rich.console import Console
 
 VAULT_ADDR = os.getenv("VAULT_ADDR", "http://127.0.0.1:8200")
 VAULT_TOKEN = os.getenv("VAULT_TOKEN", "root")
@@ -36,10 +38,14 @@ MAX_TTL = "6s"
 RENEWAL_INTERVAL = 1.0  # seconds between renewal pulses
 
 
+console = Console()
+err_console = Console(stderr=True)
+
+
 def print_banner(title: str) -> None:
-    print(f"\n\033[1;36m{'=' * 70}\033[0m")
-    print(f"\033[1;36m  {title}\033[0m")
-    print(f"\033[1;36m{'=' * 70}\033[0m")
+    console.print(f"\n[bold cyan]{'=' * 70}[/]")
+    console.print(f"[bold cyan]  {title}[/]")
+    console.print(f"[bold cyan]{'=' * 70}[/]")
 
 
 def test_token_renewal_lifecycle() -> None:
@@ -62,7 +68,7 @@ def test_token_renewal_lifecycle() -> None:
     initial_duration = token_resp["auth"]["lease_duration"]
     renewable = token_resp["auth"]["renewable"]
 
-    print("\033[1;32m[+] Child Token Created Successfully:\033[0m")
+    console.print("[bold green][+] Child Token Created Successfully:[/]")
     print(f"    - Token String    : s.{child_token[:8]}...[REDACTED]")
     print(f"    - Lease Duration  : {initial_duration}s")
     print(f"    - Renewable       : {renewable}")
@@ -99,24 +105,24 @@ def test_token_renewal_lifecycle() -> None:
             except Exception:
                 exact_ttl = current_ttl
 
-            print(f"{elapsed:6.2f}s    {'Renew Pulse #' + str(cycle):<22} {str(exact_ttl) + 's':<16} \033[1;32mRENEWED (Capped by Max TTL)\033[0m")
+            console.print(f"{elapsed:6.2f}s    {'Renew Pulse #' + str(cycle):<22} {str(exact_ttl) + 's':<16} [bold green]RENEWED (Capped by Max TTL)[/]")
 
         except (exceptions.InvalidRequest, exceptions.VaultError, exceptions.Forbidden) as exc:
             err_msg = str(exc).strip().replace("\n", " ")
-            print(f"{elapsed:6.2f}s    {'Renew Pulse #' + str(cycle):<22} {'0s':<16} \033[1;31mREJECTED: Ceiling Hit\033[0m")
-            print("\n\033[1;33m[*] Vault Renewal Rejection Signature:\033[0m")
-            print(f"    \033[1;31m{err_msg}\033[0m")
+            console.print(f"{elapsed:6.2f}s    {'Renew Pulse #' + str(cycle):<22} {'0s':<16} [bold red]REJECTED: Ceiling Hit[/]")
+            console.print("\n[bold yellow][*] Vault Renewal Rejection Signature:[/]")
+            console.print(f"    [bold red]{err_msg}[/]")
             max_ttl_hit = True
             break
 
         # Safety escape in case of an unexpected runaway loop
         if elapsed > 12.0:
-            print("\n\033[1;31m[-] Timeout: Loop exceeded expected Max TTL boundary without rejection.\033[0m")
+            console.print("\n[bold red][-] Timeout: Loop exceeded expected Max TTL boundary without rejection.[/]")
             break
 
     print_banner("3. Post-Ceiling Revocation Verification")
     if not max_ttl_hit:
-        print("\033[1;31m[-] FAILURE: Token was never rejected at the explicit_max_ttl boundary.\033[0m")
+        console.print("[bold red][-] FAILURE: Token was never rejected at the explicit_max_ttl boundary.[/]")
         sys.exit(1)
 
     print("[*] Waiting 1.5s for Vault background reaper / complete lease purge...")
@@ -126,10 +132,10 @@ def test_token_renewal_lifecycle() -> None:
     token_purged = False
     try:
         child_client.auth.token.lookup_self()
-        print("\033[1;31m[-] ERROR: Token lookup still succeeded after Max TTL expiration!\033[0m")
+        console.print("[bold red][-] ERROR: Token lookup still succeeded after Max TTL expiration![/]")
     except (exceptions.Forbidden, exceptions.InvalidRequest, exceptions.VaultError) as exc:
         token_purged = True
-        print("\033[1;32m[+] Token successfully purged and rejected by Vault:\033[0m")
+        console.print("[bold green][+] Token successfully purged and rejected by Vault:[/]")
         print(f"    - Error: {exc}")
 
     assert token_purged, "Expired token was not invalidated by Vault"
@@ -137,16 +143,16 @@ def test_token_renewal_lifecycle() -> None:
     # Also verify from root client lookup
     try:
         client.auth.token.lookup(token=child_token)
-        print("\033[1;31m[-] Warning: Root client still sees child token in index.\033[0m")
+        console.print("[bold red][-] Warning: Root client still sees child token in index.[/]")
     except Exception as exc:
-        print(f"\033[1;32m[+] Root client confirms token no longer exists in Vault: {exc}\033[0m")
+        console.print(f"[bold green][+] Root client confirms token no longer exists in Vault: {exc}[/]")
 
     print_banner("Summary: Token Lifecycle & Max TTL Invariants")
     print("  1. Periodic renewal successfully maintains short-lived tokens in memory.")
     print("  2. Vault calculates TTL caps dynamically: TTL = min(increment, explicit_max_ttl - elapsed).")
     print(f"  3. At t = {MAX_TTL}, Vault strictly refuses further renewals.")
     print("  4. Once expired, tokens cannot perform any API actions and are evicted.")
-    print("\033[1;32m\n=== Token Lifecycle Lab Completed Successfully ===\033[0m\n")
+    console.print("[bold green]\n=== Token Lifecycle Lab Completed Successfully ===[/]\n")
 
 
 if __name__ == "__main__":
@@ -156,5 +162,5 @@ if __name__ == "__main__":
         print("\n[!] Aborted by user.")
         sys.exit(130)
     except Exception as err:
-        print(f"\n\033[1;31m[ERROR] {err}\033[0m", file=sys.stderr)
+        err_console.print(f"\n[bold red][ERROR] {err}[/]")
         sys.exit(1)

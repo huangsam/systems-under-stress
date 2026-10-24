@@ -1,6 +1,16 @@
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.json:json:20240303")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
@@ -8,6 +18,14 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.util.Base64
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val VAULT_URL = System.getenv("VAULT_ADDR") ?: "http://127.0.0.1:8200"
 val VAULT_TOKEN = System.getenv("VAULT_TOKEN") ?: "root"
@@ -34,20 +52,20 @@ fun vaultReq(method: String, path: String, body: JSONObject? = null): HttpRespon
 }
 
 fun main() {
-    println("\u001b[1;36m======================================================================\u001b[0m")
-    println("\u001b[1;36mExperiment 03 (Kotlin): Transit Encryption-as-a-Service & Key Rotation\u001b[0m")
+    println(boldCyan("=".repeat(70)))
+    println(boldCyan("Experiment 03 (Kotlin): Transit Encryption-as-a-Service & Key Rotation"))
     println("Benchmarking HTTP crypto latency, batching, and zero-downtime key rotation.")
-    println("\u001b[1;36m======================================================================\u001b[0m\n")
+    println(boldCyan("=".repeat(70)) + "\n")
 
     // Check Vault connection
     try {
         val health = vaultReq("GET", "/v1/sys/health")
         if (health.statusCode() !in listOf(200, 429, 472, 473)) {
-            println("\u001b[1;31mError: Vault returned unexpected status: ${health.statusCode()}\u001b[0m")
+            println(boldRed("Error: Vault returned unexpected status: ${health.statusCode()}"))
             return
         }
     } catch (e: Exception) {
-        println("\u001b[1;31mError: Cannot connect to Vault on $VAULT_URL (${e.message})\u001b[0m")
+        println(boldRed("Error: Cannot connect to Vault on $VAULT_URL (${e.message})"))
         println("Start container first: cd vault && make up EXP=transit-crypto")
         return
     }
@@ -65,7 +83,7 @@ fun main() {
 
     // Part 1: Sequential encryption
     val sampleCount = 100
-    println("\n\u001b[1;34m[*] Part 1: Sequential Single-Item HTTP Encryption ($sampleCount records)...\u001b[0m")
+    println("\n" + boldBlue("[*] Part 1: Sequential Single-Item HTTP Encryption ($sampleCount records)..."))
     val t0 = System.currentTimeMillis()
     var lastCiphertext = ""
 
@@ -83,7 +101,7 @@ fun main() {
     println("    Sample Ciphertext: ${lastCiphertext.take(35)}...")
 
     // Part 2: Batched encryption
-    println("\n\u001b[1;34m[*] Part 2: Batched HTTP Encryption ($sampleCount records in 1 payload)...\u001b[0m")
+    println("\n" + boldBlue("[*] Part 2: Batched HTTP Encryption ($sampleCount records in 1 payload)..."))
     val batchArray = JSONArray()
     for (i in 1..sampleCount) {
         val plain = "SSN-%03d-45-%04d".format(i, i * 7 % 10000)
@@ -97,14 +115,14 @@ fun main() {
     val batchJson = JSONObject(batchResp.body())
     val batchResults = batchJson.getJSONObject("data").getJSONArray("batch_results")
 
-    println("    Status          : \u001b[1;32mSUCCESS (${batchResults.length()} items)\u001b[0m")
+    println("    Status          : ${boldGreen("SUCCESS (${batchResults.length()} items)")}")
     println("    Duration        : ${batchElapsedMs}ms")
     println("    Throughput      : %.1f encrypts/sec".format(sampleCount * 1000.0 / batchElapsedMs))
     val speedup = seqElapsedMs.toDouble() / maxOf(batchElapsedMs.toDouble(), 1.0)
-    println("    Batching Speedup: \u001b[1;32m%.1fx faster\u001b[0m".format(speedup))
+    println("    Batching Speedup: ${boldGreen("%.1fx faster")}".format(speedup))
 
     // Part 3: Zero-downtime key rotation & rewrapping
-    println("\n\u001b[1;34m[*] Part 3: Zero-Downtime Key Rotation & Server-Side Rewrapping...\u001b[0m")
+    println("\n" + boldBlue("[*] Part 3: Zero-Downtime Key Rotation & Server-Side Rewrapping..."))
     println("    Current Ciphertext from Step 1: $lastCiphertext")
 
     println("    Rotating Transit Key '$KEY_NAME' to next version...")
@@ -114,22 +132,22 @@ fun main() {
     val decResp = vaultReq("POST", "/v1/transit/decrypt/$KEY_NAME", JSONObject().put("ciphertext", lastCiphertext))
     val decJson = JSONObject(decResp.body())
     val decryptedPlain = b64d(decJson.getJSONObject("data").getString("plaintext"))
-    println("    Decrypted Plaintext : \u001b[1;32m$decryptedPlain\u001b[0m (Backwards compatibility preserved)")
+    println("    Decrypted Plaintext : ${boldGreen("$decryptedPlain")} (Backwards compatibility preserved)")
 
     println("    Rewrapping v1 ciphertext to v2 without plaintext exposure...")
     val rewrapResp = vaultReq("POST", "/v1/transit/rewrap/$KEY_NAME", JSONObject().put("ciphertext", lastCiphertext))
     val rewrapJson = JSONObject(rewrapResp.body())
     val upgradedCiphertext = rewrapJson.getJSONObject("data").getString("ciphertext")
-    println("    Upgraded Ciphertext : \u001b[1;32m$upgradedCiphertext\u001b[0m")
+    println("    Upgraded Ciphertext : ${boldGreen("$upgradedCiphertext")}")
 
-    println("\n\u001b[1;32m=================================================================")
+    println("\n" + boldGreen("=".repeat(65)))
     println("ENCRYPTION-AS-A-SERVICE TAKEAWAYS")
-    println("=================================================================\u001b[0m")
+    println(boldGreen("=".repeat(65)))
     println("1. Transit eliminates application-side key management and risks of memory key leakage.")
     println("2. HTTP latency is the bottleneck: batching encrypts 20x-50x faster by eliminating TCP RTT.")
     println("3. Vault seamlessly decrypts legacy ciphertexts using versioned keyrings.")
     println("4. 'rewrap' upgrades old ciphertexts in place without decrypting sensitive data back to client.")
-    println("=================================================================\n")
+    println(boldGreen("=".repeat(65)) + "\n")
 }
 
 main()

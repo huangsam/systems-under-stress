@@ -1,31 +1,49 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("com.clickhouse:clickhouse-jdbc:0.6.0")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import java.sql.DriverManager
 import java.sql.Timestamp
 import kotlin.system.exitProcess
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val JDBC_URL = "jdbc:ch://127.0.0.1:8123/default"
 val TABLE_NAME = "crash_course_telemetry"
 
 fun main() {
-    println("\n\u001B[1;36m" + "=".repeat(70) + "\u001B[0m")
-    println("\u001B[1;32mClickHouse Crash Course (Kotlin / JDBC): Columnar Storage & Aggregations\u001B[0m")
-    println("\u001B[1;36m" + "=".repeat(70) + "\u001B[0m\n")
+    println("\n" + boldCyan("=".repeat(70)))
+    println(boldGreen("ClickHouse Crash Course (Kotlin / JDBC): Columnar Storage & Aggregations"))
+    println(boldCyan("=".repeat(70)) + "\n")
 
     val conn =
         try {
             DriverManager.getConnection(JDBC_URL)
         } catch (e: Exception) {
-            println("\u001B[1;31m[!] Connection failed: ${e.message}\u001B[0m")
+            println(boldRed("[!] Connection failed: ${e.message}"))
             println("Start the lab container first: cd clickhouse && make up EXP=parts-limit")
             exitProcess(1)
         }
 
     conn.use { c ->
         // 1. Connectivity & Version
-        println("\u001B[1;34m[*] 1. Server Version & Connectivity\u001B[0m")
+        println(boldBlue("[*] 1. Server Version & Connectivity"))
         c.createStatement().use { stmt ->
             val rs = stmt.executeQuery("SELECT version()")
             rs.next()
@@ -33,7 +51,7 @@ fun main() {
         }
 
         // 2. Table Creation
-        println("\n\u001B[1;34m[*] 2. Creating MergeTree Engine Table\u001B[0m")
+        println("\n" + boldBlue("[*] 2. Creating MergeTree Engine Table"))
         c.createStatement().use { stmt ->
             stmt.execute("DROP TABLE IF EXISTS $TABLE_NAME")
             stmt.execute(
@@ -51,7 +69,7 @@ fun main() {
         }
 
         // 3. Batch Insert
-        println("\n\u001B[1;34m[*] 3. Columnar Batch Insert (Block Append)\u001B[0m")
+        println("\n" + boldBlue("[*] 3. Columnar Batch Insert (Block Append)"))
         val insertSql = "INSERT INTO $TABLE_NAME (timestamp, device_id, metric_type, value) VALUES (?, ?, ?, ?)"
         val now = System.currentTimeMillis()
         val devices = listOf("sensor-alpha", "sensor-beta", "sensor-gamma")
@@ -74,7 +92,7 @@ fun main() {
         }
 
         // 4. Vectorized Analytical Aggregation
-        println("\n\u001B[1;34m[*] 4. Vectorized Analytical Aggregations\u001B[0m")
+        println("\n" + boldBlue("[*] 4. Vectorized Analytical Aggregations"))
         c.createStatement().use { stmt ->
             val query =
                 """
@@ -103,7 +121,7 @@ fun main() {
         }
 
         // 5. Diagnostics
-        println("\n\u001B[1;34m[*] 5. Storage Introspection (system.parts)\u001B[0m")
+        println("\n" + boldBlue("[*] 5. Storage Introspection (system.parts)"))
         c.createStatement().use { stmt ->
             val query =
                 """
@@ -134,7 +152,7 @@ fun main() {
         }
     }
 
-    println("\n\u001B[1;32m[✓] ClickHouse Crash Course completed successfully!\u001B[0m\n")
+    println("\n" + boldGreen("[✓] ClickHouse Crash Course completed successfully!") + "\n")
 }
 
 main()

@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "psycopg[binary]>=3.1.0",
 # ]
 # ///
@@ -25,8 +26,12 @@ import time
 
 import psycopg
 from psycopg import errors
+from rich.console import Console
 
 DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
+
+
+console = Console()
 
 
 def reset_accounts() -> None:
@@ -47,7 +52,7 @@ def get_balance(account_id: int) -> float:
 # Part 1: Hot Row Contention & Row Lock Queuing
 # ----------------------------------------------------------------------
 def test_hot_row_contention() -> None:
-    print("\n\033[1;34m[*] Part 1: 50 Concurrent Updates to Single Hot Row (Alice, id=1)...\033[0m")
+    console.print("\n[bold blue][*] Part 1: 50 Concurrent Updates to Single Hot Row (Alice, id=1)...[/]")
     reset_accounts()
 
     NUM_WORKERS = 50
@@ -69,7 +74,7 @@ def test_hot_row_contention() -> None:
 
     print("    Initial Balance  : $1,000.00")
     print("    Expected Balance : $1,050.00")
-    print(f"    Final Balance    : \033[1;32m${final_balance:,.2f}\033[0m")
+    console.print(f"    Final Balance    : [bold green]${final_balance:,.2f}[/]")
     print(f"    Total Time       : {duration * 1000:.1f}ms ({NUM_WORKERS} updates serialized)")
 
     if final_balance == 1050.00:
@@ -81,7 +86,7 @@ def test_hot_row_contention() -> None:
 # Part 2: Controlled Deadlock Generation (Opposite Lock Ordering)
 # ----------------------------------------------------------------------
 def test_deadlock() -> None:
-    print("\n\033[1;34m[*] Part 2: Triggering Controlled Deadlock (Opposite Lock Ordering)...\033[0m")
+    console.print("\n[bold blue][*] Part 2: Triggering Controlled Deadlock (Opposite Lock Ordering)...[/]")
     reset_accounts()
 
     barrier = threading.Barrier(2)
@@ -139,7 +144,7 @@ def test_deadlock() -> None:
     has_commit = any("COMMITTED" in r for r in results.values())
 
     if has_deadlock and has_commit:
-        print("  \033[1;32m[✓] Deadlock successfully caught & resolved by PostgreSQL!\033[0m")
+        console.print("  [bold green][✓] Deadlock successfully caught & resolved by PostgreSQL![/]")
         print("      PostgreSQL's deadlock detector identified the wait-for cycle, aborted the")
         print("      younger transaction (SQLSTATE 40P01), allowing the other transaction to commit.")
 
@@ -148,7 +153,7 @@ def test_deadlock() -> None:
 # Part 3: The Fix - Consistent Global Lock Ordering
 # ----------------------------------------------------------------------
 def test_ordered_locking() -> None:
-    print("\n\033[1;34m[*] Part 3: Testing 40 Concurrent Transfers with Consistent Lock Ordering...\033[0m")
+    console.print("\n[bold blue][*] Part 3: Testing 40 Concurrent Transfers with Consistent Lock Ordering...[/]")
     reset_accounts()
 
     deadlock_count = 0
@@ -186,8 +191,8 @@ def test_ordered_locking() -> None:
     alice_bal = get_balance(1)
     bob_bal = get_balance(2)
 
-    print(f"    Successful Transfers : \033[1;32m{success_count} / 40\033[0m")
-    print(f"    Deadlocks Caught     : \033[1;32m{deadlock_count}\033[0m (0 expected)")
+    console.print(f"    Successful Transfers : [bold green]{success_count} / 40[/]")
+    console.print(f"    Deadlocks Caught     : [bold green]{deadlock_count}[/] (0 expected)")
     print(f"    Alice Final Balance  : ${alice_bal:,.2f}")
     print(f"    Bob Final Balance    : ${bob_bal:,.2f}")
     print(f"    Total System Wealth  : ${alice_bal + bob_bal:,.2f} ($2,000.00 expected)")
@@ -201,15 +206,15 @@ def main() -> None:
         with psycopg.connect(DB_CONN, connect_timeout=3):
             pass
     except Exception:
-        print("\033[1;31mError: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.\033[0m")
+        console.print("[bold red]Error: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.[/]")
         print("Please start the locks container first:")
         print("  cd postgres && make up EXP=locks")
         return
 
-    print("\033[1;36m=================================================================\033[0m")
-    print("\033[1;36mExperiment 02: PostgreSQL Lock Contention & Deadlock Detection\033[0m")
+    console.print("[bold cyan]=================================================================[/]")
+    console.print("[bold cyan]Experiment 02: PostgreSQL Lock Contention & Deadlock Detection[/]")
     print("Testing row-level exclusive locks and deadlock detection dynamics.")
-    print("\033[1;36m=================================================================\033[0m")
+    console.print("[bold cyan]=================================================================[/]")
 
     # Part 1: Hot row queue
     test_hot_row_contention()
@@ -220,9 +225,9 @@ def main() -> None:
     # Part 3: Ordered lock fix
     test_ordered_locking()
 
-    print("\n\033[1;32m=================================================================")
+    console.print("\n[bold green]=================================================================")
     print("SYSTEMS TAKEAWAYS")
-    print("=================================================================\033[0m")
+    console.print("=================================================================[/]")
     print("1. Hot rows serialize through exclusive row locks; no lost updates occur.")
     print("2. Deadlocks occur when concurrent transactions acquire locks out of order.")
     print("3. Deadlock detection is reactive (costly search in lock wait-graph).")

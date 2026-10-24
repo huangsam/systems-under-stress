@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "cassandra-driver>=3.29.0",
 # ]
 # ///
@@ -31,6 +32,7 @@ from pathlib import Path
 from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.policies import WhiteListRoundRobinPolicy
+from rich.console import Console
 
 COMPOSE_DIR = Path(__file__).resolve().parent.parent
 HOST = "127.0.0.1"
@@ -39,13 +41,16 @@ KEYSPACE = "lab_partitions"
 NUM_RECORDS = 5000
 
 
-def log(msg: str, color: str = "\033[0m") -> None:
+console = Console()
+
+
+def log(msg: str, color: str = "[/]") -> None:
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"\033[2m[{timestamp}]\033[0m {color}{msg}\033[0m", flush=True)
+    console.print(f"[dim][{timestamp}][/] {color}{msg}[/]", flush=True)
 
 
 def wait_for_cassandra() -> Cluster:
-    log("Connecting to Cassandra on 127.0.0.1:9042...", "\033[1;36m")
+    log("Connecting to Cassandra on 127.0.0.1:9042...", "[bold cyan]")
     profile = ExecutionProfile(
         request_timeout=20.0,
         load_balancing_policy=WhiteListRoundRobinPolicy([HOST]),
@@ -63,7 +68,7 @@ def wait_for_cassandra() -> Cluster:
             return cluster
         except Exception:
             time.sleep(2)
-    log("Failed to connect. Start with 'make up EXP=wide-partitions' or 'make up EXP=tombstones'", "\033[1;31m")
+    log("Failed to connect. Start with 'make up EXP=wide-partitions' or 'make up EXP=tombstones'", "[bold red]")
     sys.exit(1)
 
 
@@ -96,7 +101,7 @@ def setup_schema(session) -> None:
 
     session.execute(f"TRUNCATE {KEYSPACE}.monolithic_feed;")
     session.execute(f"TRUNCATE {KEYSPACE}.bucketed_feed;")
-    log("Keyspace and comparison tables initialized.", "\033[32m")
+    log("Keyspace and comparison tables initialized.", "[green]")
 
 
 def run_experiment() -> None:
@@ -112,7 +117,7 @@ def run_experiment() -> None:
         import uuid
 
         # Ingest into Monolithic table
-        log(f"Ingesting {NUM_RECORDS:,} events into SINGLE partition 'ALL' (Anti-pattern)...", "\033[1;33m")
+        log(f"Ingesting {NUM_RECORDS:,} events into SINGLE partition 'ALL' (Anti-pattern)...", "[bold yellow]")
         mono_stmt = session.prepare(f"INSERT INTO {KEYSPACE}.monolithic_feed (partition_key, event_id, payload) VALUES (?, ?, ?)")
         mono_params = [("ALL", uuid.uuid1(), f"payload_data_{i}") for i in range(NUM_RECORDS)]
 
@@ -121,7 +126,7 @@ def run_experiment() -> None:
         t_mono_write = time.perf_counter() - t0
 
         # Ingest into Bucketed table (10 distinct date/tenant buckets)
-        log(f"Ingesting {NUM_RECORDS:,} events evenly distributed across 10 buckets (Best Practice)...", "\033[1;32m")
+        log(f"Ingesting {NUM_RECORDS:,} events evenly distributed across 10 buckets (Best Practice)...", "[bold green]")
         bucket_stmt = session.prepare(f"INSERT INTO {KEYSPACE}.bucketed_feed (tenant_id, date_bucket, event_id, payload) VALUES (?, ?, ?, ?)")
         bucket_params = [(f"tenant_{i % 10}", "2026-10-22", uuid.uuid1(), f"payload_data_{i}") for i in range(NUM_RECORDS)]
 
@@ -130,7 +135,7 @@ def run_experiment() -> None:
         t_bucket_write = time.perf_counter() - t0
 
         # Query benchmarking
-        log("Benchmarking point partition scan latency...", "\033[1;36m")
+        log("Benchmarking point partition scan latency...", "[bold cyan]")
 
         # Monolithic read
         t0 = time.perf_counter()
@@ -148,10 +153,10 @@ def run_experiment() -> None:
         print(f"  Ingestion Strategy        : {'Monolithic (1 Partition)':<25} vs {'Bucketed (10 Partitions)':<25}")
         print(f"  Write Duration            : {t_mono_write:.3f}s                   vs {t_bucket_write:.3f}s")
         print(f"  Query Read Latency        : {t_mono_read:.2f} ms                  vs {t_bucket_read:.2f} ms")
-        print("  Partition Size Risk       : \033[31mCRITICAL (>100MB bloat)\033[0m   vs \033[32mSAFE (<10MB per bucket)\033[0m")
+        console.print("  Partition Size Risk       : [red]CRITICAL (>100MB bloat)[/]   vs [green]SAFE (<10MB per bucket)[/]")
         print("=" * 70 + "\n")
 
-        print("\033[1mCassandra Partitioning Guardrails:\033[0m")
+        console.print("[bold]Cassandra Partitioning Guardrails:[/]")
         print("1. Maximum recommended partition size: 100MB (Hard limit ~2GB).")
         print("2. Maximum recommended cells per partition: 100,000 cells.")
         print("3. Wide partitions cause JVM heap spikes during read repair, compaction, and coordinator caching.")

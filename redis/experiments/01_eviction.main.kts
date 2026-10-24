@@ -1,10 +1,28 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("redis.clients:jedis:5.1.2")
 @file:DependsOn("org.slf4j:slf4j-nop:2.0.13")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import redis.clients.jedis.Jedis
 import redis.clients.jedis.exceptions.JedisDataException
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val HOST = "127.0.0.1"
 val PORT = 6379
@@ -33,7 +51,7 @@ val jedis =
         j.ping()
         j
     } catch (e: Exception) {
-        println("\u001B[1;31mError: Cannot connect to Redis on $HOST:$PORT.\u001B[0m")
+        println(boldRed("Error: Cannot connect to Redis on $HOST:$PORT."))
         println("Please start an experiment container first:")
         println("  make up EXP=eviction-lru")
         println("  make up EXP=eviction-noeviction")
@@ -46,11 +64,11 @@ jedis.use { client ->
     val maxMemory = infoMem["maxmemory"]?.toLongOrNull() ?: 0L
     val policy = infoMem["maxmemory_policy"] ?: "unknown"
 
-    println("\n\u001B[1;34m" + "=".repeat(65) + "\u001B[0m")
-    println("\u001B[1;32mRedis Eviction Lab (Kotlin / Jedis Driver)\u001B[0m")
+    println("\n" + boldBlue("=".repeat(65)))
+    println(boldGreen("Redis Eviction Lab (Kotlin / Jedis Driver)"))
     println("  Max Memory Limit : ${formatBytes(maxMemory)} (${"%,d".format(maxMemory)} bytes)")
-    println("  Eviction Policy  : \u001B[1;33m$policy\u001B[0m")
-    println("\u001B[1;34m" + "=".repeat(65) + "\u001B[0m\n")
+    println("  Eviction Policy  : ${boldYellow("$policy")}")
+    println(boldBlue("=".repeat(65)) + "\n")
 
     println("Flushing keyspace for a clean test run...")
     client.flushAll()
@@ -76,7 +94,7 @@ jedis.use { client ->
         } catch (e: JedisDataException) {
             if (e.message?.contains("OOM") == true) {
                 hitOom = true
-                println("\n\u001B[1;31m[!] OOM THRESHOLD REACHED AT KEY #$i:\u001B[0m")
+                println("\n${boldRed("[!] OOM THRESHOLD REACHED AT KEY #$i:")}")
                 println("    Redis Error: ${e.message}")
                 break
             } else {
@@ -90,20 +108,20 @@ jedis.use { client ->
     val usedMemory = finalMemInfo["used_memory"]?.toLongOrNull() ?: 0L
     val evictedKeys = finalStatsInfo["evicted_keys"]?.toLongOrNull() ?: 0L
 
-    println("\n\u001B[1;34m" + "-".repeat(65) + "\u001B[0m")
-    println("\u001B[1;37mPhase 1 Results:\u001B[0m")
+    println("\n" + boldBlue("" + "-".repeat(65) + ""))
+    println(boldWhite("Phase 1 Results:"))
     println("  Keys Accepted : ${"%,d".format(inserted)}")
     println("  Used Memory   : ${formatBytes(usedMemory)}")
     println("  Evicted Keys  : ${"%,d".format(evictedKeys)}")
 
     if (policy == "noeviction") {
         if (hitOom) {
-            println("  Outcome       : \u001B[1;32mSUCCESSFULLY REPRODUCED NOEVICTION OOM\u001B[0m")
+            println("  Outcome       : ${boldGreen("SUCCESSFULLY REPRODUCED NOEVICTION OOM")}")
             println("                  Redis strictly protected its memory cap by rejecting writes.")
         }
     } else {
-        println("  Outcome       : \u001B[1;32mSUCCESSFUL ACTIVE EVICTION\u001B[0m")
+        println("  Outcome       : ${boldGreen("SUCCESSFUL ACTIVE EVICTION")}")
         println("                  Redis accepted all writes by seamlessly evicting cold keys.")
     }
-    println("\u001B[1;34m" + "=".repeat(65) + "\u001B[0m\n")
+    println(boldBlue("=".repeat(65)) + "\n")
 }

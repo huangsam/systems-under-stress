@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "clickhouse-connect>=0.7.0",
 # ]
 # ///
@@ -23,8 +24,12 @@ import sys
 import time
 
 import clickhouse_connect
+from rich.console import Console
 
 NUM_ROWS = 500_000
+
+
+console = Console()
 
 
 def format_bytes(b: int) -> str:
@@ -39,14 +44,14 @@ def main() -> None:
     try:
         client = clickhouse_connect.get_client(host="127.0.0.1", port=8123)
     except Exception as e:
-        print(f"\033[1;31mError: Could not connect to ClickHouse on 127.0.0.1:8123 ({e})\033[0m")
+        console.print(f"[bold red]Error: Could not connect to ClickHouse on 127.0.0.1:8123 ({e})[/]")
         print("Start the container first: make up EXP=compression")
         sys.exit(1)
 
-    print("\033[1;36m======================================================================\033[0m")
-    print("\033[1;36mExperiment 03: ClickHouse Columnar Codecs & LowCardinality Compression\033[0m")
+    console.print("[bold cyan]======================================================================[/]")
+    console.print("[bold cyan]Experiment 03: ClickHouse Columnar Codecs & LowCardinality Compression[/]")
     print(f"Benchmarking {NUM_ROWS:,} rows across Uncompressed, LZ4, and Delta+ZSTD.")
-    print("\033[1;36m======================================================================\033[0m\n")
+    console.print("[bold cyan]======================================================================[/]\n")
 
     # 1. Create three tables with identical logical schemas but different physical encodings
     client.command("DROP TABLE IF EXISTS telemetry_none")
@@ -108,7 +113,7 @@ def main() -> None:
         print(f"    Completed in {(time.perf_counter() - t0) * 1000:.0f}ms")
 
     # 3. Query system.columns for exact physical vs uncompressed disk sizes
-    print("\n\033[1;34m[*] Auditing Disk Storage via system.columns:\033[0m\n")
+    console.print("\n[bold blue][*] Auditing Disk Storage via system.columns:[/]\n")
     rows = client.query("""
     SELECT
         table,
@@ -129,7 +134,7 @@ def main() -> None:
         print(f"{tbl:<24} | {format_bytes(raw_b):>16} | {format_bytes(disk_b):>18} | {ratio:>17.2f}x")
 
     # 4. Per-column breakdown on telemetry_optimized vs telemetry_none
-    print("\n\033[1;34m[*] Per-Column Compression Breakdown (Optimized vs Uncompressed):\033[0m\n")
+    console.print("\n[bold blue][*] Per-Column Compression Breakdown (Optimized vs Uncompressed):[/]\n")
     col_rows = client.query("""
     SELECT
         o.name AS column_name,
@@ -151,9 +156,9 @@ def main() -> None:
     for name, ctype, codec, n_b, o_b, factor in col_rows:
         print(f"{name:<15} | {ctype:<24} | {codec:<24} | {format_bytes(n_b):>11} | {format_bytes(o_b):>11} | {factor:>8.1f}x")
 
-    print("\n\033[1;32m======================================================================")
+    console.print("\n[bold green]======================================================================")
     print("SYSTEMS TAKEAWAYS")
-    print("======================================================================\033[0m")
+    console.print("======================================================================[/]")
     print("1. Delta + ZSTD on monotonic timestamps stores only frame-to-frame differences")
     print("   (e.g. +1, +1, +1), collapsing megabytes of timestamps into a few kilobytes.")
     print("2. LowCardinality(String) replaces repeated strings with integer dictionary IDs,")

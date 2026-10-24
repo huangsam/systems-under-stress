@@ -1,7 +1,25 @@
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("com.clickhouse:clickhouse-jdbc:0.6.0")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import java.sql.DriverManager
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val JDBC_URL = "jdbc:ch://127.0.0.1:8123/default"
 val NUM_ROWS = 500_000
@@ -16,15 +34,15 @@ fun formatBytes(bytes: Long): String {
 }
 
 fun main() {
-    println("\u001b[1;36m======================================================================\u001b[0m")
-    println("\u001b[1;36mExperiment 03 (Kotlin): Columnar Codecs & LowCardinality Compression\u001b[0m")
+    println(boldCyan("=".repeat(70)))
+    println(boldCyan("Experiment 03 (Kotlin): Columnar Codecs & LowCardinality Compression"))
     println("Benchmarking ${"%,d".format(NUM_ROWS)} rows across Uncompressed, LZ4, and Delta+ZSTD.")
-    println("\u001b[1;36m======================================================================\u001b[0m\n")
+    println(boldCyan("=".repeat(70)) + "\n")
 
     val conn = try {
         DriverManager.getConnection(JDBC_URL)
     } catch (e: Exception) {
-        println("\u001b[1;31m[!] Error: Unable to connect to ClickHouse at $JDBC_URL: ${e.message}\u001b[0m")
+        println(boldRed("[!] Error: Unable to connect to ClickHouse at $JDBC_URL: ${e.message}"))
         println("Start container first: cd clickhouse && make up EXP=compression")
         return
     }
@@ -89,7 +107,7 @@ fun main() {
             println("    Seeded and optimized $table in %.2fs".format(elapsed))
         }
 
-        println("\n\u001b[1;34m[*] Physical Disk Footprint Comparison (from system.columns):\u001b[0m")
+        println("\n" + boldBlue("[*] Physical Disk Footprint Comparison (from system.columns):"))
         println("-------------------------------------------------------------------------------------")
         println("%-22s %-16s %-16s %-12s".format("Encoding Strategy", "Uncompressed", "Compressed", "Ratio"))
         println("-------------------------------------------------------------------------------------")
@@ -126,14 +144,14 @@ fun main() {
         println("-------------------------------------------------------------------------------------")
     }
 
-    println("\n\u001b[1;32m=================================================================")
+    println("\n" + boldGreen("=".repeat(65)))
     println("COLUMNAR ARCHITECTURE TAKEAWAYS")
-    println("=================================================================\u001b[0m")
+    println(boldGreen("=".repeat(65)))
     println("1. Columnar layout clusters values of the same type and distribution contiguously.")
     println("2. DoubleDelta + ZSTD compresses monotonically increasing timestamps to < 1 bit/value.")
     println("3. LowCardinality replaces repetitive strings with dictionary indices.")
     println("4. 10x+ storage reduction drastically cuts NVMe SSD spend and disk I/O scan bottlenecks.")
-    println("=================================================================\n")
+    println(boldGreen("=".repeat(65)) + "\n")
 }
 
 main()

@@ -1,5 +1,6 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("com.datastax.oss:java-driver-core:4.17.0")
 @file:DependsOn("org.slf4j:slf4j-nop:2.0.13")
 @file:DependsOn("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
@@ -7,6 +8,15 @@
 import com.datastax.oss.driver.api.core.CqlSession
 import com.datastax.oss.driver.api.core.DefaultConsistencyLevel
 import com.datastax.oss.driver.api.core.cql.SimpleStatement
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import kotlinx.coroutines.*
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Semaphore
@@ -17,6 +27,14 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
+
 val HOST = "127.0.0.1"
 val PORT = 9042
 val DC = "datacenter1"
@@ -24,9 +42,9 @@ val KEYSPACE = "lab_partition_skew"
 val EVENT_COUNT = 5_000
 val NUM_BUCKETS = 10
 
-fun log(msg: String, color: String = "\u001B[0m") {
+fun log(msg: String, style: (String) -> String = { it }) {
     val time = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneOffset.UTC).format(Instant.now())
-    println("\u001B[2m[$time]\u001B[0m $color$msg\u001B[0m")
+    println("${dim("[$time]")} ${style(msg)}")
 }
 
 runBlocking {
@@ -69,13 +87,13 @@ runBlocking {
 
         sess.execute("TRUNCATE $KEYSPACE.telemetry_monolithic;")
         sess.execute("TRUNCATE $KEYSPACE.telemetry_bucketed;")
-        log("Keyspace and benchmark tables initialized.", "\u001B[32m")
+        log("Keyspace and benchmark tables initialized.", green)
 
         val baseInstant = Instant.parse("2026-01-01T00:00:00Z")
         val sem = Semaphore(128)
 
         // Workload A: Monolithic partition
-        log("Ingesting ${"%,d".format(EVENT_COUNT)} events into SINGLE partition 'ALL' (Anti-pattern)...", "\u001B[1;36m")
+        log("Ingesting ${"%,d".format(EVENT_COUNT)} events into SINGLE partition 'ALL' (Anti-pattern)...", boldCyan)
         val monoInsertStmt = sess.prepare("""
             INSERT INTO $KEYSPACE.telemetry_monolithic (device_id, event_time, payload)
             VALUES (?, ?, ?)
@@ -96,7 +114,7 @@ runBlocking {
         val monoDurationSec = (System.currentTimeMillis() - t0Mono) / 1000.0
 
         // Workload B: Bucketed partitions
-        log("Ingesting ${"%,d".format(EVENT_COUNT)} events across $NUM_BUCKETS distributed buckets (Best Practice)...", "\u001B[1;36m")
+        log("Ingesting ${"%,d".format(EVENT_COUNT)} events across $NUM_BUCKETS distributed buckets (Best Practice)...", boldCyan)
         val bucketInsertStmt = sess.prepare("""
             INSERT INTO $KEYSPACE.telemetry_bucketed (device_id, bucket_id, event_time, payload)
             VALUES (?, ?, ?, ?)
@@ -118,7 +136,7 @@ runBlocking {
         val bucketDurationSec = (System.currentTimeMillis() - t0Bucket) / 1000.0
 
         // Read Benchmarks
-        log("Benchmarking point partition scan latency...", "\u001B[1;36m")
+        log("Benchmarking point partition scan latency...", boldCyan)
         val qMono = SimpleStatement.newInstance("SELECT * FROM $KEYSPACE.telemetry_monolithic WHERE device_id = 'ALL' LIMIT 100")
             .setConsistencyLevel(DefaultConsistencyLevel.ONE)
         val t0ReadMono = System.nanoTime()

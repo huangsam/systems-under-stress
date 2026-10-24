@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "neo4j>=5.15",
 # ]
 # ///
@@ -31,10 +32,16 @@ import sys
 import time
 from typing import Any
 
+from rich.console import Console
+
 from neo4j import Driver, GraphDatabase
 
 URI = "bolt://127.0.0.1:7687"
 AUTH = ("neo4j", "password123")
+
+
+console = Console()
+err_console = Console(stderr=True)
 
 
 def get_driver() -> Driver:
@@ -49,7 +56,7 @@ def wait_for_neo4j(driver: Driver, timeout_sec: int = 45) -> None:
             with driver.session() as session:
                 result = session.run("RETURN 1 AS online")
                 if result.single()["online"] == 1:
-                    print("[\033[1;32m+\033[0m] Neo4j is online and accepting Bolt connections.")
+                    console.print("[[bold green]+[/]] Neo4j is online and accepting Bolt connections.")
                     return
         except Exception:
             time.sleep(1.5)
@@ -66,7 +73,7 @@ def extract_total_db_hits(plan: Any) -> int:
 
 
 def reset_and_seed_supernode(driver: Driver, supernode_edges: int = 50000, sparse_edges: int = 10) -> None:
-    print(f"\n\033[1;34m[*] Seeding Supernode ({supernode_edges:,} edges) and Sparse Node ({sparse_edges} edges)...\033[0m")
+    console.print(f"\n[bold blue][*] Seeding Supernode ({supernode_edges:,} edges) and Sparse Node ({sparse_edges} edges)...[/]")
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
 
@@ -109,11 +116,11 @@ def reset_and_seed_supernode(driver: Driver, supernode_edges: int = 50000, spars
 
         super_deg = session.run("MATCH (:Hub {id: 'supernode'})<-[r:FOLLOWS]-() RETURN count(r) AS cnt").single()["cnt"]
         sparse_deg = session.run("MATCH (:Hub {id: 'sparse_node'})<-[r:FOLLOWS]-() RETURN count(r) AS cnt").single()["cnt"]
-        print(f"[\033[1;32m+\033[0m] Supernode degree: {super_deg:,} edges | Sparse node degree: {sparse_deg} edges.")
+        console.print(f"[[bold green]+[/]] Supernode degree: {super_deg:,} edges | Sparse node degree: {sparse_deg} edges.")
 
 
 def test_traversal_degradation(driver: Driver) -> None:
-    print("\n\033[1;34m[*] Part 1: Read Traversal Degradation (Pointer-Chasing in Relationship Chains)...\033[0m")
+    console.print("\n[bold blue][*] Part 1: Read Traversal Degradation (Pointer-Chasing in Relationship Chains)...[/]")
 
     with driver.session() as session:
         # 1. Query through Sparse Node (degree = 10)
@@ -145,12 +152,12 @@ def test_traversal_degradation(driver: Driver) -> None:
 
         if hits_sparse > 0:
             hits_ratio = hits_super / hits_sparse
-            print(f"\n[\033[1;33m!\033[0m] Traversing through the Supernode required \033[1;31m{hits_ratio:,.0f}x\033[0m more DB hits")
+            console.print(f"\n[[bold yellow]![/]] Traversing through the Supernode required [bold red]{hits_ratio:,.0f}x[/] more DB hits")
             print("    due to sequentially traversing the 50,000-pointer relationship record chain.")
 
 
 def test_lock_contention(driver: Driver, num_workers: int = 10, writes_per_worker: int = 25) -> None:
-    print(f"\n\033[1;34m[*] Part 2: Concurrent Write Lock Contention ({num_workers} threads, {writes_per_worker} writes/thread)...\033[0m")
+    console.print(f"\n[bold blue][*] Part 2: Concurrent Write Lock Contention ({num_workers} threads, {writes_per_worker} writes/thread)...[/]")
 
     # Setup partition nodes for uncontended test
     with driver.session() as session:
@@ -238,13 +245,13 @@ def test_lock_contention(driver: Driver, num_workers: int = 10, writes_per_worke
     print("=" * 82)
 
     latency_ratio = p95_c / p95_u if p95_u > 0 else 1.0
-    print(f"\n[\033[1;33m!\033[0m] Supernode exclusive lock serialization increased P95 write latency by \033[1;31m{latency_ratio:.1f}x\033[0m.")
+    console.print(f"\n[[bold yellow]![/]] Supernode exclusive lock serialization increased P95 write latency by [bold red]{latency_ratio:.1f}x[/].")
 
 
 def main() -> None:
-    print("\033[1;36m========================================================================\033[0m")
-    print("\033[1;36m Neo4j Limit Lab: Experiment 02 - Supernode Degradation & Lock Contention\033[0m")
-    print("\033[1;36m========================================================================\033[0m")
+    console.print("[bold cyan]========================================================================[/]")
+    console.print("[bold cyan] Neo4j Limit Lab: Experiment 02 - Supernode Degradation & Lock Contention[/]")
+    console.print("[bold cyan]========================================================================[/]")
 
     driver = get_driver()
     try:
@@ -252,9 +259,9 @@ def main() -> None:
         reset_and_seed_supernode(driver, supernode_edges=50000, sparse_edges=10)
         test_traversal_degradation(driver)
         test_lock_contention(driver, num_workers=10, writes_per_worker=25)
-        print("\n\033[1;32m[✓] Experiment 02 completed successfully.\033[0m")
+        console.print("\n[bold green][✓] Experiment 02 completed successfully.[/]")
     except Exception as e:
-        print(f"\n\033[1;31m[!] Error running experiment:\033[0m {e}", file=sys.stderr)
+        err_console.print(f"\n[bold red][!] Error running experiment:[/] {e}")
         sys.exit(1)
     finally:
         driver.close()

@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "hvac>=2.1.0",
 # ]
 # ///
@@ -25,10 +26,14 @@ import sys
 import time
 
 import hvac
+from rich.console import Console
 
 VAULT_URL = "http://127.0.0.1:8200"
 VAULT_TOKEN = "root"
 KEY_NAME = "pii-customer-ssn"
+
+
+console = Console()
 
 
 def b64e(s: str) -> str:
@@ -45,14 +50,14 @@ def main() -> None:
         if not client.sys.is_initialized():
             raise RuntimeError("Vault not initialized")
     except Exception as e:
-        print(f"\033[1;31mError: Cannot connect to Vault on {VAULT_URL} ({e})\033[0m")
+        console.print(f"[bold red]Error: Cannot connect to Vault on {VAULT_URL} ({e})[/]")
         print("Start the container first: make up EXP=transit-crypto")
         sys.exit(1)
 
-    print("\033[1;36m======================================================================\033[0m")
-    print("\033[1;36mExperiment 03: Vault Transit Encryption-as-a-Service & Key Rotation\033[0m")
+    console.print("[bold cyan]======================================================================[/]")
+    console.print("[bold cyan]Experiment 03: Vault Transit Encryption-as-a-Service & Key Rotation[/]")
     print("Benchmarking HTTP crypto overhead, batching, and zero-downtime key rotation.")
-    print("\033[1;36m======================================================================\033[0m\n")
+    console.print("[bold cyan]======================================================================[/]\n")
 
     # 1. Enable Transit secrets engine
     mounts = client.sys.list_mounted_secrets_engines()["data"]
@@ -73,7 +78,7 @@ def main() -> None:
     NUM_RECORDS = 200
     payloads = [b64e(f"SSN-999-00-{i:04d}") for i in range(NUM_RECORDS)]
 
-    print(f"\n\033[1;34m[*] Part 1: Encrypting {NUM_RECORDS} PII records (Sequential vs Batched)...\033[0m")
+    console.print(f"\n[bold blue][*] Part 1: Encrypting {NUM_RECORDS} PII records (Sequential vs Batched)...[/]")
 
     t0 = time.perf_counter()
     seq_ciphertexts: list[str] = []
@@ -93,12 +98,12 @@ def main() -> None:
     speedup = seq_ms / batch_ms if batch_ms > 0 else 1.0
     print(f"    Sequential HTTP (200 calls) : {seq_ms:>7.1f}ms ({seq_ops:>7,.0f} records/sec)")
     print(f"    Batched API (1 HTTP call)   : {batch_ms:>7.1f}ms ({batch_ops:>7,.0f} records/sec)")
-    print(f"    Batch Throughput Gain       : \033[1;32m{speedup:.1f}x Faster\033[0m")
+    console.print(f"    Batch Throughput Gain       : [bold green]{speedup:.1f}x Faster[/]")
 
     # 3. Part 2: Zero-Downtime Key Rotation & Server-Side Rewrap
-    print("\n\033[1;34m[*] Part 2: Zero-Downtime Key Rotation (v1 -> v2) & Rewrapping...\033[0m")
+    console.print("\n[bold blue][*] Part 2: Zero-Downtime Key Rotation (v1 -> v2) & Rewrapping...[/]")
     sample_v1 = batch_ciphertexts[0]
-    print(f"    Original v1 Ciphertext : \033[1;33m{sample_v1[:45]}...\033[0m")
+    console.print(f"    Original v1 Ciphertext : [bold yellow]{sample_v1[:45]}...[/]")
 
     # Rotate key to Version 2
     client.secrets.transit.rotate_key(name=KEY_NAME)
@@ -108,7 +113,7 @@ def main() -> None:
     # Rewrap v1 ciphertext to v2 without exposing plaintext
     rewrap_resp = client.secrets.transit.rewrap_data(name=KEY_NAME, ciphertext=sample_v1)
     sample_v2 = rewrap_resp["data"]["ciphertext"]
-    print(f"    Rewrapped v2 Ciphertext: \033[1;32m{sample_v2[:45]}...\033[0m")
+    console.print(f"    Rewrapped v2 Ciphertext: [bold green]{sample_v2[:45]}...[/]")
 
     # Enforce minimum decryption version = 2 (deprecating v1 keys after migration)
     client.secrets.transit.update_key_configuration(name=KEY_NAME, min_decryption_version=2)
@@ -128,9 +133,9 @@ def main() -> None:
 
     assert v1_blocked and plaintext_recovered == "SSN-999-00-0000"
 
-    print("\n\033[1;32m======================================================================")
+    console.print("\n[bold green]======================================================================")
     print("SYSTEMS TAKEAWAYS")
-    print("======================================================================\033[0m")
+    console.print("======================================================================[/]")
     print("1. Transit EaaS is CPU-fast (AES-NI) but HTTP-latency bound; always use")
     print(f"   'batch_input' ({speedup:.1f}x speedup) or Envelope Encryption (data keys) for bulk data.")
     print("2. Version-prefixed ciphertexts ('vault:v1:...', 'vault:v2:...') allow instant")

@@ -1,7 +1,17 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.postgresql:postgresql:42.7.3")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.SQLException
@@ -13,6 +23,14 @@ import kotlin.concurrent.thread
 val DB_URL = "jdbc:postgresql://127.0.0.1:5432/lab_db"
 val DB_USER = "postgres"
 val DB_PASS = "postgres"
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 fun getConn(): Connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)
 
@@ -36,12 +54,12 @@ fun getBalance(id: Int): Double {
     }
 }
 
-println("\n\u001B[1;36m" + "=".repeat(70) + "\u001B[0m")
-println("\u001B[1;32mExperiment 02 (Kotlin / JDBC): Row Lock Contention & Deadlock Detection\u001B[0m")
-println("\u001B[1;36m" + "=".repeat(70) + "\u001B[0m\n")
+println("\n" + boldCyan("=".repeat(70)))
+println(boldGreen("Experiment 02 (Kotlin / JDBC): Row Lock Contention & Deadlock Detection"))
+println(boldCyan("=".repeat(70)) + "\n")
 
 // Part 1: 50 Concurrent Updates to Single Hot Row
-println("\u001B[1;34m[*] Part 1: 50 Concurrent Updates to Single Hot Row (Alice, id=1)...\u001B[0m")
+println(boldBlue("[*] Part 1: 50 Concurrent Updates to Single Hot Row (Alice, id=1)..."))
 resetAccounts()
 
 val pool = Executors.newFixedThreadPool(25)
@@ -65,11 +83,11 @@ pool.awaitTermination(30, TimeUnit.SECONDS)
 val durMs = System.currentTimeMillis() - t0
 
 val finalBal = getBalance(1)
-println("    Final Balance: \u001B[1;32m$$finalBal\u001B[0m (Expected: $1050.00)")
+println("    Final Balance: ${boldGreen("$$finalBal")} (Expected: $1050.00)")
 println("    50 updates serialized safely in ${durMs}ms with zero lost updates.")
 
 // Part 2: Controlled Deadlock Generation
-println("\n\u001B[1;34m[*] Part 2: Generating Controlled Deadlock (SQLSTATE 40P01)...\u001B[0m")
+println("\n" + boldBlue("[*] Part 2: Generating Controlled Deadlock (SQLSTATE 40P01)..."))
 resetAccounts()
 
 val barrier = CyclicBarrier(2)
@@ -120,8 +138,8 @@ tA.join()
 tB.join()
 
 if (deadlockCaught) {
-    println("    \u001B[1;32m[✓] DEADLOCK DETECTED (SQLSTATE 40P01)!\u001B[0m")
+    println("    ${boldGreen("[✓] DEADLOCK DETECTED (SQLSTATE 40P01)!")}")
     println("        PostgreSQL background deadlock detector broke circular lock wait.")
 }
 
-println("\n\u001B[1;34m" + "=".repeat(70) + "\u001B[0m\n")
+println("\n${boldBlue("" + "=".repeat(70) + "")}\n")

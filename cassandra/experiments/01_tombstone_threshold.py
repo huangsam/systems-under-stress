@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "cassandra-driver>=3.29.0",
 # ]
 # ///
@@ -35,6 +36,7 @@ from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.policies import WhiteListRoundRobinPolicy
 from cassandra.query import SimpleStatement
+from rich.console import Console
 
 from cassandra import ConsistencyLevel, ReadFailure, ReadTimeout
 
@@ -49,9 +51,12 @@ TOTAL_ROWS = 15_000
 DELETE_ROWS = 12_000
 
 
-def log(msg: str, color: str = "\033[0m") -> None:
+console = Console()
+
+
+def log(msg: str, color: str = "[/]") -> None:
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"\033[2m[{timestamp}]\033[0m {color}{msg}\033[0m", flush=True)
+    console.print(f"[dim][{timestamp}][/] {color}{msg}[/]", flush=True)
 
 
 def run_cmd(cmd: list[str]) -> subprocess.CompletedProcess[str]:
@@ -59,16 +64,16 @@ def run_cmd(cmd: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def trigger_nodetool_flush() -> None:
-    log("Flushing memtables to SSTables on disk via nodetool...", "\033[1;34m")
+    log("Flushing memtables to SSTables on disk via nodetool...", "[bold blue]")
     res = run_cmd(["docker", "compose", "exec", "-T", "cassandra-tombstones", "nodetool", "flush", KEYSPACE, TABLE])
     if res.returncode == 0:
-        log("Memtable flushed to SSTable successfully.", "\033[32m")
+        log("Memtable flushed to SSTable successfully.", "[green]")
     else:
-        log(f"Notice: nodetool flush skipped or failed: {res.stderr.strip()}", "\033[33m")
+        log(f"Notice: nodetool flush skipped or failed: {res.stderr.strip()}", "[yellow]")
 
 
 def wait_for_cassandra() -> Cluster:
-    log("Connecting to Cassandra on 127.0.0.1:9042...", "\033[1;36m")
+    log("Connecting to Cassandra on 127.0.0.1:9042...", "[bold cyan]")
     profile = ExecutionProfile(
         request_timeout=30.0,
         load_balancing_policy=WhiteListRoundRobinPolicy([HOST]),
@@ -83,16 +88,16 @@ def wait_for_cassandra() -> Cluster:
             )
             session = cluster.connect()
             session.execute("SELECT release_version FROM system.local")
-            log(f"Connected to Cassandra cluster successfully (attempt {attempt}).", "\033[1;32m")
+            log(f"Connected to Cassandra cluster successfully (attempt {attempt}).", "[bold green]")
             return cluster
         except Exception:
             time.sleep(2)
-    log("Failed to connect to Cassandra after 30 attempts. Is 'make up EXP=tombstones' running?", "\033[1;31m")
+    log("Failed to connect to Cassandra after 30 attempts. Is 'make up EXP=tombstones' running?", "[bold red]")
     sys.exit(1)
 
 
 def setup_schema(session) -> None:
-    log(f"Setting up keyspace '{KEYSPACE}' and table '{TABLE}'...", "\033[1;36m")
+    log(f"Setting up keyspace '{KEYSPACE}' and table '{TABLE}'...", "[bold cyan]")
     session.execute(f"""
         CREATE KEYSPACE IF NOT EXISTS {KEYSPACE}
         WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}};
@@ -111,7 +116,7 @@ def setup_schema(session) -> None:
 
     # Fast reset of table data
     session.execute(f"TRUNCATE {KEYSPACE}.{TABLE};")
-    log("Schema ready and table truncated.", "\033[32m")
+    log("Schema ready and table truncated.", "[green]")
 
 
 def run_experiment() -> None:
@@ -129,7 +134,7 @@ def run_experiment() -> None:
         # Phase 1: Insert 15,000 rows
         # ---------------------------------------------------------
         base_time = datetime.datetime(2026, 1, 1, 0, 0, 0, tzinfo=datetime.UTC)
-        log(f"Phase 1: Inserting {TOTAL_ROWS:,} sensor readings into partition '{SENSOR_ID}'...", "\033[1;36m")
+        log(f"Phase 1: Inserting {TOTAL_ROWS:,} sensor readings into partition '{SENSOR_ID}'...", "[bold cyan]")
 
         insert_stmt = session.prepare(f"""
             INSERT INTO {KEYSPACE}.{TABLE} (sensor_id, recorded_at, metric_val, payload)
@@ -147,14 +152,14 @@ def run_experiment() -> None:
 
         failed_inserts = sum(1 for success, _ in results if not success)
         if failed_inserts > 0:
-            log(f"Warning: {failed_inserts} inserts failed", "\033[31m")
+            log(f"Warning: {failed_inserts} inserts failed", "[red]")
         else:
-            log(f"Successfully inserted {TOTAL_ROWS:,} rows in {t1 - t0:.2f}s ({(TOTAL_ROWS / (t1 - t0)):.0f} rows/s).", "\033[32m")
+            log(f"Successfully inserted {TOTAL_ROWS:,} rows in {t1 - t0:.2f}s ({(TOTAL_ROWS / (t1 - t0)):.0f} rows/s).", "[green]")
 
         # ---------------------------------------------------------
         # Phase 2: Delete 12,000 rows (Generating 12,000 tombstones)
         # ---------------------------------------------------------
-        log(f"Phase 2: Deleting first {DELETE_ROWS:,} rows to generate tombstones...", "\033[1;36m")
+        log(f"Phase 2: Deleting first {DELETE_ROWS:,} rows to generate tombstones...", "[bold cyan]")
 
         delete_stmt = session.prepare(f"""
             DELETE FROM {KEYSPACE}.{TABLE}
@@ -170,9 +175,9 @@ def run_experiment() -> None:
 
         failed_deletes = sum(1 for success, _ in del_results if not success)
         if failed_deletes > 0:
-            log(f"Warning: {failed_deletes} deletes failed", "\033[31m")
+            log(f"Warning: {failed_deletes} deletes failed", "[red]")
         else:
-            log(f"Generated {DELETE_ROWS:,} tombstones in {t1 - t0:.2f}s ({(DELETE_ROWS / (t1 - t0)):.0f} ops/s).", "\033[32m")
+            log(f"Generated {DELETE_ROWS:,} tombstones in {t1 - t0:.2f}s ({(DELETE_ROWS / (t1 - t0)):.0f} ops/s).", "[green]")
 
         # Flush memtables to disk SSTables
         trigger_nodetool_flush()
@@ -180,8 +185,8 @@ def run_experiment() -> None:
         # ---------------------------------------------------------
         # Phase 3: Trigger the Tombstone Threshold Limit
         # ---------------------------------------------------------
-        log("Phase 3: Querying partition containing 12,000 tombstones...", "\033[1;36m")
-        log("Query: SELECT * FROM sensor_telemetry WHERE sensor_id = 'sensor-alpha' LIMIT 5000;", "\033[2m")
+        log("Phase 3: Querying partition containing 12,000 tombstones...", "[bold cyan]")
+        log("Query: SELECT * FROM sensor_telemetry WHERE sensor_id = 'sensor-alpha' LIMIT 5000;", "[dim]")
 
         query_stmt = SimpleStatement(
             f"SELECT * FROM {KEYSPACE}.{TABLE} WHERE sensor_id = %s LIMIT 5000;",
@@ -196,33 +201,33 @@ def run_experiment() -> None:
             rows = session.execute(query_stmt, (SENSOR_ID,))
             row_list = list(rows)
             t1 = time.perf_counter()
-            log(f"Unexpected: Query succeeded and returned {len(row_list)} rows in {t1 - t0:.3f}s.", "\033[33m")
+            log(f"Unexpected: Query succeeded and returned {len(row_list)} rows in {t1 - t0:.3f}s.", "[yellow]")
         except ReadFailure as exc:
             read_failed = True
             error_details = str(exc)
-            log("SUCCESS: Cassandra aborted the query with ReadFailure!", "\033[1;31m")
-            log(f"Exception Type: {type(exc).__name__}", "\033[31m")
-            log(f"Server Error Message: {error_details}", "\033[1;31m")
+            log("SUCCESS: Cassandra aborted the query with ReadFailure!", "[bold red]")
+            log(f"Exception Type: {type(exc).__name__}", "[red]")
+            log(f"Server Error Message: {error_details}", "[bold red]")
         except Exception as exc:
             read_failed = True
             error_details = f"{type(exc).__name__}: {exc}"
-            log(f"Query raised: {error_details}", "\033[1;31m")
+            log(f"Query raised: {error_details}", "[bold red]")
 
         # Also test querying without partition key (full scan across table)
-        log("Testing unconstrained full table scan across tombstones...", "\033[1;36m")
+        log("Testing unconstrained full table scan across tombstones...", "[bold cyan]")
         try:
             full_scan_stmt = SimpleStatement(f"SELECT * FROM {KEYSPACE}.{TABLE} LIMIT 5000;", consistency_level=ConsistencyLevel.ONE)
             session.execute(full_scan_stmt)
-            log("Full scan completed without abort.", "\033[33m")
+            log("Full scan completed without abort.", "[yellow]")
         except (ReadFailure, ReadTimeout) as exc:
-            log(f"Full scan was aborted as expected: {exc}", "\033[1;31m")
+            log(f"Full scan was aborted as expected: {exc}", "[bold red]")
 
         # ---------------------------------------------------------
         # Phase 4: Remediation - Querying with Clustering Key Bounds
         # ---------------------------------------------------------
-        log("Phase 4: Remediation - Slicing past the tombstone boundary...", "\033[1;36m")
+        log("Phase 4: Remediation - Slicing past the tombstone boundary...", "[bold cyan]")
         boundary_time = base_time + datetime.timedelta(seconds=DELETE_ROWS)
-        log(f"Clustering Key Filter: recorded_at >= {boundary_time.isoformat()}", "\033[2m")
+        log(f"Clustering Key Filter: recorded_at >= {boundary_time.isoformat()}", "[dim]")
 
         remediation_stmt = SimpleStatement(
             f"""
@@ -237,8 +242,8 @@ def run_experiment() -> None:
         healthy_rows = list(session.execute(remediation_stmt, (SENSOR_ID, boundary_time)))
         t1 = time.perf_counter()
 
-        log(f"Remediated query returned {len(healthy_rows)} live rows in {(t1 - t0) * 1000:.2f} ms!", "\033[1;32m")
-        log("Tombstones scanned: 0 (bypassed via SSTable clustering key index block).", "\033[32m")
+        log(f"Remediated query returned {len(healthy_rows)} live rows in {(t1 - t0) * 1000:.2f} ms!", "[bold green]")
+        log("Tombstones scanned: 0 (bypassed via SSTable clustering key index block).", "[green]")
 
         # ---------------------------------------------------------
         # Summary & Systems Insights
@@ -253,7 +258,7 @@ def run_experiment() -> None:
         print(f"  Clustering Key Slice Latency: {(t1 - t0) * 1000:.2f} ms (Bypassed tombstones)")
         print("=" * 70 + "\n")
 
-        print("\033[1mCore Engineering Takeaways:\033[0m")
+        console.print("[bold]Core Engineering Takeaways:[/]")
         print("1. Deletes in Cassandra are append-only mutations that write immutable tombstones.")
         print("2. Scans must read tombstones to ensure deleted cells aren't resurrected from older SSTables.")
         print("3. When a query scans > 1,000 tombstones, Cassandra issues a server WARN.")

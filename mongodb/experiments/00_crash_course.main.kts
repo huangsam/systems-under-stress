@@ -1,7 +1,17 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.mongodb:mongodb-driver-sync:5.1.0")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import com.mongodb.client.MongoClients
 import com.mongodb.client.model.Accumulators
 import com.mongodb.client.model.Aggregates
@@ -16,19 +26,27 @@ val MONGO_URI = "mongodb://127.0.0.1:27017/"
 val DB_NAME = "lab_db"
 val COLL_NAME = "crash_course_inventory"
 
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
+
 fun main() {
-    println("\n\u001B[1;36m" + "=".repeat(70) + "\u001B[0m")
-    println("\u001B[1;32mMongoDB Crash Course (Kotlin / Official Driver): Documents & Pipelines\u001B[0m")
-    println("\u001B[1;36m" + "=".repeat(70) + "\u001B[0m\n")
+    println("\n" + boldCyan("=".repeat(70)))
+    println(boldGreen("MongoDB Crash Course (Kotlin / Official Driver): Documents & Pipelines"))
+    println(boldCyan("=".repeat(70)) + "\n")
 
     val client =
         try {
             val c = MongoClients.create(MONGO_URI)
             val pingRes = c.getDatabase("admin").runCommand(Document("ping", 1))
-            println("\u001B[1;34m[*] 1. Server Connectivity & Info (ping: ${pingRes["ok"]})\u001B[0m")
+            println(boldBlue("[*] 1. Server Connectivity & Info (ping: ${pingRes["ok"]})"))
             c
         } catch (e: Exception) {
-            println("\u001B[1;31m[!] Connection failed: ${e.message}\u001B[0m")
+            println(boldRed("[!] Connection failed: ${e.message}"))
             println("Start the lab container first: cd mongodb && make up EXP=unindexed-sort")
             exitProcess(1)
         }
@@ -43,7 +61,7 @@ fun main() {
         coll.drop()
 
         // 2. Document insertion
-        println("\n\u001B[1;34m[*] 2. Inserting Rich Documents (Nested BSON & Arrays)\u001B[0m")
+        println("\n" + boldBlue("[*] 2. Inserting Rich Documents (Nested BSON & Arrays)"))
         val sampleDocs =
             listOf(
                 Document("sku", "LAP-01")
@@ -80,7 +98,7 @@ fun main() {
         println("    Inserted ${sampleDocs.size} documents into '$COLL_NAME'.")
 
         // 3. Query & Update
-        println("\n\u001B[1;34m[*] 3. Nested Query & Atomic Field Modification\u001B[0m")
+        println("\n" + boldBlue("[*] 3. Nested Query & Atomic Field Modification"))
         val found = coll.find(Filters.gte("pricing.base", 1000.0)).first()
         if (found != null) {
             val pricing = found.get("pricing", Document::class.java)
@@ -100,7 +118,7 @@ fun main() {
         }
 
         // 4. Aggregation pipeline
-        println("\n\u001B[1;34m[*] 4. Aggregation Pipeline (\$match -> \$group -> \$sort)\u001B[0m")
+        println("\n" + boldBlue("[*] 4. Aggregation Pipeline (\$match -> \$group -> \$sort)"))
         val pipeline =
             listOf(
                 Aggregates.match(Filters.gt("stock", 0)),
@@ -120,7 +138,7 @@ fun main() {
         }
 
         // 5. Diagnostics
-        println("\n\u001B[1;34m[*] 5. Diagnostics & Server Status\u001B[0m")
+        println("\n" + boldBlue("[*] 5. Diagnostics & Server Status"))
         val serverStatus = db.runCommand(Document("serverStatus", 1))
         val mem = serverStatus.get("mem", Document::class.java)
         val conns = serverStatus.get("connections", Document::class.java)
@@ -132,7 +150,7 @@ fun main() {
         println("    Dropped demo collection '$COLL_NAME'.")
     }
 
-    println("\n\u001B[1;32m[✓] MongoDB Crash Course completed successfully!\u001B[0m\n")
+    println("\n" + boldGreen("[✓] MongoDB Crash Course completed successfully!") + "\n")
 }
 
 main()

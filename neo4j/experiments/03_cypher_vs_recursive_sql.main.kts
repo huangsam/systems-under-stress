@@ -1,30 +1,48 @@
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.neo4j.driver:neo4j-java-driver:5.20.0")
 @file:DependsOn("org.postgresql:postgresql:42.7.3")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import org.neo4j.driver.AuthTokens
 import org.neo4j.driver.GraphDatabase
 import java.sql.DriverManager
 
 val NEO4J_URI = "bolt://127.0.0.1:7687"
 val NEO4J_AUTH = AuthTokens.basic("neo4j", "password123")
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
+
 val PG_URL = "jdbc:postgresql://127.0.0.1:5432/lab_db?user=postgres&password=postgres"
 
 val NUM_NODES = 1500
 val BRANCHING = 3
 
 fun main() {
-    println("\u001b[1;36m======================================================================\u001b[0m")
-    println("\u001b[1;36mExperiment 03 (Kotlin): Multi-Hop Cypher (Neo4j) vs Recursive SQL (Postgres)\u001b[0m")
+    println(boldCyan("=".repeat(70)))
+    println(boldCyan("Experiment 03 (Kotlin): Multi-Hop Cypher (Neo4j) vs Recursive SQL (Postgres)"))
     println("Benchmarking index-free adjacency vs iterative B-Tree index joins.")
-    println("\u001b[1;36m======================================================================\u001b[0m\n")
+    println(boldCyan("=".repeat(70)) + "\n")
 
     val neoDriver = try {
         val d = GraphDatabase.driver(NEO4J_URI, NEO4J_AUTH)
         d.verifyConnectivity()
         d
     } catch (e: Exception) {
-        println("\u001b[1;31mError: Cannot connect to Neo4j on $NEO4J_URI (${e.message})\u001b[0m")
+        println(boldRed("Error: Cannot connect to Neo4j on $NEO4J_URI (${e.message})"))
         println("Start container first: cd neo4j && make up EXP=compare-sql")
         return
     }
@@ -32,7 +50,7 @@ fun main() {
     val pgConn = try {
         DriverManager.getConnection(PG_URL)
     } catch (e: Exception) {
-        println("\u001b[1;31mError: Cannot connect to PostgreSQL on $PG_URL (${e.message})\u001b[0m")
+        println(boldRed("Error: Cannot connect to PostgreSQL on $PG_URL (${e.message})"))
         return
     }
 
@@ -84,7 +102,7 @@ fun main() {
         """.trimIndent(), mapOf("edges" to edgeList))
     }
 
-    println("\n\u001b[1;34m[*] Multi-Hop Traversal Benchmark (from Root Service ID: 0):\u001b[0m")
+    println("\n" + boldBlue("[*] Multi-Hop Traversal Benchmark (from Root Service ID: 0):"))
     println("---------------------------------------------------------------------------------")
     println("%-6s %-16s %-18s %-18s".format("Depth", "Distinct Reached", "Postgres SQL", "Neo4j Cypher"))
     println("---------------------------------------------------------------------------------")
@@ -133,15 +151,15 @@ fun main() {
     }
     println("---------------------------------------------------------------------------------")
 
-    println("\n\u001b[1;32m=================================================================")
+    println("\n" + boldGreen("=".repeat(65)))
     println("REPRESENTATIONAL & ENGINE TAKEAWAYS")
-    println("=================================================================\u001b[0m")
+    println(boldGreen("=".repeat(65)))
     println("1. Relational stores execute recursive CTEs via iterative table joins and hash sets.")
     println("   As depth increases, intermediate working tables grow quadratically.")
     println("2. Neo4j executes pointer dereferences across memory-mapped record chains.")
     println("3. For deep or variable-length graph queries (>= 3 hops), native property graphs")
     println("   substantially outpace relational join engines.")
-    println("=================================================================\n")
+    println(boldGreen("=".repeat(65)) + "\n")
 
     neoDriver.close()
     pgConn.close()

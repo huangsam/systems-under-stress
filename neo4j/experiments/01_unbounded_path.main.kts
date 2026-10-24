@@ -1,10 +1,28 @@
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.neo4j.driver:neo4j-java-driver:5.20.0")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import org.neo4j.driver.AuthTokens
 import org.neo4j.driver.GraphDatabase
 import org.neo4j.driver.summary.Plan
 import org.neo4j.driver.summary.ProfiledPlan
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val URI = "bolt://127.0.0.1:7687"
 val AUTH = AuthTokens.basic("neo4j", "password123")
@@ -24,17 +42,17 @@ fun extractDbHits(plan: Plan?): Long {
 }
 
 fun main() {
-    println("\u001b[1;36m=================================================================\u001b[0m")
-    println("\u001b[1;36mExperiment 01 (Kotlin): Neo4j Unbounded Path Traversal\u001b[0m")
+    println(boldCyan("=".repeat(65)))
+    println(boldCyan("Experiment 01 (Kotlin): Neo4j Unbounded Path Traversal"))
     println("Investigating combinatorial explosion O(b^d) vs bidirectional BFS.")
-    println("\u001b[1;36m=================================================================\u001b[0m")
+    println(boldCyan("=".repeat(65)))
 
     val driver = try {
         val d = GraphDatabase.driver(URI, AUTH)
         d.verifyConnectivity()
         d
     } catch (e: Exception) {
-        println("\u001b[1;31m[!] Error: Unable to connect to Neo4j at $URI: ${e.message}\u001b[0m")
+        println(boldRed("[!] Error: Unable to connect to Neo4j at $URI: ${e.message}"))
         println("Start container first: cd neo4j && make up EXP=traversal-depth")
         return
     }
@@ -66,7 +84,7 @@ fun main() {
         }
 
         // Part 1: Combinatorial explosion
-        println("\n\u001b[1;34m[*] Part 1: Benchmarking Variable-Length Path Matching (MATCH -[:KNOWS*1..d]->)...\u001b[0m")
+        println("\n" + boldBlue("[*] Part 1: Benchmarking Variable-Length Path Matching (MATCH -[:KNOWS*1..d]->)..."))
         println("---------------------------------------------------------------------------------")
         println("%-6s %-15s %-18s %-15s".format("Depth", "Paths Evaluated", "Engine DB Hits", "Latency"))
         println("---------------------------------------------------------------------------------")
@@ -92,7 +110,7 @@ fun main() {
         println("---------------------------------------------------------------------------------")
 
         // Part 2: Shortest path optimization
-        println("\n\u001b[1;34m[*] Part 2: Mitigation via ShortestPath (Bidirectional BFS)...\u001b[0m")
+        println("\n" + boldBlue("[*] Part 2: Mitigation via ShortestPath (Bidirectional BFS)..."))
         val targetId = (NUM_NODES * 0.75).toInt()
         val cypherShortest = "PROFILE MATCH p = shortestPath((a:Person {id: 0})-[:KNOWS*]-(b:Person {id: $targetId})) RETURN length(p) AS hops"
         val t0 = System.currentTimeMillis()
@@ -106,18 +124,18 @@ fun main() {
 
         println("    Target Node ID : $targetId")
         println("    Shortest Path  : $hops hops")
-        println("    DB Hits        : \u001b[1;32m${"%,d".format(dbHits)}\u001b[0m")
+        println("    DB Hits        : ${boldGreen("${"%,d".format(dbHits)}")}")
         println("    Duration       : ${elapsed}ms")
 
-        println("\n\u001b[1;32m=================================================================")
+        println("\n" + boldGreen("=".repeat(65)))
         println("GRAPH TRAVERSAL TAKEAWAYS")
-        println("=================================================================\u001b[0m")
+        println(boldGreen("=".repeat(65)))
         println("1. Unbounded variable-length traversals ([:KNOWS*]) explode combinatorially O(b^d).")
         println("2. While index-free adjacency enables microsecond pointer dereferences, evaluating")
         println("   millions of permutations exhausts memory and causes query timeouts.")
         println("3. Always constrain variable-length traversals with upper bounds (*1..3) or use")
         println("   shortestPath() / APOC path expanders with node filters.")
-        println("=================================================================\n")
+        println(boldGreen("=".repeat(65)) + "\n")
     }
     driver.close()
 }

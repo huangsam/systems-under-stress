@@ -1,13 +1,31 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("com.datastax.oss:java-driver-core:4.17.0")
 @file:DependsOn("org.slf4j:slf4j-nop:2.0.13")
 
 import com.datastax.oss.driver.api.core.CqlSession
 import com.datastax.oss.driver.api.core.cql.SimpleStatement
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import java.net.InetSocketAddress
 import java.util.UUID
 import kotlin.system.exitProcess
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val HOST = "127.0.0.1"
 val PORT = 9042
@@ -16,9 +34,9 @@ val KEYSPACE = "lab_crash_course"
 val TABLE_NAME = "users_by_country"
 
 fun main() {
-    println("\n\u001B[1;36m" + "=".repeat(70) + "\u001B[0m")
-    println("\u001B[1;32mApache Cassandra Crash Course (Kotlin / DataStax Driver): CQL & Partitions\u001B[0m")
-    println("\u001B[1;36m" + "=".repeat(70) + "\u001B[0m\n")
+    println("\n" + boldCyan("=".repeat(70)))
+    println(boldGreen("Apache Cassandra Crash Course (Kotlin / DataStax Driver): CQL & Partitions"))
+    println(boldCyan("=".repeat(70)) + "\n")
 
     val session =
         try {
@@ -28,14 +46,14 @@ fun main() {
                 .withLocalDatacenter(DC)
                 .build()
         } catch (e: Exception) {
-            println("\u001B[1;31m[!] Connection failed: ${e.message}\u001B[0m")
+            println(boldRed("[!] Connection failed: ${e.message}"))
             println("Start the lab container first: cd cassandra && make up EXP=tombstones")
             exitProcess(1)
         }
 
     session.use { sess ->
         // 1. Cluster Metadata
-        println("\u001B[1;34m[*] 1. Node Metadata & System Introspection\u001B[0m")
+        println(boldBlue("[*] 1. Node Metadata & System Introspection"))
         val nodeRow = sess.execute("SELECT cluster_name, data_center, release_version FROM system.local").one()
         if (nodeRow != null) {
             println("    Cluster Name: ${nodeRow.getString("cluster_name")}")
@@ -43,7 +61,7 @@ fun main() {
         }
 
         // 2. Keyspace & Table Creation
-        println("\n\u001B[1;34m[*] 2. Creating Keyspace & Table Schema\u001B[0m")
+        println("\n" + boldBlue("[*] 2. Creating Keyspace & Table Schema"))
         sess.execute(
             """
             CREATE KEYSPACE IF NOT EXISTS $KEYSPACE
@@ -68,7 +86,7 @@ fun main() {
         println("    Schema Notes: 'country' is Partition Key (token hash); 'user_id' is Clustering Column.")
 
         // 3. Prepared Statements & Inserts
-        println("\n\u001B[1;34m[*] 3. Prepared Statements & Partition-Targeted Writes\u001B[0m")
+        println("\n" + boldBlue("[*] 3. Prepared Statements & Partition-Targeted Writes"))
         val insertStmt =
             sess.prepare(
                 """
@@ -92,7 +110,7 @@ fun main() {
         println("    Inserted ${records.size} users across 3 distinct country partitions (US, CA, DE).")
 
         // 4. Partition Query
-        println("\n\u001B[1;34m[*] 4. Querying by Partition Key (O(1) Token Routing)\u001B[0m")
+        println("\n" + boldBlue("[*] 4. Querying by Partition Key (O(1) Token Routing)"))
         val query = SimpleStatement.newInstance("SELECT country, username, email, score FROM $KEYSPACE.$TABLE_NAME WHERE country = 'US';")
         val rs = sess.execute(query)
         println("    Querying partition 'country = US':")
@@ -101,7 +119,7 @@ fun main() {
         }
 
         // 5. Schema Introspection
-        println("\n\u001B[1;34m[*] 5. Schema Introspection (system_schema.columns)\u001B[0m")
+        println("\n" + boldBlue("[*] 5. Schema Introspection (system_schema.columns)"))
         val schemaQuery =
             """
             SELECT column_name, kind, type
@@ -119,7 +137,7 @@ fun main() {
         println("    Cleaned up demo keyspace '$KEYSPACE'.")
     }
 
-    println("\n\u001B[1;32m[✓] Apache Cassandra Crash Course completed successfully!\u001B[0m\n")
+    println("\n" + boldGreen("[✓] Apache Cassandra Crash Course completed successfully!") + "\n")
 }
 
 main()

@@ -1,7 +1,17 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.postgresql:postgresql:42.7.3")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import java.math.BigDecimal
 import java.sql.Connection
 import java.sql.DriverManager
@@ -10,27 +20,35 @@ import kotlin.system.exitProcess
 val DB_URL = "jdbc:postgresql://127.0.0.1:5432/lab_db"
 val DB_USER = "postgres"
 val DB_PASS = "postgres"
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
+
 val TABLE_NAME = "crash_course_items"
 
 fun getConn(): Connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)
 
 fun main() {
-    println("\n\u001B[1;36m" + "=".repeat(70) + "\u001B[0m")
-    println("\u001B[1;32mPostgreSQL Crash Course (Kotlin / JDBC): Relational Fundamentals\u001B[0m")
-    println("\u001B[1;36m" + "=".repeat(70) + "\u001B[0m\n")
+    println("\n" + boldCyan("=".repeat(70)))
+    println(boldGreen("PostgreSQL Crash Course (Kotlin / JDBC): Relational Fundamentals"))
+    println(boldCyan("=".repeat(70)) + "\n")
 
     val conn =
         try {
             getConn()
         } catch (e: Exception) {
-            println("\u001B[1;31m[!] Connection failed: ${e.message}\u001B[0m")
+            println(boldRed("[!] Connection failed: ${e.message}"))
             println("Start the lab container first: cd postgres && make up EXP=isolation")
             exitProcess(1)
         }
 
     conn.use { c ->
         // 1. Connectivity & Version
-        println("\u001B[1;34m[*] 1. Server Version & Connectivity\u001B[0m")
+        println(boldBlue("[*] 1. Server Version & Connectivity"))
         c.createStatement().use { stmt ->
             val rs = stmt.executeQuery("SELECT version();")
             rs.next()
@@ -38,7 +56,7 @@ fun main() {
         }
 
         // 2. Schema DDL
-        println("\n\u001B[1;34m[*] 2. Creating Demo Table\u001B[0m")
+        println("\n" + boldBlue("[*] 2. Creating Demo Table"))
         c.createStatement().use { stmt ->
             stmt.execute("DROP TABLE IF EXISTS $TABLE_NAME;")
             stmt.execute(
@@ -57,7 +75,7 @@ fun main() {
         }
 
         // 3. Parameterized Insert & Batch Insert
-        println("\n\u001B[1;34m[*] 3. Parameterized Inserts & Reads\u001B[0m")
+        println("\n" + boldBlue("[*] 3. Parameterized Inserts & Reads"))
         c.prepareStatement(
             "INSERT INTO $TABLE_NAME (name, sku, price, stock) VALUES (?, ?, ?, ?) RETURNING id;",
         ).use { ps ->
@@ -106,7 +124,7 @@ fun main() {
     }
 
     // 4. Transactions: Commit vs Rollback
-    println("\n\u001B[1;34m[*] 4. Transaction Semantics (Atomic Rollback)\u001B[0m")
+    println("\n" + boldBlue("[*] 4. Transaction Semantics (Atomic Rollback)"))
     var initialCount = 0
     getConn().use { c ->
         c.createStatement().use { stmt ->
@@ -141,7 +159,7 @@ fun main() {
         }
 
         // 5. Diagnostics: pg_stat_activity & Table Footprint
-        println("\n\u001B[1;34m[*] 5. Diagnostic Queries & Catalog Metadata\u001B[0m")
+        println("\n" + boldBlue("[*] 5. Diagnostic Queries & Catalog Metadata"))
         c.createStatement().use { stmt ->
             val rs =
                 stmt.executeQuery(
@@ -166,7 +184,7 @@ fun main() {
         }
     }
 
-    println("\n\u001B[1;32m[✓] PostgreSQL Crash Course completed successfully!\u001B[0m\n")
+    println("\n" + boldGreen("[✓] PostgreSQL Crash Course completed successfully!") + "\n")
 }
 
 main()

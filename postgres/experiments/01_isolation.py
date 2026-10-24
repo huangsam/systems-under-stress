@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "psycopg[binary]>=3.1.0",
 # ]
 # ///
@@ -24,8 +25,12 @@ import time
 
 import psycopg
 from psycopg import errors
+from rich.console import Console
 
 DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
+
+
+console = Console()
 
 
 def reset_doctors() -> None:
@@ -46,7 +51,7 @@ def count_on_call() -> int:
 # Part 1: Verify Dirty Read Immunity
 # ----------------------------------------------------------------------
 def test_dirty_read() -> None:
-    print("\n\033[1;34m[*] Part 1: Testing READ UNCOMMITTED (Dirty Read check)...\033[0m")
+    console.print("\n[bold blue][*] Part 1: Testing READ UNCOMMITTED (Dirty Read check)...[/]")
     reset_doctors()
 
     barrier = threading.Barrier(2)
@@ -81,9 +86,9 @@ def test_dirty_read() -> None:
     t_b.join()
 
     if dirty_read_detected:
-        print("  \033[1;31m[!] Dirty read occurred!\033[0m")
+        console.print("  [bold red][!] Dirty read occurred![/]")
     else:
-        print("  \033[1;32m[✓] Dirty read prevented:\033[0m Session B only saw committed data.")
+        console.print("  [bold green][✓] Dirty read prevented:[/] Session B only saw committed data.")
         print("      PostgreSQL treats READ UNCOMMITTED as READ COMMITTED under its MVCC engine.")
 
 
@@ -91,7 +96,7 @@ def test_dirty_read() -> None:
 # Part 2: Write Skew Under REPEATABLE READ vs SERIALIZABLE
 # ----------------------------------------------------------------------
 def run_write_skew_simulation(isolation_level: psycopg.IsolationLevel, label: str) -> None:
-    print(f"\n\033[1;34m[*] Part 2: Simulating Write Skew under '{label}'...\033[0m")
+    console.print(f"\n[bold blue][*] Part 2: Simulating Write Skew under '{label}'...[/]")
     reset_doctors()
 
     barrier = threading.Barrier(2)
@@ -133,14 +138,14 @@ def run_write_skew_simulation(isolation_level: psycopg.IsolationLevel, label: st
 
     print(f"    Dr. Alice Result : {results.get('Dr. Alice')}")
     print(f"    Dr. Bob Result   : {results.get('Dr. Bob')}")
-    print(f"    Doctors Still On Call : \033[1;{'31' if remaining == 0 else '32'}m{remaining}\033[0m (Required: >= 1)")
+    console.print(f"    Doctors Still On Call : [bold {'red' if remaining == 0 else 'green'}]{remaining}[/] (Required: >= 1)")
 
     if remaining == 0:
-        print("  \033[1;31m[!] WRITE SKEW ANOMALY OCCURRED!\033[0m")
+        console.print("  [bold red][!] WRITE SKEW ANOMALY OCCURRED![/]")
         print("      Both transactions read overlapping snapshots, updated non-overlapping rows,")
         print("      and committed successfully - violating the global system invariant.")
     else:
-        print("  \033[1;32m[✓] INVARIANT PRESERVED BY SERIALIZABLE SNAPSHOT ISOLATION (SSI)!\033[0m")
+        console.print("  [bold green][✓] INVARIANT PRESERVED BY SERIALIZABLE SNAPSHOT ISOLATION (SSI)![/]")
         print("      PostgreSQL detected the rw-antidependency cycle and aborted one transaction.")
 
 
@@ -149,15 +154,15 @@ def main() -> None:
         with psycopg.connect(DB_CONN, connect_timeout=3):
             pass
     except Exception:
-        print("\033[1;31mError: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.\033[0m")
+        console.print("[bold red]Error: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.[/]")
         print("Please start the container first:")
         print("  cd postgres && make up EXP=isolation")
         return
 
-    print("\033[1;36m=================================================================\033[0m")
-    print("\033[1;36mExperiment 01: PostgreSQL Transaction Isolation & Write Skew\033[0m")
+    console.print("[bold cyan]=================================================================[/]")
+    console.print("[bold cyan]Experiment 01: PostgreSQL Transaction Isolation & Write Skew[/]")
     print("Testing concurrency anomalies across MVCC isolation levels.")
-    print("\033[1;36m=================================================================\033[0m")
+    console.print("[bold cyan]=================================================================[/]")
 
     # 1. Dirty Read test
     test_dirty_read()
@@ -168,9 +173,9 @@ def main() -> None:
     # 3. Write Skew under Serializable
     run_write_skew_simulation(psycopg.IsolationLevel.SERIALIZABLE, "SERIALIZABLE")
 
-    print("\n\033[1;32m=================================================================")
+    console.print("\n[bold green]=================================================================")
     print("SYSTEMS TAKEAWAYS")
-    print("=================================================================\033[0m")
+    console.print("=================================================================[/]")
     print("1. PostgreSQL does not implement Dirty Reads; READ UNCOMMITTED = READ COMMITTED.")
     print("2. REPEATABLE READ protects against Phantom Reads but FAILS on Write Skew.")
     print("3. Write Skew can only be solved by: SELECT ... FOR UPDATE (explicit locking)")

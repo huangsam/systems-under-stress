@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "redis>=5.0.0",
 # ]
 # ///
@@ -22,10 +23,14 @@ import time
 import uuid
 
 import redis.asyncio as aioredis
+from rich.console import Console
 
 HOT_KEY = "product:trending:42"
 DB_COMPUTE_DELAY = 0.05  # 50ms simulated database query latency
 CONCURRENT_REQUESTS = 100
+
+
+console = Console()
 
 
 class MockDatabase:
@@ -143,7 +148,7 @@ async def run_scenario(name: str, worker_fn, client: aioredis.Redis, pre_seed: b
         # Seed key with 60ms remaining TTL (in the early-refresh danger zone)
         await client.set(HOT_KEY, "{'id': '42'}", px=60)
 
-    print(f"\n\033[1;34m[*] Running: {name}\033[0m")
+    console.print(f"\n[bold blue][*] Running: {name}[/]")
     start = time.perf_counter()
 
     # Launch 100 requests concurrently
@@ -156,7 +161,7 @@ async def run_scenario(name: str, worker_fn, client: aioredis.Redis, pre_seed: b
 
     print(f"    Total Client Requests : {CONCURRENT_REQUESTS}")
     print(f"    Elapsed Time          : {duration * 1000:.1f}ms")
-    print(f"    Database Query Count  : \033[1;{'31' if db_hits > 10 else '32'}m{db_hits}\033[0m")
+    console.print(f"    Database Query Count  : [bold {'red' if db_hits > 10 else 'green'}]{db_hits}[/]")
     print(f"    Served from Cache     : {cache_hits}")
 
 
@@ -165,14 +170,14 @@ async def main() -> None:
     try:
         await client.ping()
     except Exception:
-        print("\033[1;31mError: Cannot connect to Redis on 127.0.0.1:6379.\033[0m")
+        console.print("[bold red]Error: Cannot connect to Redis on 127.0.0.1:6379.[/]")
         print("Run 'make up EXP=stampede' first.")
         return
 
-    print("\033[1;36m=================================================================\033[0m")
-    print("\033[1;36mExperiment 02: Cache Stampede (Thundering Herd) Simulation\033[0m")
+    console.print("[bold cyan]=================================================================[/]")
+    console.print("[bold cyan]Experiment 02: Cache Stampede (Thundering Herd) Simulation[/]")
     print("Testing 100 concurrent requests arriving on an expired hot key.")
-    print("\033[1;36m=================================================================\033[0m")
+    console.print("[bold cyan]=================================================================[/]")
 
     # Scenario 1: Naive Cache-Aside
     await run_scenario("1. Naive Cache-Aside (Unprotected)", worker_naive, client)
@@ -183,9 +188,9 @@ async def main() -> None:
     # Scenario 3: Probabilistic Early Refresh (XFetch on key near expiry)
     await run_scenario("3. Probabilistic Early Refresh (XFetch)", worker_xfetch, client, pre_seed=True)
 
-    print("\n\033[1;32m=================================================================")
+    console.print("\n[bold green]=================================================================")
     print("SYSTEMS TAKEAWAYS")
-    print("=================================================================\033[0m")
+    console.print("=================================================================[/]")
     print("1. Naive Cache-Aside causes a 1:1 surge into the primary DB upon key expiry.")
     print("2. Distributed Locks (SET NX PX) collapse 100 DB queries into EXACTLY 1 query.")
     print("3. Probabilistic early refresh eliminates cache miss latency entirely for users.")

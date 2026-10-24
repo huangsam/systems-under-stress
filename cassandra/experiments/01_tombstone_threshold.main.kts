@@ -1,5 +1,6 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("com.datastax.oss:java-driver-core:4.17.0")
 @file:DependsOn("org.slf4j:slf4j-nop:2.0.13")
 @file:DependsOn("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
@@ -9,6 +10,15 @@ import com.datastax.oss.driver.api.core.DefaultConsistencyLevel
 import com.datastax.oss.driver.api.core.cql.SimpleStatement
 import com.datastax.oss.driver.api.core.servererrors.ReadFailureException
 import com.datastax.oss.driver.api.core.servererrors.ReadTimeoutException
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import kotlinx.coroutines.*
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Semaphore
@@ -17,6 +27,14 @@ import java.net.InetSocketAddress
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val HOST = "127.0.0.1"
 val PORT = 9042
@@ -28,31 +46,31 @@ val SENSOR_ID = "sensor-alpha"
 val TOTAL_ROWS = 15_000
 val DELETE_ROWS = 12_000
 
-fun log(msg: String, color: String = "\u001B[0m") {
+fun log(msg: String, style: (String) -> String = { it }) {
     val time = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneOffset.UTC).format(Instant.now())
-    println("\u001B[2m[$time]\u001B[0m $color$msg\u001B[0m")
+    println("${dim("[$time]")} ${style(msg)}")
 }
 
 fun triggerNodetoolFlush() {
-    log("Flushing memtables to SSTables on disk via nodetool...", "\u001B[1;34m")
+    log("Flushing memtables to SSTables on disk via nodetool...", boldBlue)
     try {
         val proc = ProcessBuilder("docker", "compose", "exec", "-T", "cassandra-tombstones", "nodetool", "flush", KEYSPACE, TABLE)
             .redirectErrorStream(true)
             .start()
         val exitCode = proc.waitFor()
         if (exitCode == 0) {
-            log("Memtable flushed to SSTable successfully.", "\u001B[32m")
+            log("Memtable flushed to SSTable successfully.", green)
         } else {
             val output = proc.inputStream.bufferedReader().readText().trim()
-            log("Notice: nodetool flush returned $exitCode: $output", "\u001B[33m")
+            log("Notice: nodetool flush returned $exitCode: $output", yellow)
         }
     } catch (e: Exception) {
-        log("Notice: Could not invoke nodetool directly: ${e.message}", "\u001B[33m")
+        log("Notice: Could not invoke nodetool directly: ${e.message}", yellow)
     }
 }
 
 fun connectCassandra(): CqlSession {
-    log("Connecting to Cassandra via DataStax Java Driver 4.x...", "\u001B[1;36m")
+    log("Connecting to Cassandra via DataStax Java Driver 4.x...", boldCyan)
     for (attempt in 1..20) {
         try {
             val session = CqlSession.builder()
@@ -60,7 +78,7 @@ fun connectCassandra(): CqlSession {
                 .withLocalDatacenter(DC)
                 .build()
             val row = session.execute("SELECT release_version FROM system.local").one()
-            log("Connected successfully to Cassandra node! Release version: ${row?.getString("release_version")}", "\u001B[1;32m")
+            log("Connected successfully to Cassandra node! Release version: ${row?.getString("release_version")}", boldGreen)
             return session
         } catch (e: Exception) {
             Thread.sleep(1500)
@@ -70,7 +88,7 @@ fun connectCassandra(): CqlSession {
 }
 
 fun setupSchema(session: CqlSession) {
-    log("Setting up keyspace '$KEYSPACE' and table '$TABLE'...", "\u001B[1;36m")
+    log("Setting up keyspace '$KEYSPACE' and table '$TABLE'...", boldCyan)
     session.execute("""
         CREATE KEYSPACE IF NOT EXISTS $KEYSPACE
         WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
@@ -88,7 +106,7 @@ fun setupSchema(session: CqlSession) {
     """.trimIndent())
 
     session.execute("TRUNCATE $KEYSPACE.$TABLE;")
-    log("Schema ready and table truncated.", "\u001B[32m")
+    log("Schema ready and table truncated.", green)
 }
 
 runBlocking {
@@ -108,7 +126,7 @@ runBlocking {
         """.trimIndent())
 
         // Phase 1: High-concurrency async inserts
-        log("Phase 1: Inserting ${"%,d".format(TOTAL_ROWS)} sensor readings into partition '$SENSOR_ID'...", "\u001B[1;36m")
+        log("Phase 1: Inserting ${"%,d".format(TOTAL_ROWS)} sensor readings into partition '$SENSOR_ID'...", boldCyan)
         val insertStart = System.currentTimeMillis()
         val sem = Semaphore(128)
         val insertJobs = (0 until TOTAL_ROWS).map { i ->
@@ -123,10 +141,10 @@ runBlocking {
         }
         insertJobs.awaitAll()
         val insertSec = (System.currentTimeMillis() - insertStart) / 1000.0
-        log("Successfully inserted ${"%,d".format(TOTAL_ROWS)} rows in ${"%.2f".format(insertSec)}s (${"%,d".format((TOTAL_ROWS / insertSec).toInt())} rows/s).", "\u001B[32m")
+        log("Successfully inserted ${"%,d".format(TOTAL_ROWS)} rows in ${"%.2f".format(insertSec)}s (${"%,d".format((TOTAL_ROWS / insertSec).toInt())} rows/s).", green)
 
         // Phase 2: High-concurrency async deletes to generate tombstones
-        log("Phase 2: Deleting first ${"%,d".format(DELETE_ROWS)} rows to generate tombstones...", "\u001B[1;36m")
+        log("Phase 2: Deleting first ${"%,d".format(DELETE_ROWS)} rows to generate tombstones...", boldCyan)
         val deleteStmt = sess.prepare("""
             DELETE FROM $KEYSPACE.$TABLE
             WHERE sensor_id = ? AND recorded_at = ?
@@ -145,14 +163,14 @@ runBlocking {
         }
         delJobs.awaitAll()
         val delSec = (System.currentTimeMillis() - delStart) / 1000.0
-        log("Generated ${"%,d".format(DELETE_ROWS)} tombstones in ${"%.2f".format(delSec)}s (${"%,d".format((DELETE_ROWS / delSec).toInt())} ops/s).", "\u001B[32m")
+        log("Generated ${"%,d".format(DELETE_ROWS)} tombstones in ${"%.2f".format(delSec)}s (${"%,d".format((DELETE_ROWS / delSec).toInt())} ops/s).", green)
 
         // Phase 3: Flush to disk SSTables
         triggerNodetoolFlush()
 
         // Phase 4: Query partition containing tombstones
-        log("Phase 3: Querying partition containing ${"%,d".format(DELETE_ROWS)} tombstones...", "\u001B[1;36m")
-        log("Query: SELECT * FROM $TABLE WHERE sensor_id = '$SENSOR_ID' LIMIT 5000;", "\u001B[2m")
+        log("Phase 3: Querying partition containing ${"%,d".format(DELETE_ROWS)} tombstones...", boldCyan)
+        log("Query: SELECT * FROM $TABLE WHERE sensor_id = '$SENSOR_ID' LIMIT 5000;", dim)
 
         try {
             val qStmt = SimpleStatement.newInstance("SELECT * FROM $KEYSPACE.$TABLE WHERE sensor_id = ? LIMIT 5000", SENSOR_ID)
@@ -163,18 +181,18 @@ runBlocking {
             val rs = sess.execute(qStmt)
             val rows = rs.all()
             val durationMs = (System.nanoTime() - queryStart) / 1_000_000.0
-            log("Query returned ${rows.size} rows in ${"%.2f".format(durationMs)} ms (Cassandra scanned past tombstones).", "\u001B[33m")
+            log("Query returned ${rows.size} rows in ${"%.2f".format(durationMs)} ms (Cassandra scanned past tombstones).", yellow)
         } catch (e: ReadFailureException) {
-            log("SUCCESS: Cassandra aborted the query with ReadFailureException!", "\u001B[1;31m")
-            log("Server Error Message: ${e.message}", "\u001B[1;31m")
+            log("SUCCESS: Cassandra aborted the query with ReadFailureException!", boldRed)
+            log("Server Error Message: ${e.message}", boldRed)
         } catch (e: Exception) {
-            log("Query threw: ${e::class.simpleName} - ${e.message}", "\u001B[33m")
+            log("Query threw: ${e::class.simpleName} - ${e.message}", yellow)
         }
 
         // Phase 5: Remediation via Clustering Key Slice
-        log("Phase 4: Remediation - Querying with Clustering Key Bounds...", "\u001B[1;36m")
+        log("Phase 4: Remediation - Querying with Clustering Key Bounds...", boldCyan)
         val boundaryInstant = baseInstant.plusSeconds(DELETE_ROWS.toLong())
-        log("Clustering Key Filter: recorded_at >= $boundaryInstant", "\u001B[2m")
+        log("Clustering Key Filter: recorded_at >= $boundaryInstant", dim)
 
         val remStmt = SimpleStatement.newInstance(
             "SELECT * FROM $KEYSPACE.$TABLE WHERE sensor_id = ? AND recorded_at >= ? LIMIT 1000",
@@ -187,8 +205,8 @@ runBlocking {
         val healthyRows = remRs.all()
         val remDurationMs = (System.nanoTime() - remStart) / 1_000_000.0
 
-        log("Remediated query returned ${healthyRows.size} live rows in ${"%.2f".format(remDurationMs)} ms!", "\u001B[1;32m")
-        log("Tombstones scanned: 0 (bypassed via SSTable clustering key index block).", "\u001B[32m")
+        log("Remediated query returned ${healthyRows.size} live rows in ${"%.2f".format(remDurationMs)} ms!", boldGreen)
+        log("Tombstones scanned: 0 (bypassed via SSTable clustering key index block).", green)
 
         println("\n" + "=".repeat(70))
         println("  KOTLIN / JVM EXPERIMENT 01 SUMMARY")

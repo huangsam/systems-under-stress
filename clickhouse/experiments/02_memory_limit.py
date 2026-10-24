@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "clickhouse-connect>=0.7.0",
 # ]
 # ///
@@ -24,6 +25,8 @@ from __future__ import annotations
 import sys
 import time
 
+from rich.console import Console
+
 try:
     import clickhouse_connect
     from clickhouse_connect.driver.exceptions import DatabaseError
@@ -40,6 +43,9 @@ QUERY_MEM_CAP = 25_000_000  # 25 MB
 EXTERNAL_GROUP_BY_THRESHOLD = 12_000_000  # 12 MB spill threshold
 
 
+console = Console()
+
+
 def get_client() -> clickhouse_connect.driver.Client:
     try:
         client = clickhouse_connect.get_client(
@@ -53,7 +59,7 @@ def get_client() -> clickhouse_connect.driver.Client:
         client.command("SELECT 1")
         return client
     except Exception as err:
-        print("\033[1;31m[!] Error: Unable to connect to ClickHouse at 127.0.0.1:8123.\033[0m")
+        console.print("[bold red][!] Error: Unable to connect to ClickHouse at 127.0.0.1:8123.[/]")
         print(f"    Details: {err}")
         print("\nPlease start the memory-cap profile first:")
         print("    cd clickhouse && make up EXP=memory-cap\n")
@@ -61,7 +67,7 @@ def get_client() -> clickhouse_connect.driver.Client:
 
 
 def seed_clickstream_dataset(client: clickhouse_connect.driver.Client, num_rows: int = 500_000) -> None:
-    print(f"\n\033[1;34m[*] Preparing synthetic high-cardinality dataset ({num_rows:,} rows)...\033[0m")
+    console.print(f"\n[bold blue][*] Preparing synthetic high-cardinality dataset ({num_rows:,} rows)...[/]")
     client.command(f"DROP TABLE IF EXISTS {TABLE_NAME}")
 
     create_table_sql = f"""
@@ -100,12 +106,12 @@ def seed_clickstream_dataset(client: clickhouse_connect.driver.Client, num_rows:
     WHERE table = '{TABLE_NAME}' AND active = 1
     """).result_rows[0]
 
-    print(f"    Dataset Ready: \033[1;32m{stats[0]:,} rows\033[0m inserted in {elapsed:.2f}s")
+    console.print(f"    Dataset Ready: [bold green]{stats[0]:,} rows[/] inserted in {elapsed:.2f}s")
     print(f"    Disk Footprint: Compressed={stats[1]} (Uncompressed={stats[2]})")
 
 
 def run_in_memory_aggregation(client: clickhouse_connect.driver.Client) -> None:
-    print("\n\033[1;34m[*] Part 1: High-Cardinality Aggregation Under Strict RAM Limit...\033[0m")
+    console.print("\n[bold blue][*] Part 1: High-Cardinality Aggregation Under Strict RAM Limit...[/]")
     print("    Query       : GROUP BY distinct user_id UUIDs with uniqExact(url)")
     print(f"    Settings    : max_memory_usage = {QUERY_MEM_CAP} bytes")
     print("                  max_bytes_before_external_group_by = 0 (Spill Disabled)")
@@ -131,15 +137,15 @@ def run_in_memory_aggregation(client: clickhouse_connect.driver.Client) -> None:
     except DatabaseError as err:
         elapsed = time.perf_counter() - start_time
         err_msg = str(err)
-        print(f"\n  \033[1;31m[!] QUERY TERMINATED BY ENGINE (Elapsed: {elapsed:.2f}s)\033[0m")
+        console.print(f"\n  [bold red][!] QUERY TERMINATED BY ENGINE (Elapsed: {elapsed:.2f}s)[/]")
         print("      ClickHouse Error Code : 241 (MEMORY_LIMIT_EXCEEDED)")
         print(f"      Engine Diagnostics    : {err_msg.strip()}")
-        print("\n  \033[1;32m[✓] Failure Verified:\033[0m ClickHouse protected host OS by aborting before")
+        console.print("\n  [bold green][✓] Failure Verified:[/] ClickHouse protected host OS by aborting before")
         print("      the 1,000,000-key aggregation hash table could trigger container OOM (Exit 137).")
 
 
 def run_spill_to_disk_aggregation(client: clickhouse_connect.driver.Client) -> None:
-    print("\n\033[1;34m[*] Part 2: Enabling External Aggregation (Disk Spilling)...\033[0m")
+    console.print("\n[bold blue][*] Part 2: Enabling External Aggregation (Disk Spilling)...[/]")
     print(f"    Settings    : max_memory_usage = {QUERY_MEM_CAP} (64MB)")
     print(f"                  max_bytes_before_external_group_by = {EXTERNAL_GROUP_BY_THRESHOLD} (20MB)")
     print("    Expected    : When hash table reaches 20MB, ClickHouse flushes intermediate blocks")
@@ -166,14 +172,14 @@ def run_spill_to_disk_aggregation(client: clickhouse_connect.driver.Client) -> N
     result = client.query(query).result_rows[0]
     elapsed = time.perf_counter() - start_time
 
-    print("\n    Query Status          : \033[1;32mSUCCESSFUL COMPLETION\033[0m")
-    print(f"    Aggregated Groups     : \033[1;32m{result[0]:,}\033[0m user UUIDs processed")
+    console.print("\n    Query Status          : [bold green]SUCCESSFUL COMPLETION[/]")
+    console.print(f"    Aggregated Groups     : [bold green]{result[0]:,}[/] user UUIDs processed")
     print(f"    Grand Total Events    : {result[1]:,} clicks verified")
     print(f"    Total Execution Time  : {elapsed:.2f} seconds")
 
 
 def run_hyperloglog_comparison(client: clickhouse_connect.driver.Client) -> None:
-    print("\n\033[1;34m[*] Part 3: Algorithmic Memory Optimization (uniqExact vs uniq/HyperLogLog)...\033[0m")
+    console.print("\n[bold blue][*] Part 3: Algorithmic Memory Optimization (uniqExact vs uniq/HyperLogLog)...[/]")
     print("    Evaluating approximate aggregation with fixed-size registers vs exact hash set.")
 
     # Step 3a: uniqExact fails under memory limit
@@ -182,7 +188,7 @@ def run_hyperloglog_comparison(client: clickhouse_connect.driver.Client) -> None
         client.query(f"SELECT uniqExact(user_id) FROM {TABLE_NAME} SETTINGS max_memory_usage = {QUERY_MEM_CAP}")
         print("    uniqExact succeeded.")
     except DatabaseError:
-        print(f"    \033[1;31m[!] uniqExact failed as expected:\033[0m Exact hash set exceeded {QUERY_MEM_CAP / 1024 / 1024:.1f}MB.")
+        console.print(f"    [bold red][!] uniqExact failed as expected:[/] Exact hash set exceeded {QUERY_MEM_CAP / 1024 / 1024:.1f}MB.")
 
     # Step 3b: uniq (HyperLogLog) succeeds effortlessly
     print("    Testing uniq(user_id) HyperLogLog under identical memory cap...")
@@ -196,15 +202,15 @@ def run_hyperloglog_comparison(client: clickhouse_connect.driver.Client) -> None
 
     print(f"    Exact Count (uniqExact) : {exact_count:,}")
     print(f"    HLL Count (uniq)        : {hll_count:,}")
-    print(f"    Approximation Error     : \033[1;32m{error_pct}%\033[0m (< 1% variance)")
+    console.print(f"    Approximation Error     : [bold green]{error_pct}%[/] (< 1% variance)")
     print(f"    HLL Query Duration      : {elapsed * 1000:.2f} ms (succeeded within memory cap)")
 
 
 def main() -> None:
-    print("\033[1;36m=================================================================\033[0m")
-    print("\033[1;36mExperiment 02: Analytical Memory Saturation & Disk Spill\033[0m")
+    console.print("[bold cyan]=================================================================[/]")
+    console.print("[bold cyan]Experiment 02: Analytical Memory Saturation & Disk Spill[/]")
     print("Testing max_memory_usage limits, external aggregation, and HLL algorithms.")
-    print("\033[1;36m=================================================================\033[0m")
+    console.print("[bold cyan]=================================================================[/]")
 
     client = get_client()
 
@@ -224,9 +230,9 @@ def main() -> None:
     # Part 3: HLL comparison
     run_hyperloglog_comparison(client)
 
-    print("\n\033[1;32m=================================================================")
+    console.print("\n[bold green]=================================================================")
     print("SYSTEMS & PRODUCTION TAKEAWAYS")
-    print("=================================================================\033[0m")
+    console.print("=================================================================[/]")
     print("1. ClickHouse allocates memory aggressively for vector hash tables during GROUP BY.")
     print("   High-cardinality keys (like UUIDs or session IDs) scale RAM linearly with key count.")
     print("2. Memory exhaustion guards:")

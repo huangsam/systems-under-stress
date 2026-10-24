@@ -1,6 +1,8 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = [
+#     "rich>=13.7.0",
+# ]
 # ///
 """
 Experiment 03: Kernel OOM Killer vs Swap Behavior (Exit Code 137)
@@ -30,6 +32,10 @@ import os
 import platform
 import sys
 import time
+
+from rich.console import Console
+
+console = Console()
 
 
 def get_cgroup_memory_paths() -> tuple[str | None, str | None, str | None]:

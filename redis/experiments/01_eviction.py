@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "redis>=5.0.0",
 # ]
 # ///
@@ -20,8 +21,11 @@ import sys
 import time
 
 from redis.exceptions import OutOfMemoryError, ResponseError
+from rich.console import Console
 
 import redis
+
+console = Console()
 
 
 def format_bytes(b: int) -> str:
@@ -38,7 +42,7 @@ def main() -> None:
     try:
         client.ping()
     except redis.ConnectionError:
-        print("\033[1;31mError: Cannot connect to Redis on 127.0.0.1:6379.\033[0m")
+        console.print("[bold red]Error: Cannot connect to Redis on 127.0.0.1:6379.[/]")
         print("Please start an experiment container first:")
         print("  make up EXP=eviction-lru   # for LRU eviction")
         print("  make up EXP=eviction-noeviction # for OOM failure testing")
@@ -49,11 +53,11 @@ def main() -> None:
     max_memory = int(info_mem.get("maxmemory", 0))
     policy = info_mem.get("maxmemory_policy", "unknown")
 
-    print("\033[1;34m" + "=" * 65 + "\033[0m")
-    print("\033[1;32mRedis Eviction Lab: Current Configuration\033[0m")
+    console.print("[bold blue]" + "=" * 65 + "[/]")
+    console.print("[bold green]Redis Eviction Lab: Current Configuration[/]")
     print(f"  Max Memory Limit : {format_bytes(max_memory)} ({max_memory:,} bytes)")
-    print(f"  Eviction Policy  : \033[1;33m{policy}\033[0m")
-    print("\033[1;34m" + "=" * 65 + "\033[0m\n")
+    console.print(f"  Eviction Policy  : [bold yellow]{policy}[/]")
+    console.print("[bold blue]" + "=" * 65 + "[/]\n")
 
     # 2. Reset database for clean run
     print("Flushing keyspace for a clean test run...")
@@ -80,7 +84,7 @@ def main() -> None:
             if "oom" in err_str or "maxmemory" in err_str or isinstance(err, OutOfMemoryError):
                 oom_errors += 1
                 if oom_errors == 1:
-                    print(f"\n\033[1;31m[!] FIRST OOM HIT at item {i}!\033[0m")
+                    console.print(f"\n[bold red][!] FIRST OOM HIT at item {i}![/]")
                     print(f"    Redis Error Message: {err}")
             else:
                 raise err
@@ -129,23 +133,23 @@ def main() -> None:
     final_mem = client.info("memory")
     final_stats = client.info("stats")
 
-    print("\n" + "\033[1;32m" + "=" * 65)
+    console.print("\n" + "[bold green]" + "=" * 65)
     print("EXPERIMENT 01 SUMMARY REPORT")
-    print("=" * 65 + "\033[0m")
-    print(f"Policy Under Test     : \033[1;33m{policy}\033[0m")
+    console.print("=" * 65 + "[/]")
+    console.print(f"Policy Under Test     : [bold yellow]{policy}[/]")
     print(f"Peak Memory Reached   : {format_bytes(final_mem.get('used_memory_peak', 0))}")
     print(f"Current Memory Used   : {format_bytes(final_mem.get('used_memory', 0))}")
-    print(f"Total Keys Evicted    : \033[1;31m{final_stats.get('evicted_keys', 0):,}\033[0m")
-    print(f"Hot Key Hit Ratio     : \033[1;32m{hot_ratio:.1f}%\033[0m ({hot_hits}/{hot_total})")
+    console.print(f"Total Keys Evicted    : [bold red]{final_stats.get('evicted_keys', 0):,}[/]")
+    console.print(f"Hot Key Hit Ratio     : [bold green]{hot_ratio:.1f}%[/] ({hot_hits}/{hot_total})")
     print(f"Cold Key Hit Ratio    : {cold_ratio:.1f}% ({cold_hits}/{cold_total})")
     print("=" * 65)
 
     if policy == "noeviction":
-        print("\n\033[1;33m[Takeaway - noeviction]\033[0m")
+        console.print("\n[bold yellow][Takeaway - noeviction][/]")
         print("Redis refused all writes once maxmemory was reached with OOM errors.")
         print("Read requests continue to succeed, but write-heavy services fail hard without application fallback.")
     elif "lru" in policy:
-        print("\n\033[1;33m[Takeaway - allkeys-lru]\033[0m")
+        console.print("\n[bold yellow][Takeaway - allkeys-lru][/]")
         print("Redis safely capped memory by evicting older/idle keys to make room for new writes.")
         print(f"Hot keys maintained a {hot_ratio:.1f}% hit rate while cold keys were recycled automatically.")
 

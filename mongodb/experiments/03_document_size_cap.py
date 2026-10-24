@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "pymongo>=4.6.0",
 # ]
 # ///
@@ -26,9 +27,13 @@ import time
 
 from pymongo import MongoClient
 from pymongo.errors import DocumentTooLarge, OperationFailure, WriteError
+from rich.console import Console
 
 MONGO_URI = "mongodb://127.0.0.1:27017/"
 BSON_MAX_BYTES = 16 * 1024 * 1024  # 16,777,216 bytes
+
+
+console = Console()
 
 
 def format_bytes(b: int) -> str:
@@ -44,7 +49,7 @@ def main() -> None:
     try:
         client.admin.command("ping")
     except Exception:
-        print("\033[1;31mError: Cannot connect to MongoDB on 127.0.0.1:27017.\033[0m")
+        console.print("[bold red]Error: Cannot connect to MongoDB on 127.0.0.1:27017.[/]")
         print("Start the container first: make up EXP=document-limits")
         sys.exit(1)
 
@@ -52,13 +57,13 @@ def main() -> None:
     db.drop_collection("unbounded_sensors")
     db.drop_collection("bucketed_sensors")
 
-    print("\033[1;36m======================================================================\033[0m")
-    print("\033[1;36mExperiment 03: MongoDB Unbounded Array Growth & the 16MB BSON Ceiling\033[0m")
+    console.print("[bold cyan]======================================================================[/]")
+    console.print("[bold cyan]Experiment 03: MongoDB Unbounded Array Growth & the 16MB BSON Ceiling[/]")
     print(f"Hard BSON Document Limit: {format_bytes(BSON_MAX_BYTES)} ({BSON_MAX_BYTES:,} bytes)")
-    print("\033[1;36m======================================================================\033[0m\n")
+    console.print("[bold cyan]======================================================================[/]\n")
 
     # 1. Part 1: Unbounded $push into a single document until 16MB crash
-    print("\033[1;34m[*] Part 1: Appending 256KB event batches via $push until 16MB crash...\033[0m")
+    console.print("[bold blue][*] Part 1: Appending 256KB event batches via $push until 16MB crash...[/]")
     col_unbounded = db["unbounded_sensors"]
     col_unbounded.insert_one({"sensor_id": "sensor-01", "events": []})
 
@@ -105,13 +110,13 @@ def main() -> None:
                     ]
                 )
             )[0]
-            print(f"\n  \033[1;31m[!] HARD 16MB CEILING BREACHED at Batch {batch_num}!\033[0m")
+            console.print(f"\n  [bold red][!] HARD 16MB CEILING BREACHED at Batch {batch_num}![/]")
             print(f"      Document Size Before Rejection : {format_bytes(stats['size'])} ({stats['size']:,} bytes)")
             print(f"      Error Code / Message           : {err}")
             break
 
     # 2. Part 2: The Bucket Pattern (Capping array at 500 events per document)
-    print("\n\033[1;34m[*] Part 2: Remediation via the Bucket Pattern (max 64 events/bucket)...\033[0m")
+    console.print("\n[bold blue][*] Part 2: Remediation via the Bucket Pattern (max 64 events/bucket)...[/]")
     col_bucketed = db["bucketed_sensors"]
     col_bucketed.create_index([("sensor_id", 1), ("bucket_count", 1)])
 
@@ -134,9 +139,9 @@ def main() -> None:
     print(f"    Total Bucket Documents Created : {num_buckets}")
     print(f"    Average Write Latency / Batch  : {bucket_elapsed_ms / 70:.2f}ms (vs {peak_latency_ms:.2f}ms peak on bloated doc)")
 
-    print("\n\033[1;32m======================================================================")
+    console.print("\n[bold green]======================================================================")
     print("SYSTEMS TAKEAWAYS")
-    print("======================================================================\033[0m")
+    console.print("======================================================================[/]")
     print("1. Never use unbounded $push arrays for activity logs, comments, or IoT telemetry.")
     print(f"2. Write amplification: Latency grew from {initial_latency_ms:.2f}ms to {peak_latency_ms:.2f}ms as WiredTiger")
     print("   had to reallocate and rewrite the entire multi-megabyte document on every update.")

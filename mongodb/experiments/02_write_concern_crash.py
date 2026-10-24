@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "pymongo>=4.6.0",
 # ]
 # ///
@@ -32,11 +33,15 @@ from typing import Any
 
 from pymongo import MongoClient, WriteConcern
 from pymongo.errors import AutoReconnect, ConnectionFailure, PyMongoError
+from rich.console import Console
 
 COMPOSE_DIR = Path(__file__).resolve().parent.parent
 MONGO_URI = "mongodb://127.0.0.1:27017/"
 DB_NAME = "lab_db"
 COLL_NAME = "durability_test"
+
+
+console = Console()
 
 
 def run_compose_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -48,7 +53,7 @@ def ensure_container_ready() -> MongoClient:
     try:
         run_compose_cmd(["up", "-d", "--wait"])
     except (subprocess.CalledProcessError, FileNotFoundError) as err:
-        print(f"\033[1;33m[Notice] Docker command execution issue: {err}\033[0m")
+        console.print(f"[bold yellow][Notice] Docker command execution issue: {err}[/]")
 
     # Connect with timeout
     for attempt in range(1, 15):
@@ -59,7 +64,7 @@ def ensure_container_ready() -> MongoClient:
         except ConnectionFailure:
             time.sleep(1)
 
-    print("\033[1;31m[ERROR] Unable to connect to MongoDB on 127.0.0.1:27017.\033[0m")
+    console.print("[bold red][ERROR] Unable to connect to MongoDB on 127.0.0.1:27017.[/]")
     print("Please ensure the durability container is up:")
     print("  cd mongodb && make up EXP=durability")
     sys.exit(1)
@@ -71,10 +76,10 @@ def test_write_concern_durability(
     target_writes: int = 2500,
     kill_after: int = 1200,
 ) -> dict[str, Any]:
-    print("\n\033[1;34m" + "-" * 70 + "\033[0m")
+    console.print("\n[bold blue]" + "-" * 70 + "[/]")
     w_val = write_concern.document.get("w", 1)
     j_val = write_concern.document.get("j", False)
-    print(f"\033[1;33mTesting Mode: {mode_name}\033[0m (w={w_val}, j={j_val})")
+    console.print(f"[bold yellow]Testing Mode: {mode_name}[/] (w={w_val}, j={j_val})")
     print("-" * 70)
 
     client = ensure_container_ready()
@@ -125,7 +130,7 @@ def test_write_concern_durability(
 
     effective_reported = sent_count if w_val == 0 else ack_count
     print(f"  [*] Trigger reached ({effective_reported:,} writes recorded).")
-    print("  \033[1;31m[*] Terminating container abruptly via SIGKILL (kill -9)...\033[0m")
+    console.print("  [bold red][*] Terminating container abruptly via SIGKILL (kill -9)...[/]")
 
     # Send SIGKILL to the container
     try:
@@ -156,10 +161,10 @@ def test_write_concern_durability(
     lost_writes = max(0, reported_total - recovered_count)
     loss_pct = (lost_writes / reported_total * 100.0) if reported_total > 0 else 0.0
 
-    print(f"  \033[1;36mAudit Results for {mode_name}:\033[0m")
+    console.print(f"  [bold cyan]Audit Results for {mode_name}:[/]")
     print(f"    Client Acknowledged / Sent : {reported_total:,}")
     print(f"    Recovered Documents in DB  : {recovered_count:,} (highest seq={max_seq:,})")
-    print(f"    Lost Writes                : \033[1;{'31' if lost_writes > 0 else '32'}m{lost_writes:,} ({loss_pct:.1f}%)\033[0m")
+    console.print(f"    Lost Writes                : [bold {'red' if lost_writes > 0 else 'green'}]{lost_writes:,} ({loss_pct:.1f}%)[/]")
 
     return {
         "mode": mode_name,
@@ -182,10 +187,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print("\033[1;34m" + "=" * 75 + "\033[0m")
-    print("\033[1;32m  Experiment 02: MongoDB Write Concerns & Crash Recovery (SIGKILL)\033[0m")
+    console.print("[bold blue]" + "=" * 75 + "[/]")
+    console.print("[bold green]  Experiment 02: MongoDB Write Concerns & Crash Recovery (SIGKILL)[/]")
     print("  Investigating durability: w=0 vs w=1 (RAM) vs w=1, j=True (Disk Journal)")
-    print("\033[1;34m" + "=" * 75 + "\033[0m")
+    console.print("[bold blue]" + "=" * 75 + "[/]")
 
     modes_to_test: list[tuple[str, WriteConcern, int, int]] = []
 
@@ -202,14 +207,14 @@ def main() -> None:
         results.append(res)
         time.sleep(1)
 
-    print("\n\033[1;34m" + "=" * 80 + "\033[0m")
-    print("\033[1;37mDurability Comparison Matrix:\033[0m")
-    print("\033[1;34m" + "-" * 80 + "\033[0m")
+    console.print("\n[bold blue]" + "=" * 80 + "[/]")
+    console.print("[bold white]Durability Comparison Matrix:[/]")
+    console.print("[bold blue]" + "-" * 80 + "[/]")
     print(f"{'Mode':<28} | {'Ack/Sent':<10} | {'Recovered':<10} | {'Lost':<8} | {'Loss %':<8} | {'Durability':<15}")
     print("-" * 80)
     for r in results:
         print(f"{r['mode']:<28} | {r['sent_or_ack']:<10} | {r['recovered']:<10} | {r['lost']:<8} | {r['loss_pct']:<8} | {r['durability']:<15}")
-    print("\033[1;34m" + "=" * 80 + "\033[0m\n")
+    console.print("[bold blue]" + "=" * 80 + "[/]\n")
 
 
 if __name__ == "__main__":

@@ -1,13 +1,31 @@
 #!/usr/bin/env kotlin
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.json:json:20240303")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import org.json.JSONObject
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import kotlin.system.exitProcess
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val VAULT_ADDR = System.getenv("VAULT_ADDR") ?: "http://127.0.0.1:8200"
 val VAULT_TOKEN = System.getenv("VAULT_TOKEN") ?: "root"
@@ -40,26 +58,26 @@ fun vaultRequest(
 }
 
 fun main() {
-    println("\n\u001B[1;36m" + "=".repeat(70) + "\u001B[0m")
-    println("\u001B[1;32mHashiCorp Vault Crash Course (Kotlin / HTTP API): Secrets & Leases\u001B[0m")
-    println("\u001B[1;36m" + "=".repeat(70) + "\u001B[0m\n")
+    println("\n" + boldCyan("=".repeat(70)))
+    println(boldGreen("HashiCorp Vault Crash Course (Kotlin / HTTP API): Secrets & Leases"))
+    println(boldCyan("=".repeat(70)) + "\n")
 
     val healthResp =
         try {
             vaultRequest("GET", "/v1/sys/health")
         } catch (e: Exception) {
-            println("\u001B[1;31m[!] Connection failed: ${e.message}\u001B[0m")
+            println(boldRed("[!] Connection failed: ${e.message}"))
             println("Start the lab container first: cd vault && make up EXP=dynamic-db")
             exitProcess(1)
         }
 
     val health = JSONObject(healthResp.body())
-    println("\u001B[1;34m[*] 1. Server Health & Seal Status\u001B[0m")
+    println(boldBlue("[*] 1. Server Health & Seal Status"))
     println("    Vault Version: ${health.optString("version")}, Cluster: ${health.optString("cluster_name")}")
     println("    Initialized: ${health.optBoolean("initialized")}, Sealed: ${health.optBoolean("sealed")}")
 
     // 2. KV v2 Write Secret
-    println("\n\u001B[1;34m[*] 2. Versioned Secrets Engine (KV v2 Write & Read)\u001B[0m")
+    println("\n" + boldBlue("[*] 2. Versioned Secrets Engine (KV v2 Write & Read)"))
     val payloadV1 =
         JSONObject().apply {
             put(
@@ -80,7 +98,7 @@ fun main() {
     println("    Written Secret v${metaV1.getInt("version")}: $dataV1")
 
     // 3. Rotate Secret to V2
-    println("\n\u001B[1;34m[*] 3. Secret Rotation (Creating Version 2)\u001B[0m")
+    println("\n" + boldBlue("[*] 3. Secret Rotation (Creating Version 2)"))
     val payloadV2 =
         JSONObject().apply {
             put(
@@ -107,7 +125,7 @@ fun main() {
     println("    Historical query (v1 api_key): '$histKey'")
 
     // 4. Ephemeral Child Token
-    println("\n\u001B[1;34m[*] 4. Ephemeral Child Tokens & Lease Metadata\u001B[0m")
+    println("\n" + boldBlue("[*] 4. Ephemeral Child Tokens & Lease Metadata"))
     val tokenPayload =
         JSONObject().apply {
             put("ttl", "10m")
@@ -131,7 +149,7 @@ fun main() {
     println("    Revoked child token.")
 
     // 5. Diagnostics: Mounts
-    println("\n\u001B[1;34m[*] 5. Mounted Secrets Engines\u001B[0m")
+    println("\n" + boldBlue("[*] 5. Mounted Secrets Engines"))
     val mountsResp = vaultRequest("GET", "/v1/sys/mounts")
     val mounts = JSONObject(mountsResp.body()).getJSONObject("data")
     for (key in mounts.keySet()) {
@@ -143,7 +161,7 @@ fun main() {
     vaultRequest("DELETE", "/v1/secret/metadata/$SECRET_PATH")
     println("    Cleaned up demo secret '$SECRET_PATH' and all metadata.")
 
-    println("\n\u001B[1;32m[✓] HashiCorp Vault Crash Course completed successfully!\u001B[0m\n")
+    println("\n" + boldGreen("[✓] HashiCorp Vault Crash Course completed successfully!") + "\n")
 }
 
 main()

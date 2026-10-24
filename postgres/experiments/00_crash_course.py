@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "psycopg[binary]>=3.1.0",
 # ]
 # ///
@@ -20,33 +21,37 @@ from __future__ import annotations
 import sys
 
 import psycopg
+from rich.console import Console
 
 DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
 TABLE_NAME = "crash_course_items"
 
 
+console = Console()
+
+
 def main() -> None:
-    print("\n\033[1;36m" + "=" * 70 + "\033[0m")
-    print("\033[1;32mPostgreSQL Crash Course: Relational Fundamentals & Diagnostics\033[0m")
-    print("\033[1;36m" + "=" * 70 + "\033[0m\n")
+    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
+    console.print("[bold green]PostgreSQL Crash Course: Relational Fundamentals & Diagnostics[/]")
+    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
 
     try:
         conn = psycopg.connect(DB_CONN, autocommit=True)
     except Exception as e:
-        print(f"\033[1;31m[!] Connection failed: {e}\033[0m")
+        console.print(f"[bold red][!] Connection failed: {e}[/]")
         print("Start the lab container first: cd postgres && make up EXP=isolation")
         sys.exit(1)
 
     with conn:
         with conn.cursor() as cur:
             # 1. Connectivity & Version
-            print("\033[1;34m[*] 1. Server Version & Connectivity\033[0m")
+            console.print("[bold blue][*] 1. Server Version & Connectivity[/]")
             cur.execute("SELECT version();")
             version_str = cur.fetchone()[0]
             print(f"    Version: {version_str.split(',')[0]}")
 
             # 2. Schema DDL
-            print("\n\033[1;34m[*] 2. Creating Demo Table\033[0m")
+            console.print("\n[bold blue][*] 2. Creating Demo Table[/]")
             cur.execute(f"DROP TABLE IF EXISTS {TABLE_NAME};")
             cur.execute(f"""
                 CREATE TABLE {TABLE_NAME} (
@@ -61,7 +66,7 @@ def main() -> None:
             print(f"    Created table '{TABLE_NAME}'.")
 
             # 3. Parameterized Insert & Batch Insert
-            print("\n\033[1;34m[*] 3. Parameterized Inserts & Reads\033[0m")
+            console.print("\n[bold blue][*] 3. Parameterized Inserts & Reads[/]")
             cur.execute(
                 f"INSERT INTO {TABLE_NAME} (name, sku, price, stock) VALUES (%s, %s, %s, %s) RETURNING id;",
                 ("Mechanical Keyboard", "KEY-001", 129.99, 15),
@@ -92,7 +97,7 @@ def main() -> None:
             print("    Decremented stock for 'KEY-001'.")
 
     # 4. Transactions: Commit vs Rollback
-    print("\n\033[1;34m[*] 4. Transaction Semantics (Atomic Rollback)\033[0m")
+    console.print("\n[bold blue][*] 4. Transaction Semantics (Atomic Rollback)[/]")
     with psycopg.connect(DB_CONN, autocommit=False) as tx_conn:
         with tx_conn.cursor() as cur:
             cur.execute(f"SELECT count(*) FROM {TABLE_NAME};")
@@ -114,7 +119,7 @@ def main() -> None:
             print(f"    Verified row count unchanged ({post_count} rows). Rollback succeeded.")
 
             # 5. Diagnostics: pg_stat_activity & Table Footprint
-            print("\n\033[1;34m[*] 5. Diagnostic Queries & Catalog Metadata\033[0m")
+            console.print("\n[bold blue][*] 5. Diagnostic Queries & Catalog Metadata[/]")
             cur.execute("""
                 SELECT pid, usename, client_addr, state, wait_event_type, wait_event
                 FROM pg_stat_activity
@@ -136,7 +141,7 @@ def main() -> None:
             cur.execute(f"DROP TABLE IF EXISTS {TABLE_NAME};")
             print(f"    Cleaned up demo table '{TABLE_NAME}'.")
 
-    print("\n\033[1;32m[✓] PostgreSQL Crash Course completed successfully!\033[0m\n")
+    console.print("\n[bold green][✓] PostgreSQL Crash Course completed successfully![/]\n")
 
 
 if __name__ == "__main__":

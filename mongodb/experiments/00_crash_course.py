@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "pymongo>=4.6.0",
 # ]
 # ///
@@ -21,24 +22,28 @@ import sys
 from datetime import UTC, datetime
 
 from pymongo import MongoClient
+from rich.console import Console
 
 MONGO_URI = "mongodb://127.0.0.1:27017/"
 DB_NAME = "lab_db"
 COLL_NAME = "crash_course_inventory"
 
 
+console = Console()
+
+
 def main() -> None:
-    print("\n\033[1;36m" + "=" * 70 + "\033[0m")
-    print("\033[1;32mMongoDB Crash Course: Documents, Pipelines & Diagnostics\033[0m")
-    print("\033[1;36m" + "=" * 70 + "\033[0m\n")
+    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
+    console.print("[bold green]MongoDB Crash Course: Documents, Pipelines & Diagnostics[/]")
+    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
 
     client: MongoClient = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
 
     try:
         ping_res = client.admin.command("ping")
-        print(f"\033[1;34m[*] 1. Server Connectivity & Info (ping: {ping_res.get('ok')})\033[0m")
+        console.print(f"[bold blue][*] 1. Server Connectivity & Info (ping: {ping_res.get('ok')})[/]")
     except Exception as e:
-        print(f"\033[1;31m[!] Connection failed: {e}\033[0m")
+        console.print(f"[bold red][!] Connection failed: {e}[/]")
         print("Start the lab container first: cd mongodb && make up EXP=unindexed-sort")
         sys.exit(1)
 
@@ -50,7 +55,7 @@ def main() -> None:
     coll.drop()
 
     # 2. Document insertion (nested documents & arrays)
-    print("\n\033[1;34m[*] 2. Inserting Rich Documents (Nested BSON & Arrays)\033[0m")
+    console.print("\n[bold blue][*] 2. Inserting Rich Documents (Nested BSON & Arrays)[/]")
     sample_docs = [
         {
             "sku": "LAP-01",
@@ -94,7 +99,7 @@ def main() -> None:
     print(f"    Inserted {len(res.inserted_ids)} documents into '{COLL_NAME}'.")
 
     # 3. Filter queries and atomic updates
-    print("\n\033[1;34m[*] 3. Nested Query & Atomic Field Modification\033[0m")
+    console.print("\n[bold blue][*] 3. Nested Query & Atomic Field Modification[/]")
     # Query using nested dot-notation
     found = coll.find_one({"pricing.base": {"$gte": 1000.0}})
     if found:
@@ -110,7 +115,7 @@ def main() -> None:
         print(f"    Updated 'LAP-01' stock: {updated['stock']}, tags: {updated['tags']}")
 
     # 4. Aggregation pipeline
-    print("\n\033[1;34m[*] 4. Aggregation Pipeline ($match -> $group -> $sort)\033[0m")
+    console.print("\n[bold blue][*] 4. Aggregation Pipeline ($match -> $group -> $sort)[/]")
     pipeline = [
         {"$match": {"stock": {"$gt": 0}}},
         {
@@ -129,7 +134,7 @@ def main() -> None:
         print(f"      - Category: {doc['_id']}: {doc['item_count']} items, avg ${doc['avg_price']:.2f}, total stock {doc['total_stock']}")
 
     # 5. Diagnostics
-    print("\n\033[1;34m[*] 5. Diagnostics & Collection Stats\033[0m")
+    console.print("\n[bold blue][*] 5. Diagnostics & Collection Stats[/]")
     server_status = db.command("serverStatus")
     mem_info = server_status.get("mem", {})
     connections = server_status.get("connections", {})
@@ -140,7 +145,7 @@ def main() -> None:
     coll.drop()
     print(f"    Dropped demo collection '{COLL_NAME}'.")
 
-    print("\n\033[1;32m[✓] MongoDB Crash Course completed successfully!\033[0m\n")
+    console.print("\n[bold green][✓] MongoDB Crash Course completed successfully![/]\n")
 
 
 if __name__ == "__main__":

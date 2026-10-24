@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "rich>=13.7.0",
 #     "redis>=5.0.0",
 # ]
 # ///
@@ -11,7 +12,12 @@ from __future__ import annotations
 import sys
 import time
 
+from rich.console import Console
+
 import redis
+
+console = Console()
+err_console = Console(stderr=True)
 
 
 def format_bytes(b: int) -> str:
@@ -32,7 +38,7 @@ def main() -> None:
         print("Run 'make up EXP=eviction-lru' first.", file=sys.stderr)
         sys.exit(1)
 
-    print("\033[1;36m=== Live Redis Stats Monitor (Ctrl+C to stop) ===\033[0m")
+    console.print("[bold cyan]=== Live Redis Stats Monitor (Ctrl+C to stop) ===[/]")
     header = f"{'Used Mem':>10} | {'Max Mem':>10} | {'Usage %':>8} | {'Evicted Keys':>14} | {'Total Keys':>12} | {'Hit Ratio':>10}"
     print(header)
     print("-" * len(header))

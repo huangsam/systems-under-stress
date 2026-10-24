@@ -1,11 +1,29 @@
 @file:Repository("https://repo1.maven.org/maven2/")
+@file:DependsOn("com.github.ajalt.mordant:mordant-jvm:2.4.0")
 @file:DependsOn("org.json:json:20240303")
 
+import com.github.ajalt.mordant.rendering.TextColors.blue
+import com.github.ajalt.mordant.rendering.TextColors.cyan
+import com.github.ajalt.mordant.rendering.TextColors.green
+import com.github.ajalt.mordant.rendering.TextColors.magenta
+import com.github.ajalt.mordant.rendering.TextColors.red
+import com.github.ajalt.mordant.rendering.TextColors.white
+import com.github.ajalt.mordant.rendering.TextColors.yellow
+import com.github.ajalt.mordant.rendering.TextStyles.bold
+import com.github.ajalt.mordant.rendering.TextStyles.dim
 import org.json.JSONObject
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+
+val boldCyan = bold + cyan
+val boldGreen = bold + green
+val boldRed = bold + red
+val boldYellow = bold + yellow
+val boldBlue = bold + blue
+val boldMagenta = bold + magenta
+val boldWhite = bold + white
 
 val VAULT_ADDR = System.getenv("VAULT_ADDR") ?: "http://127.0.0.1:8200"
 val VAULT_TOKEN = System.getenv("VAULT_TOKEN") ?: "root"
@@ -31,20 +49,20 @@ fun vaultReq(token: String, method: String, path: String, body: JSONObject? = nu
 }
 
 fun main() {
-    println("\u001b[1;36m=================================================================\u001b[0m")
-    println("\u001b[1;36mExperiment 02 (Kotlin): Token TTL, Renewable Leases & Max TTL\u001b[0m")
+    println(boldCyan("=".repeat(65)))
+    println(boldCyan("Experiment 02 (Kotlin): Token TTL, Renewable Leases & Max TTL"))
     println("Investigating heartbeat renewal mechanics and the unbreachable max_ttl ceiling.")
-    println("\u001b[1;36m=================================================================\u001b[0m\n")
+    println("${boldCyan("=================================================================")}\n")
 
     // Check Vault connection
     try {
         val health = vaultReq(VAULT_TOKEN, "GET", "/v1/sys/health")
         if (health.statusCode() !in listOf(200, 429, 472, 473)) {
-            println("\u001b[1;31mError: Vault returned unexpected status: ${health.statusCode()}\u001b[0m")
+            println(boldRed("Error: Vault returned unexpected status: ${health.statusCode()}"))
             return
         }
     } catch (e: Exception) {
-        println("\u001b[1;31mError: Cannot connect to Vault on $VAULT_ADDR (${e.message})\u001b[0m")
+        println(boldRed("Error: Cannot connect to Vault on $VAULT_ADDR (${e.message})"))
         println("Start container first: cd vault && make up EXP=token-lifecycle")
         return
     }
@@ -64,7 +82,7 @@ fun main() {
     println("    Child Token Created : ${childToken.take(12)}...")
     println("    Initial Lease TTL   : ${initialDuration}s")
 
-    println("\n\u001b[1;34m[*] Beginning Heartbeat Renewal Loop (every 1s)...\u001b[0m")
+    println("\n" + boldBlue("[*] Beginning Heartbeat Renewal Loop (every 1s)..."))
     val startTime = System.currentTimeMillis()
     var pulse = 1
 
@@ -78,10 +96,10 @@ fun main() {
         if (renewResp.statusCode() == 200) {
             val renewJson = JSONObject(renewResp.body())
             val remainingTtl = renewJson.getJSONObject("auth").getInt("lease_duration")
-            println("\u001b[1;32mRENEWED\u001b[0m (New TTL: ${remainingTtl}s)")
+            println("${boldGreen("RENEWED")} (New TTL: ${remainingTtl}s)")
         } else {
-            println("\u001b[1;31mFAILED (HTTP ${renewResp.statusCode()})\u001b[0m")
-            println("\n  \u001b[1;31m[!] HARD CEILING HIT: Token Max TTL Exceeded!\u001b[0m")
+            println(boldRed("FAILED (HTTP ${renewResp.statusCode()})"))
+            println("\n  ${boldRed("[!] HARD CEILING HIT: Token Max TTL Exceeded!")}")
             println("      Response Body: ${renewResp.body().trim()}")
             break
         }
@@ -89,18 +107,18 @@ fun main() {
         if (pulse > 10) break
     }
 
-    println("\n\u001b[1;34m[*] Verifying token revocation after Max TTL expiration...\u001b[0m")
+    println("\n" + boldBlue("[*] Verifying token revocation after Max TTL expiration..."))
     val lookupResp = vaultReq(childToken, "GET", "/v1/auth/token/lookup-self")
-    println("    Lookup-self HTTP Status : \u001b[1;31m${lookupResp.statusCode()}\u001b[0m (403 Forbidden / Expired)")
+    println("    Lookup-self HTTP Status : ${boldRed("${lookupResp.statusCode()}")} (403 Forbidden / Expired)")
 
-    println("\n\u001b[1;32m=================================================================")
+    println("\n" + boldGreen("=".repeat(65)))
     println("TOKEN LIFECYCLE TAKEAWAYS")
-    println("=================================================================\u001b[0m")
+    println(boldGreen("=".repeat(65)))
     println("1. Baseline TTL requires clients to actively pulse renewals (heartbeat).")
     println("2. 'explicit_max_ttl' enforces a hard lifetime ceiling that cannot be bypassed")
     println("   by continuous renewals.")
     println("3. When max_ttl expires, Vault permanently purges the token from memory and storage.")
-    println("=================================================================\n")
+    println(boldGreen("=".repeat(65)) + "\n")
 }
 
 main()
