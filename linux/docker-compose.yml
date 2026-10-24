@@ -9,7 +9,7 @@ x-linux-base: &linux-base
     - .:/lab:ro
   command: ["sleep", "infinity"]
   healthcheck:
-    test: ["CMD-SHELL", "test -d /proc && python3 --version"]
+    test: ["CMD-SHELL", "test -d /proc && python3 --version && uv --version"]
     interval: 2s
     timeout: 2s
     retries: 5
