@@ -15,8 +15,10 @@ x-linux-base: &linux-base
     retries: 5
 
 services:
-  # Profile: pid-limit
-  # Strict cgroups v2 pids ceiling (40 processes max), 64MB RAM, 0.5 CPU
+  # Profile: pid-limit - Exp 01: Cgroups PID Limit & Contained Fork Bomb
+  # Limits: cgroups v2 pids.max=40, 64MB RAM, 0.5 CPU
+  # Objective: Tests kernel EAGAIN fork bomb containment
+  # Runner: cd linux && make up EXP=pid-limit && make run SCRIPT=01_fork_bomb_cgroup
   pid-limit:
     <<: *linux-base
     container_name: linux-pid-limit
@@ -28,8 +30,10 @@ services:
           memory: 64M
           pids: 40
 
-  # Profile: fd-exhaustion
-  # Process-level descriptor limits (ulimit -n 64), 64MB RAM, 0.5 CPU
+  # Profile: fd-exhaustion - Exp 02: File Descriptor & Inode Limits
+  # Limits: ulimit -n 64, 64MB RAM
+  # Objective: Triggers EMFILE and tests leak prevention with context managers
+  # Runner: cd linux && make up EXP=fd-exhaustion && make run SCRIPT=02_fd_limits
   fd-exhaustion:
     <<: *linux-base
     container_name: linux-fd-exhaustion
@@ -44,8 +48,10 @@ services:
           cpus: '0.5'
           memory: 64M
 
-  # Profile: oom-killer
-  # Strict memory limit (32MB) with zero swap (memswap_limit == memory)
+  # Profile: oom-killer - Exp 03: Kernel OOM Killer & Swap Behavior
+  # Limits: 32MB RAM, memswap_limit=32M, 0.5 CPU
+  # Objective: Stresses strict container memory ceiling and triggers kernel SIGKILL
+  # Runner: cd linux && make up EXP=oom-killer && make run SCRIPT=03_oom_killer
   oom-killer:
     <<: *linux-base
     container_name: linux-oom-killer

@@ -19,7 +19,10 @@ x-postgres-base: &postgres-base
     retries: 15
 
 services:
-  # Experiment 1: Isolation anomalies & Write Skew
+  # Profile: isolation - Exp 01: Transaction Isolation & Write Skew
+  # Limits: 256MB RAM, 1.0 CPU
+  # Objective: Tests Write Skew under REPEATABLE READ vs SSI prevention (SQLSTATE 40001)
+  # Runner: make up EXP=isolation && make run SCRIPT=01_isolation
   isolation:
     <<: *postgres-base
     profiles: ["isolation"]
@@ -27,7 +30,10 @@ services:
       - ./initdb.d:/docker-entrypoint-initdb.d:ro
       - postgres-isolation-data:/var/lib/postgresql
 
-  # Experiment 2: Lock Contention & Fast Deadlock Detection
+  # Profile: locks - Exp 02: Row Lock Contention & Deadlock Detection
+  # Limits: deadlock_timeout=100ms, log_lock_waits=on
+  # Objective: Stresses hot-row locks and catches SQLSTATE 40P01 deadlock aborts
+  # Runner: make up EXP=locks && make run SCRIPT=02_locks
   locks:
     <<: *postgres-base
     profiles: ["locks"]
@@ -39,7 +45,10 @@ services:
       - ./initdb.d:/docker-entrypoint-initdb.d:ro
       - postgres-locks-data:/var/lib/postgresql
 
-  # Experiment 3: Memory Spill to Disk (low work_mem)
+  # Profile: work-mem - Exp 03: PostgreSQL work_mem & Disk Spill
+  # Limits: work_mem=4MB, log_temp_files=0
+  # Objective: Forces external merge disk spills during sorting
+  # Runner: make up EXP=work-mem && make run SCRIPT=03_work_mem
   work-mem:
     <<: *postgres-base
     profiles: ["work-mem"]

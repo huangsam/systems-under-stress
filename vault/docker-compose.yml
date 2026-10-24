@@ -45,7 +45,10 @@ services:
     volumes:
       - vault-pg-data:/var/lib/postgresql
 
-  # Profile 1: Dynamic Secrets Engine & Lease Revocation Cascades
+  # Profile: dynamic-creds - Exp 01: Dynamic Secrets & Lease Revocation Cascades
+  # Limits: Dual-container setup: Vault dev server + PostgreSQL 18
+  # Objective: Tests on-demand role provisioning and SQL connection drop upon lease revocation
+  # Runner: make up EXP=dynamic-creds && make run SCRIPT=01_dynamic_db_creds
   vault-dynamic:
     <<: *vault-base
     profiles: ["dynamic-creds"]
@@ -55,14 +58,20 @@ services:
     volumes:
       - vault-dynamic-data:/vault/file
 
-  # Profile 2: Token TTL, Renewable Leases & Max TTL Ceilings
+  # Profile: token-lifecycle - Exp 02: Token TTL, Renewals & Max TTL Ceilings
+  # Limits: Dev-mode Vault container, default TTL and max_ttl boundaries
+  # Objective: Demonstrates heartbeat renewal limits and forced token purging at max_ttl boundary
+  # Runner: make up EXP=token-lifecycle && make run SCRIPT=02_token_renewal
   vault-token:
     <<: *vault-base
     profiles: ["token-lifecycle"]
     volumes:
       - vault-token-data:/vault/file
 
-  # Profile 3: Transit Encryption-as-a-Service (EaaS) Throughput & Key Rotation
+  # Profile: transit-crypto - Exp 03: Transit Encryption & Key Rotation
+  # Limits: Dev-mode Vault container with transit secrets engine
+  # Objective: Compares single vs batched HTTP encryption throughput and verifies zero-downtime key rotation
+  # Runner: make up EXP=transit-crypto && make run SCRIPT=03_transit_throughput
   vault-transit:
     <<: *vault-base
     profiles: ["transit-crypto"]

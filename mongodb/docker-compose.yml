@@ -16,21 +16,30 @@ x-mongo-base: &mongo-base
     start_period: 3s
 
 services:
-  # Experiment 1: The 100MB RAM In-Memory Sort Limit
+  # Profile: unindexed-sort - Exp 01: In-Memory Sort Limit
+  # Limits: 100MB internal RAM sort ceiling
+  # Objective: Tests blocking in-memory sort failures and remedies via allowDiskUse=true and B-Tree indexing
+  # Runner: make up EXP=unindexed-sort && make run SCRIPT=01_sort_memory_limit
   unindexed-sort:
     <<: *mongo-base
     profiles: ["unindexed-sort"]
     volumes:
       - mongo-sort-data:/data/db
 
-  # Experiment 2: Write Concerns & Crash Durability (w:0 vs w:1 vs j:True)
+  # Profile: durability - Exp 02: Write Concern & Crash Durability
+  # Limits: 384MB RAM, SIGKILL crash simulation
+  # Objective: Compares write survival across w:0, w:1, and j:True
+  # Runner: make up EXP=durability && make run SCRIPT=02_write_concern_crash
   durability:
     <<: *mongo-base
     profiles: ["durability"]
     volumes:
       - mongo-durability-data:/data/db
 
-  # Experiment 3: Document Growth, Reallocation & 16MB BSON Hard Cap
+  # Profile: document-limits - Exp 03: 16MB BSON Document Cap & Array Growth
+  # Limits: 16MB strict BSON document size boundary
+  # Objective: Triggers BSONObjectTooLarge with unbounded $push; tests bucket pattern fix
+  # Runner: make up EXP=document-limits && make run SCRIPT=03_document_size_cap
   document-limits:
     <<: *mongo-base
     profiles: ["document-limits"]

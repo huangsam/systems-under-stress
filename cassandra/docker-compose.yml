@@ -18,7 +18,10 @@ x-cassandra-base: &cassandra-base
     start_period: 30s
 
 services:
-  # Experiment 01: Tombstone failure threshold (10,000 tombstones)
+  # Profile: tombstones - Exp 01: Tombstone Failure Threshold
+  # Limits: 10,000 tombstone read abort ceiling, 512MB heap
+  # Objective: Triggers ReadFailureException when scanning 12,000 tombstones; tests clustering slice fix
+  # Runner: make up EXP=tombstones && make run SCRIPT=01_tombstone_threshold
   cassandra-tombstones:
     <<: *cassandra-base
     container_name: cassandra-tombstones
@@ -29,7 +32,10 @@ services:
     volumes:
       - cassandra-tombstone-data:/var/lib/cassandra
 
-  # Experiment 02: PACELC Tunable Consistency (3-node mini-cluster)
+  # Profile: cluster-consistency - Exp 02: Tunable Consistency & PACELC 3-Node Cluster
+  # Limits: 3 nodes (RF=3), 896MB RAM / 384MB heap per node, simulated node outages via docker stop
+  # Objective: Tests quorum availability across ONE, QUORUM, ALL during rolling node degradation
+  # Runner: make up EXP=cluster-consistency && make run SCRIPT=02_consistency_levels
   cassandra-node1:
     <<: *cassandra-base
     container_name: cassandra-node1
@@ -94,7 +100,10 @@ services:
       cassandra-node1:
         condition: service_healthy
 
-  # Experiment 03: Wide partitions & Hot-spotting
+  # Profile: wide-partitions - Exp 03: Wide Partitions & Hot-Spotting
+  # Limits: 512MB heap, single-partition row accumulation
+  # Objective: Compares unbounded single-partition writes against deterministic multi-bucket hashing
+  # Runner: make up EXP=wide-partitions && make run SCRIPT=03_partition_skew
   cassandra-wide:
     <<: *cassandra-base
     container_name: cassandra-wide

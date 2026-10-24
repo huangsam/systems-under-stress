@@ -15,7 +15,10 @@ x-redis-base: &redis-base
     retries: 5
 
 services:
-  # Experiment 1A: allkeys-lru with 16MB maxmemory limit
+  # Profile: eviction-lru - Exp 01A: Least Recently Used Eviction
+  # Limits: 16MB maxmemory, allkeys-lru eviction policy
+  # Objective: Tests transparent memory stabilization and high hit-ratio under 80/20 load
+  # Runner: make up EXP=eviction-lru && make run SCRIPT=01_eviction
   eviction-lru:
     <<: *redis-base
     profiles: ["eviction-lru", "eviction"]
@@ -27,7 +30,10 @@ services:
     volumes:
       - redis-eviction-lru-data:/data
 
-  # Experiment 1B: noeviction with 16MB maxmemory limit (should trigger OOM errors)
+  # Profile: eviction-noeviction - Exp 01B: Memory Limit OOM Error
+  # Limits: 16MB maxmemory, noeviction policy
+  # Objective: Triggers explicit Redis OOM errors once 16MB ceiling is hit
+  # Runner: make up EXP=eviction-noeviction && make run SCRIPT=01_eviction
   eviction-noeviction:
     <<: *redis-base
     profiles: ["eviction-noeviction"]
@@ -39,7 +45,10 @@ services:
     volumes:
       - redis-eviction-noeviction-data:/data
 
-  # Experiment 1C: allkeys-lfu with 16MB maxmemory limit (frequency-based eviction)
+  # Profile: eviction-lfu - Exp 01C: Least Frequently Used Eviction
+  # Limits: 16MB maxmemory, allkeys-lfu policy
+  # Objective: Tests logarithmic counter eviction protecting frequent keys regardless of recency
+  # Runner: make up EXP=eviction-lfu && make run SCRIPT=01_eviction
   eviction-lfu:
     <<: *redis-base
     profiles: ["eviction-lfu"]
@@ -51,7 +60,10 @@ services:
     volumes:
       - redis-eviction-lfu-data:/data
 
-  # Experiment 2: Cache stampede simulation
+  # Profile: stampede - Exp 02: Cache Stampede & Distributed Mutex
+  # Limits: 64MB maxmemory
+  # Objective: Simulates 100 concurrent requests on expired hot keys comparing naive vs lock vs XFetch
+  # Runner: make up EXP=stampede && make run SCRIPT=02_stampede
   stampede:
     <<: *redis-base
     profiles: ["stampede"]
@@ -62,7 +74,10 @@ services:
     volumes:
       - redis-stampede-data:/data
 
-  # Experiment 3A: Persistence - RDB snapshots only (no AOF)
+  # Profile: persistence-rdb - Exp 03A: Periodic RDB Snapshots
+  # Limits: save 60 10000, appendonly no
+  # Objective: Simulates SIGKILL crash to verify loss of in-flight writes since last snapshot
+  # Runner: make up EXP=persistence-rdb && make run SCRIPT=03_persistence
   persistence-rdb:
     <<: *redis-base
     profiles: ["persistence-rdb", "persistence"]
@@ -74,7 +89,10 @@ services:
     volumes:
       - redis-persist-rdb-data:/data
 
-  # Experiment 3B: Persistence - AOF with appendfsync everysec (standard production default)
+  # Profile: persistence-aof - Exp 03B: AOF with appendfsync everysec
+  # Limits: appendonly yes, appendfsync everysec
+  # Objective: Tests production default durability capping crash data loss to last 1-second buffer
+  # Runner: make up EXP=persistence-aof && make run SCRIPT=03_persistence
   persistence-aof:
     <<: *redis-base
     profiles: ["persistence-aof"]
@@ -87,7 +105,10 @@ services:
     volumes:
       - redis-persist-aof-data:/data
 
-  # Experiment 3C: Persistence - AOF with appendfsync always (maximum durability, disk bound)
+  # Profile: persistence-always - Exp 03C: AOF with appendfsync always
+  # Limits: appendonly yes, appendfsync always
+  # Objective: Verifies zero data loss under SIGKILL crash at the expense of write throughput
+  # Runner: make up EXP=persistence-always && make run SCRIPT=03_persistence
   persistence-always:
     <<: *redis-base
     profiles: ["persistence-always"]

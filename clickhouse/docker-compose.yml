@@ -19,14 +19,20 @@ x-clickhouse-base: &clickhouse-base
     retries: 15
 
 services:
-  # Experiment 1: Un-batched inserts and parts explosion limit
+  # Profile: parts-limit - Exp 01: Too Many Parts Failure
+  # Limits: parts_to_throw_insert=120, parts_to_delay_insert=80
+  # Objective: Tests un-batched inserts triggering TOO_MANY_PARTS failure
+  # Runner: make up EXP=parts-limit && make run SCRIPT=01_parts_explosion
   parts-limit:
     <<: *clickhouse-base
     profiles: ["parts-limit"]
     volumes:
       - clickhouse-parts-data:/var/lib/clickhouse
 
-  # Experiment 2: Analytical memory ceiling (64MB max_memory_usage) & disk spill
+  # Profile: memory-cap - Exp 02: Analytical Memory Limit & Disk Spill
+  # Limits: max_memory_usage=64MB, max_bytes_before_external_group_by=32MB
+  # Objective: Triggers MEMORY_LIMIT_EXCEEDED; tests external group by disk spilling
+  # Runner: make up EXP=memory-cap && make run SCRIPT=02_memory_limit
   memory-cap:
     <<: *clickhouse-base
     profiles: ["memory-cap"]
@@ -34,7 +40,10 @@ services:
       - ./users.d/memory-limit.xml:/etc/clickhouse-server/users.d/memory-limit.xml:ro
       - clickhouse-mem-data:/var/lib/clickhouse
 
-  # Experiment 3: Columnar Compression Codecs & LowCardinality Benchmarking
+  # Profile: compression - Exp 03: Columnar Compression Codecs & LowCardinality
+  # Limits: 512MB RAM, 1.0 CPU
+  # Objective: Compares disk footprint across Default, ZSTD, Gorilla, DoubleDelta, and LowCardinality
+  # Runner: make up EXP=compression && make run SCRIPT=03_codec_compression
   compression:
     <<: *clickhouse-base
     profiles: ["compression"]

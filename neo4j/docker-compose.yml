@@ -22,21 +22,30 @@ x-neo4j-base: &neo4j-base
     start_period: 15s
 
 services:
-  # Experiment 1: Unbounded Path Traversal (Combinatorial Explosion)
+  # Profile: traversal-depth - Exp 01: Combinatorial Path Explosion
+  # Limits: 384MB heap, 64MB pagecache
+  # Objective: Tests combinatorial explosion in variable-length paths vs bidirectional BFS
+  # Runner: make up EXP=traversal-depth && make run SCRIPT=01_unbounded_path
   traversal-depth:
     <<: *neo4j-base
     profiles: ["traversal-depth"]
     volumes:
       - neo4j-traversal-data:/data
 
-  # Experiment 2: Dense Supernode (Pointer Chasing & Lock Contention)
+  # Profile: supernode - Exp 02: Dense Supernodes & Lock Contention
+  # Limits: 512MB RAM, hub node with 30,000+ relationships
+  # Objective: Tests pointer-chasing read degradation and exclusive write-lock contention
+  # Runner: make up EXP=supernode && make run SCRIPT=02_supernode
   supernode:
     <<: *neo4j-base
     profiles: ["supernode"]
     volumes:
       - neo4j-supernode-data:/data
 
-  # Experiment 3: Multi-Hop Cypher vs Recursive SQL (Neo4j + PostgreSQL)
+  # Profile: compare-sql - Exp 03: Multi-Hop Cypher vs Recursive SQL
+  # Limits: Dual-container topology: Neo4j + PostgreSQL 18
+  # Objective: Benchmarks index-free adjacency graph traversals against SQL WITH RECURSIVE scans
+  # Runner: make up EXP=compare-sql && make run SCRIPT=03_cypher_vs_recursive_sql
   compare-sql:
     <<: *neo4j-base
     profiles: ["compare-sql"]
