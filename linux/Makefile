@@ -39,7 +39,7 @@ sh:
 	docker compose --profile $(EXP) exec $(EXP) /bin/bash
 
 run:
-	docker compose --profile $(EXP) exec -T $(EXP) uv run /lab/experiments/$(SCRIPT).py
+	docker compose --profile $(EXP) exec -T $(EXP) python3 /lab/experiments/$(SCRIPT).py
 
 logs:
 	docker compose --profile $(EXP) logs -f $(EXP)

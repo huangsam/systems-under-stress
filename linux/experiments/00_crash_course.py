@@ -1,8 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = [
-#     "rich>=13.7.0",
-# ]
+# dependencies = []
 # ///
 """
 Linux Kernel Primitives & Container Limits Crash Course
@@ -21,10 +19,6 @@ import os
 import platform
 import resource
 
-from rich.console import Console
-
-console = Console()
-
 
 def read_file_safe(path: str) -> str | None:
     try:
@@ -35,17 +29,17 @@ def read_file_safe(path: str) -> str | None:
 
 
 def main() -> None:
-    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
-    console.print("[bold green]Linux Kernel Primitives & Container Limits Crash Course[/]")
-    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
+    print("\n" + "=" * 70)
+    print("Linux Kernel Primitives & Container Limits Crash Course")
+    print("=" * 70 + "\n")
 
     current_os = platform.system()
     if current_os != "Linux":
-        console.print(f"[bold yellow][!] Note: Running on {current_os} host. Linux kernel inspection paths (/proc, /sys) require container execution.[/]")
+        print(f"[!] Note: Running on {current_os} host. Linux kernel inspection paths (/proc, /sys) require container execution.")
         print("    Execute inside the lab container: cd linux && make up && make run SCRIPT=00_crash_course\n")
 
     # 1. Kernel & Host
-    console.print("[bold blue][*] 1. Kernel Runtime & Architecture[/]")
+    print("[*] 1. Kernel Runtime & Architecture")
     uname = platform.uname()
     print(f"    System: {uname.system} {uname.release} ({uname.machine})")
     proc_ver = read_file_safe("/proc/version")
@@ -53,7 +47,7 @@ def main() -> None:
         print(f"    Kernel Build: {proc_ver.split('(')[0].strip()}")
 
     # 2. Process Namespace
-    console.print("\n[bold blue][*] 2. Process Namespace & Status (/proc/self/status)[/]")
+    print("\n[*] 2. Process Namespace & Status (/proc/self/status)")
     pid = os.getpid()
     ppid = os.getppid()
     print(f"    Current PID: {pid} (Parent PID: {ppid})")
@@ -70,7 +64,7 @@ def main() -> None:
                 print(f"    {metric:<10}: {status_dict[metric]}")
 
     # 3. Process POSIX Limits
-    console.print("\n[bold blue][*] 3. POSIX Resource Limits (getrlimit)[/]")
+    print("\n[*] 3. POSIX Resource Limits (getrlimit)")
     for res_name, res_id in [
         ("RLIMIT_NOFILE", resource.RLIMIT_NOFILE),
         ("RLIMIT_NPROC", getattr(resource, "RLIMIT_NPROC", None)),
@@ -83,7 +77,7 @@ def main() -> None:
             print(f"    {res_name:<15}: soft={soft_str:<12} hard={hard_str}")
 
     # 4. Cgroups v2
-    console.print("\n[bold blue][*] 4. Cgroups v2 Subsystem (/sys/fs/cgroup)[/]")
+    print("\n[*] 4. Cgroups v2 Subsystem (/sys/fs/cgroup)")
     cgroup_controllers = read_file_safe("/sys/fs/cgroup/cgroup.controllers")
     if cgroup_controllers:
         print(f"    Available Controllers: {cgroup_controllers}")
@@ -110,7 +104,7 @@ def main() -> None:
             print(f"    CPU Limit: {cpus} cores (quota={quota}us, period={period}us)")
 
     # 5. File Descriptors
-    console.print("\n[bold blue][*] 5. Open File Descriptors (/proc/self/fd)[/]")
+    print("\n[*] 5. Open File Descriptors (/proc/self/fd)")
     fd_dir = "/proc/self/fd"
     if os.path.isdir(fd_dir):
         fds = os.listdir(fd_dir)
@@ -118,7 +112,7 @@ def main() -> None:
     else:
         print("    (/proc/self/fd not present in current environment)")
 
-    console.print("\n[bold green][✓] Linux Kernel Crash Course completed successfully![/]\n")
+    print("\n[✓] Linux Kernel Crash Course completed successfully!\n")
 
 
 if __name__ == "__main__":

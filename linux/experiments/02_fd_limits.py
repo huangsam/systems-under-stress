@@ -1,8 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = [
-#     "rich>=13.7.0",
-# ]
+# dependencies = []
 # ///
 """
 Experiment 02: File Descriptor & Inode Exhaustion (ulimit -n 64)
@@ -26,10 +24,6 @@ import errno
 import os
 import platform
 import resource
-
-from rich.console import Console
-
-console = Console()
 
 
 def inspect_proc_self_fd() -> dict[int, str]:

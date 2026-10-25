@@ -1,8 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = [
-#     "rich>=13.7.0",
-# ]
+# dependencies = []
 # ///
 """
 Experiment 01: The Cgroups PID Limit (Contained Fork Bomb)
@@ -25,10 +23,6 @@ import os
 import platform
 import sys
 import time
-
-from rich.console import Console
-
-console = Console()
 
 
 def get_cgroup_pids_paths() -> tuple[str | None, str | None]:
