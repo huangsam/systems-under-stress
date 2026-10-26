@@ -47,8 +47,6 @@ make soft-reset
 make clean
 ```
 
-> **Note on `linux/` Engine**: The Linux Kernel lab remains pure Python because its workloads execute directly inside tightly restricted 32MB cgroup micro-containers (`mem_limit: 32m`, `pids.max: 40`).
-
 ---
 
 ## Prerequisites
