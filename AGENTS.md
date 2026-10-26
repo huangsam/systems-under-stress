@@ -60,7 +60,7 @@ This file serves as the root agent instructions, invariants, and guardrails.
      ```
 
 5. **Two-Tier Resets & Teardown Hygiene**:
-   - **Soft Reset (Fast)**: Provide commands or script functions for in-engine resets (`FLUSHALL`, `TRUNCATE TABLE`, etc.) for sub-second query iteration.
+   - **Soft Reset (Fast)**: Provide `make soft-reset` for in-engine resets (`FLUSHALL`, `TRUNCATE TABLE`, etc.) for sub-second query iteration, where the engine has resettable state (not `vault/` or `linux/`).
    - **Hard Reset (Cold)**: Clean teardown via `docker compose --profile <name> down -v` or `docker compose --profile "*" down -v` to ensure Docker does not leave orphaned profiled volumes on disk.
 
 6. **Self-Contained Client Dependencies (PEP 723 via `uv`)**:
@@ -77,19 +77,22 @@ This file serves as the root agent instructions, invariants, and guardrails.
 
 7. **Observability & Real-Time Feedback**:
    - Never rely solely on an unhandled crash or final stack trace.
-   - Every experiment should provide a way to observe the limit being approached or hit in real-time (e.g. streaming memory usage, eviction rates, lock wait times, or connection counts).
+   - Experiment scripts should print live progress and the failure signature as they run. A dedicated `make monitor` stream exists only for `redis/`; other labs rely on script output and engine CLI targets (e.g. `make client`, `make psql`).
 
 8. **Ergonomic CLI Standards (Makefile)**:
    - Provide a concise `Makefile` in each technology lab directory supporting standard targets:
      - `make up EXP=<profile>`: Starts target profile with `--wait`.
-     - `make run EXP=<profile>`: Executes the workload script via `uv run`.
-     - `make monitor EXP=<profile>`: Streams live metrics/stats for that engine.
+     - `make run SCRIPT=<name>`: Executes `experiments/<name>.py` via `uv run` (`linux/` also takes `EXP=<profile>` to select the container).
+     - `make down EXP=<profile>`: Stops one profile and wipes its volumes.
+     - `make soft-reset`: Fast in-engine reset (all labs except `vault/` and `linux/`).
+     - `make monitor`: Live metrics stream (`redis/` only, optional elsewhere).
+     - `make help`: Lists profiles and targets.
      - `make clean`: Tears down all containers and named volumes via `--profile "*" down -v`.
 
 9. **Documentation & Lab Structure**:
-   - Every experiment directory or major profile should be accompanied by a `README.md` following the standard lab template:
+   - Each lab has one `README.md` with a section per experiment, ideally covering these topics (headings vary slightly by lab, and some experiments omit sections):
      - **Hypothesis & Objective**
-     - **Configuration & Limits**
-     - **Reproduction Steps**
-     - **Observed Metrics & Failure Signatures**
+     - **Configuration & Limits** (or "Constraints")
+     - **How to Run** (or "Reproduction Steps")
+     - **Observed Metrics & Failure Signatures** (or "Empirical Benchmark/Results")
      - **Production & Systems Takeaways**

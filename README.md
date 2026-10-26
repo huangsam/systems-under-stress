@@ -26,7 +26,7 @@ A hands-on, empirical systems engineering lab suite exploring the **hard operati
 
 ## Quick Start (Universal CLI Workflow)
 
-Every lab directory shares the exact same `Makefile` interface:
+Every lab directory shares a common `Makefile` interface (`make help` lists the exact targets per lab; `linux/` also needs `EXP=` on `make run`, and `vault/`/`linux/` have no `soft-reset`):
 
 ```bash
 cd <technology>   # e.g., cd redis, cd postgres, cd clickhouse
@@ -40,7 +40,7 @@ make up EXP=<profile>
 # 3. Execute the self-driving workload script
 make run SCRIPT=<script_name>       # Python runner via uv (PEP 723 inline dependencies)
 
-# 4. Fast in-memory reset (FLUSHALL / TRUNCATE / DROP) without container restart
+# 4. Fast in-engine reset (FLUSHALL / TRUNCATE / DROP) without container restart (not available in vault/ or linux/)
 make soft-reset
 
 # 5. Tear down all profiles and wipe all named volumes for a 100% cold reset
