@@ -15,14 +15,14 @@ postgres/
 ├── initdb.d/
 │   └── init.sql             # Automatic schema initialization
 ├── experiments/
-│   ├── 00_crash_course.py / .main.kts  # Baseline connectivity, CRUD & transactional rollback
-│   ├── 01_isolation.py / .main.kts     # Dirty reads & Write Skew (Repeatable Read vs Serializable)
-│   ├── 02_locks.py / .main.kts         # Hot row lock queues & deadlock detection
-│   └── 03_work_mem.py / .main.kts      # Sort spill-to-disk on low work_mem
+│   ├── 00_crash_course.py   # Baseline connectivity, CRUD & transactional rollback
+│   ├── 01_isolation.py      # Dirty reads & Write Skew (Repeatable Read vs Serializable)
+│   ├── 02_locks.py          # Hot row lock queues & deadlock detection
+│   └── 03_work_mem.py       # Sort spill-to-disk on low work_mem
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run via `uv run` or `make run`.
 
 ---
 

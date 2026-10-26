@@ -2,7 +2,7 @@
 EXP ?= isolation
 SCRIPT ?= 01_isolation
 
-.PHONY: help up down clean soft-reset run run-kt psql logs
+.PHONY: help up down clean soft-reset run psql logs
 
 help:
 	@echo "PostgreSQL Experiments Harness"
@@ -36,9 +36,6 @@ soft-reset:
 
 run:
 	uv run experiments/$(SCRIPT).py
-
-run-kt:
-	kotlin experiments/$(SCRIPT).main.kts
 
 psql:
 	docker compose exec -it $(EXP) psql -U postgres -d lab_db

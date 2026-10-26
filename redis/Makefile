@@ -42,9 +42,6 @@ soft-reset:
 run:
 	uv run experiments/$(SCRIPT).py
 
-run-kt:
-	kotlin experiments/$(SCRIPT).main.kts
-
 monitor:
 	uv run experiments/monitor.py
 

@@ -11,16 +11,16 @@ This lab uses a single [`docker-compose.yml`](./docker-compose.yml) with **Docke
 ```text
 neo4j/
 ├── docker-compose.yml       # Pinned image, cgroups limits (512MB RAM), JVM heap caps (384MB), profiles
-├── Makefile                 # One-touch runner targets (up, run, run-kt, soft-reset, cypher-shell, clean)
+├── Makefile                 # One-touch runner targets (up, run, soft-reset, cypher-shell, clean)
 ├── experiments/
-│   ├── 00_crash_course.py / .main.kts            # Property graphs, Cypher traversals & dbms.components
-│   ├── 01_unbounded_path.py / .main.kts          # Combinatorial path explosion: variable-length hops vs shortestPath
-│   ├── 02_supernode.py / .main.kts               # Dense supernodes (50k edges): pointer chasing & write lock contention
-│   └── 03_cypher_vs_recursive_sql.py / .main.kts # Native index-free adjacency vs recursive CTE in PostgreSQL
+│   ├── 00_crash_course.py            # Property graphs, Cypher traversals & dbms.components
+│   ├── 01_unbounded_path.py          # Combinatorial path explosion: variable-length hops vs shortestPath
+│   ├── 02_supernode.py               # Dense supernodes (50k edges): pointer chasing & write lock contention
+│   └── 03_cypher_vs_recursive_sql.py # Native index-free adjacency vs recursive CTE in PostgreSQL
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run via `uv run` or `make run`.
 
 ### Host Safety & Resource Caps
 - **Docker Image**: `neo4j:5.26.32-community`

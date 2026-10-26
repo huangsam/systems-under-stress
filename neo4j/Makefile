@@ -2,7 +2,7 @@
 EXP ?= traversal-depth
 SCRIPT ?= 01_unbounded_path
 
-.PHONY: help up down clean soft-reset run run-kt cypher-shell logs
+.PHONY: help up down clean soft-reset run cypher-shell logs
 
 help:
 	@echo "Neo4j Experiments Harness"
@@ -36,9 +36,6 @@ soft-reset:
 
 run:
 	uv run experiments/$(SCRIPT).py
-
-run-kt:
-	kotlin experiments/$(SCRIPT).main.kts
 
 cypher-shell:
 	docker compose exec -it $(EXP) cypher-shell -u neo4j -p password123

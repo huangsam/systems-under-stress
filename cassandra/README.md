@@ -11,22 +11,16 @@ This lab uses a single [`docker-compose.yml`](./docker-compose.yml) with **Docke
 ```text
 cassandra/
 ├── docker-compose.yml             # Base anchor &cassandra-base, cgroups limits, profiles
-├── Makefile                       # One-touch runner targets (up, run, run-kt, down, clean, soft-reset, cqlsh)
+├── Makefile                       # One-touch runner targets (up, run, down, clean, soft-reset, cqlsh)
 ├── experiments/
-│   ├── 00_crash_course.py / .main.kts  # Cluster introspection, CQL basics & partition key routing
-│   ├── 01_tombstone_threshold.py / .main.kts # Tombstone accumulation, safety limits & failure abort
-│   ├── 02_consistency_levels.py / .main.kts  # 3-node cluster PACELC trade-offs under node failure
-│   └── 03_partition_skew.py / .main.kts      # Wide partition hotspots vs compound key bucketing
+│   ├── 00_crash_course.py         # Cluster introspection, CQL basics & partition key routing
+│   ├── 01_tombstone_threshold.py  # Tombstone accumulation, safety limits & failure abort
+│   ├── 02_consistency_levels.py   # 3-node cluster PACELC trade-offs under node failure
+│   └── 03_partition_skew.py       # Wide partition hotspots vs compound key bucketing
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) for Python (`uv run`) or `@file:DependsOn` for Kotlin (`kotlin`).
-
-### Dual Client Ecosystem: Python vs Kotlin (JVM Native)
-Because the legacy Python `cassandra-driver` relies on unmaintained C extensions (`libev`), this lab provides **first-class Kotlin scripts (`.main.kts`)** powered by the official **DataStax Java Driver 4.x (`com.datastax.oss:java-driver-core`)**:
-* **Zero build ceremony**: No Gradle or Maven; `@file:DependsOn` resolves Netty and DataStax dependencies on the fly.
-* **Full Coroutines Asynchrony**: Non-blocking `session.executeAsync()` with Kotlin Coroutines for maximum throughput.
-* **Run with**: `make run-kt SCRIPT=01_tombstone_threshold` (or `kotlin experiments/01_tombstone_threshold.main.kts`).
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run via `uv run` or `make run`.
 
 ### Host Safety & Resource Guardrails
 - **Cgroups Limits**: `cpus: '1.5'`, `memory: 768M` (single-node) / `512M` (cluster nodes).

@@ -11,18 +11,18 @@ This lab uses a single [`docker-compose.yml`](./docker-compose.yml) with **Docke
 ```text
 clickhouse/
 ├── docker-compose.yml       # Pinned image, cgroups limits (512M RAM, 1.0 CPU), profiles
-├── Makefile                 # One-touch runner targets (up, run, run-kt, down, clean, client)
+├── Makefile                 # One-touch runner targets (up, run, down, clean, client)
 ├── users.d/
 │   └── memory-limit.xml     # User profile override for max_memory_usage=64MB
 ├── experiments/
-│   ├── 00_crash_course.py / .main.kts      # Columnar ingestion, MergeTree basics & system.parts
-│   ├── 01_parts_explosion.py / .main.kts   # Un-batched single-row inserts vs batched ingestion
-│   ├── 02_memory_limit.py / .main.kts      # Analytical RAM ceiling & external group-by disk spill
-│   └── 03_codec_compression.py / .main.kts # Columnar codecs (DoubleDelta, Gorilla, ZSTD) vs NONE
+│   ├── 00_crash_course.py      # Columnar ingestion, MergeTree basics & system.parts
+│   ├── 01_parts_explosion.py   # Un-batched single-row inserts vs batched ingestion
+│   ├── 02_memory_limit.py      # Analytical RAM ceiling & external group-by disk spill
+│   └── 03_codec_compression.py # Columnar codecs (DoubleDelta, Gorilla, ZSTD) vs NONE
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (`clickhouse-connect>=0.7.0`, run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (`clickhouse-connect>=0.7.0`) and run via `uv run` or `make run`.
 
 ---
 

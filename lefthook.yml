@@ -10,10 +10,6 @@ pre-commit:
       glob: "*.py"
       run: uvx ruff check --fix {staged_files} && uvx ruff format {staged_files}
       stage_fixed: true
-    kotlin-lint:
-      glob: "*.main.kts"
-      run: ktlint --format {staged_files}
-      stage_fixed: true
     compose-lint:
       glob: "**/docker-compose.yml"
       run: make compose-lint

@@ -2,7 +2,7 @@
 EXP ?= unindexed-sort
 SCRIPT ?= 01_sort_memory_limit
 
-.PHONY: help up down clean soft-reset run run-kt mongosh logs
+.PHONY: help up down clean soft-reset run mongosh logs
 
 help:
 	@echo "MongoDB Experiments Harness"
@@ -36,9 +36,6 @@ soft-reset:
 
 run:
 	uv run experiments/$(SCRIPT).py
-
-run-kt:
-	kotlin experiments/$(SCRIPT).main.kts
 
 mongosh:
 	docker compose exec -it $(EXP) mongosh lab_db

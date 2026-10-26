@@ -2,7 +2,7 @@
 EXP ?= parts-limit
 SCRIPT ?= 01_parts_explosion
 
-.PHONY: help up down clean soft-reset run run-kt client logs
+.PHONY: help up down clean soft-reset run client logs
 
 help:
 	@echo "ClickHouse Limit Testing Harness"
@@ -36,9 +36,6 @@ soft-reset:
 
 run:
 	uv run experiments/$(SCRIPT).py
-
-run-kt:
-	kotlin experiments/$(SCRIPT).main.kts
 
 client:
 	docker compose exec -it $(EXP) clickhouse-client

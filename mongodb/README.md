@@ -13,14 +13,14 @@ mongodb/
 ├── docker-compose.yml       # Pinned image (mongo:9.0.4), cgroups limits, profiles
 ├── Makefile                 # One-touch runner targets
 ├── experiments/
-│   ├── 00_crash_course.py / .main.kts        # BSON documents, aggregation pipelines & serverStatus
-│   ├── 01_sort_memory_limit.py / .main.kts   # 100MB in-memory sort limit vs allowDiskUse & B-Tree index
-│   ├── 02_write_concern_crash.py / .main.kts # Write durability & crash recovery across w:0, w:1, j:True
-│   └── 03_document_size_cap.py / .main.kts   # Document growth, 16MB BSON ceiling & bucket pattern
+│   ├── 00_crash_course.py         # BSON documents, aggregation pipelines & serverStatus
+│   ├── 01_sort_memory_limit.py    # 100MB in-memory sort limit vs allowDiskUse & B-Tree index
+│   ├── 02_write_concern_crash.py  # Write durability & crash recovery across w:0, w:1, j:True
+│   └── 03_document_size_cap.py    # Document growth, 16MB BSON ceiling & bucket pattern
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run via `uv run` or `make run`.
 
 ---
 

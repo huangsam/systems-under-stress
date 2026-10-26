@@ -14,14 +14,14 @@ redis/
 ├── Makefile                 # One-touch runner targets
 ├── experiments/
 │   ├── monitor.py           # Real-time memory & eviction terminal stream
-│   ├── 00_crash_course.py / .main.kts  # Core data structures, pipelining & INFO diagnostics
-│   ├── 01_eviction.py / .main.kts      # Stress memory limits & compare eviction policies
-│   ├── 02_stampede.py / .main.kts      # Cache stampede & locking fixes
-│   └── 03_persistence.py / .main.kts   # AOF vs RDB crash durability
+│   ├── 00_crash_course.py   # Core data structures, pipelining & INFO diagnostics
+│   ├── 01_eviction.py       # Stress memory limits & compare eviction policies
+│   ├── 02_stampede.py       # Cache stampede & locking fixes
+│   └── 03_persistence.py    # AOF vs RDB crash durability
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run via `uv run` or `make run`.
 
 ---
 

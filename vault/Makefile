@@ -11,7 +11,7 @@ else
 SERVICE = vault-dynamic
 endif
 
-.PHONY: help up down clean run run-kt vault-cli logs
+.PHONY: help up down clean run vault-cli logs
 
 help:
 	@echo "HashiCorp Vault Experiments Harness"
@@ -40,9 +40,6 @@ clean:
 
 run:
 	uv run experiments/$(SCRIPT).py
-
-run-kt:
-	kotlin experiments/$(SCRIPT).main.kts
 
 vault-cli:
 	docker compose exec -it $(SERVICE) vault $(CMD)

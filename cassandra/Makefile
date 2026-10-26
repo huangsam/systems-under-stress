@@ -10,7 +10,6 @@ help:
 	@echo "Usage:"
 	@echo "  make up EXP=<profile>       Start container(s) for profile and wait until healthy"
 	@echo "  make run SCRIPT=<name>      Run Python test script via 'uv run experiments/<name>.py'"
-	@echo "  make run-kt SCRIPT=<name>   Run Kotlin script via 'kotlin experiments/<name>.main.kts'"
 	@echo "  make soft-reset             Truncate lab tables (fast reset without cold-boot penalty)"
 	@echo "  make down EXP=<profile>     Stop and wipe volumes for specific profile"
 	@echo "  make clean                  Stop all profiles and wipe all lab volumes"
@@ -51,9 +50,6 @@ nodetool:
 
 run:
 	CASS_DRIVER_NO_EXTENSIONS=1 uv run --python 3.11 experiments/$(SCRIPT).py
-
-run-kt:
-	kotlin experiments/$(SCRIPT).main.kts
 
 logs:
 	docker compose --profile $(EXP) logs -f

@@ -11,16 +11,16 @@ This lab uses a single [`docker-compose.yml`](./docker-compose.yml) with **Docke
 ```text
 vault/
 ├── docker-compose.yml       # Pinned image, cgroups limits (128M RAM, 0.5 CPU), profiles
-├── Makefile                 # One-touch runner targets (up, run, run-kt, down, clean, vault-cli, logs)
+├── Makefile                 # One-touch runner targets (up, run, down, clean, vault-cli, logs)
 ├── experiments/
-│   ├── 00_crash_course.py / .main.kts      # KV v2 secrets, token leases & system health
-│   ├── 01_dynamic_db_creds.py / .main.kts  # Dynamic PostgreSQL credentials & instant lease revocation
-│   ├── 02_token_renewal.py / .main.kts     # Renewable child tokens & explicit_max_ttl boundary enforcement
-│   └── 03_transit_throughput.py / .main.kts # Transit EaaS encryption, batching & key rotation
+│   ├── 00_crash_course.py      # KV v2 secrets, token leases & system health
+│   ├── 01_dynamic_db_creds.py  # Dynamic PostgreSQL credentials & instant lease revocation
+│   ├── 02_token_renewal.py     # Renewable child tokens & explicit_max_ttl boundary enforcement
+│   └── 03_transit_throughput.py # Transit EaaS encryption, batching & key rotation
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (`hvac>=2.1.0`, `psycopg[binary]>=3.1.0`, run via `uv run` or `make run`) and Kotlin script dependencies via `@file:DependsOn` (run via `kotlin` or `make run-kt`).
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (`hvac>=2.1.0`, `psycopg[binary]>=3.1.0`) and run via `uv run` or `make run`.
 
 ---
 
