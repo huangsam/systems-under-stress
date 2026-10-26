@@ -9,7 +9,7 @@ A hands-on, empirical systems engineering lab suite exploring the **hard operati
 
 ---
 
-## Lab Matrix (24 Reproducible Experiments Across 8 Engines)
+## Lab Matrix (32 Reproducible Experiments Across 8 Engines)
 
 | Engine | Experiments | Primary Failure Signatures Reproduced |
 | :--- | :--- | :--- |
