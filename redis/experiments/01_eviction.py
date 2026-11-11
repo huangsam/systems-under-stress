@@ -135,7 +135,7 @@ def main() -> None:
 
     console.print("\n" + "[bold green]" + "=" * 65)
     print("EXPERIMENT 01 SUMMARY REPORT")
-    console.print("=" * 65 + "[/]")
+    console.print("[bold green]" + "=" * 65 + "[/]")
     console.print(f"Policy Under Test     : [bold yellow]{policy}[/]")
     print(f"Peak Memory Reached   : {format_bytes(final_mem.get('used_memory_peak', 0))}")
     print(f"Current Memory Used   : {format_bytes(final_mem.get('used_memory', 0))}")
