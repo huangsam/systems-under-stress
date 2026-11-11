@@ -33,6 +33,14 @@ All test scripts declare metadata inline via [PEP 723](https://peps.python.org/p
 | `fd-exhaustion` | `fd-exhaustion` | `0.5` | `64M` | `ulimits.nofile: 64` (`RLIMIT_NOFILE`) | `OSError` (`EMFILE` Errno 24) |
 | `oom-killer` | `oom-killer` | `0.5` | `32M` | `memswap_limit: 32M` (Zero swap) | Kernel `SIGKILL` (Signal 9 / Exit Code 137) |
 
+### Reading the Limits
+
+Cgroups apply resource limits to a group of processes; for example, `pids.current`
+is the group's current task count and `pids.max` is its ceiling. By contrast,
+`RLIMIT_NOFILE` caps descriptors for one process. The FD experiment also prints
+`/proc/sys/fs/file-nr` and `file-max`: these report kernel-wide file-handle usage
+and its ceiling, not the process's descriptor limit.
+
 ---
 
 ## Experiment 01: The Cgroups PID Limit (Contained Fork Bomb)
