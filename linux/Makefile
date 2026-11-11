@@ -1,7 +1,11 @@
 # Makefile for Linux Kernel Primitives & Container Limits Experiments
-# Default profile is pid-limit
-EXP ?= pid-limit
+# Select the matching container profile from SCRIPT unless EXP is explicit.
 SCRIPT ?= 01_fork_bomb_cgroup
+PROFILE_00_crash_course = pid-limit
+PROFILE_01_fork_bomb_cgroup = pid-limit
+PROFILE_02_fd_limits = fd-exhaustion
+PROFILE_03_oom_killer = oom-killer
+EXP ?= $(or $(PROFILE_$(SCRIPT)),pid-limit)
 
 .PHONY: help up down clean run sh logs ps
 
@@ -10,7 +14,8 @@ help:
 	@echo "==================================="
 	@echo "Usage:"
 	@echo "  make up EXP=<profile>                 Start container for profile with cgroup limits"
-	@echo "  make run EXP=<profile> SCRIPT=<name>  Run experiment script inside container"
+	@echo "  make run SCRIPT=<name>                Run script in its matching profile container"
+	@echo "  make run EXP=<profile> SCRIPT=<name>  Override the script's matching profile"
 	@echo "  make sh EXP=<profile>                 Open interactive shell inside container"
 	@echo "  make logs EXP=<profile>               Follow container logs"
 	@echo "  make down EXP=<profile>               Stop and remove container for profile"

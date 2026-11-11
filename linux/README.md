@@ -55,8 +55,8 @@ The macOS host and all neighbouring containers experience **0% CPU or process ta
 # 1. Start the pid-limit container with 40-process ceiling
 make up EXP=pid-limit
 
-# 2. Run the fork bomb experiment inside the container
-make run EXP=pid-limit SCRIPT=01_fork_bomb_cgroup
+# 2. Run the fork bomb experiment inside its matching container
+make run SCRIPT=01_fork_bomb_cgroup
 
 # 3. Teardown
 make down EXP=pid-limit
@@ -107,11 +107,15 @@ Furthermore, when the table is 100% full, even administrative inspection calls (
 make up EXP=fd-exhaustion
 
 # 2. Run descriptor exhaustion experiment
-make run EXP=fd-exhaustion SCRIPT=02_fd_limits
+make run SCRIPT=02_fd_limits
 
 # 3. Teardown
 make down EXP=fd-exhaustion
 ```
+
+`make run SCRIPT=<name>` selects the matching container profile automatically. The
+profile can be overridden with `EXP=<profile>` when needed. The script must still
+be run after its profile has been started with `make up`.
 
 ### 4. Observed Metrics & Failure Signatures
 ```text
@@ -171,7 +175,7 @@ $$\text{Exit Code} = 128 + 9 = 137$$
 make up EXP=oom-killer
 
 # 2. Run OOM killer observer experiment
-make run EXP=oom-killer SCRIPT=03_oom_killer
+make run SCRIPT=03_oom_killer
 
 # 3. Teardown
 make down EXP=oom-killer
