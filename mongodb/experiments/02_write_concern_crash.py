@@ -187,10 +187,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    console.print("[bold blue]" + "=" * 75 + "[/]")
+    console.print("=" * 75, style="bold blue")
     console.print("[bold green]  Experiment 02: MongoDB Write Concerns & Crash Recovery (SIGKILL)[/]")
     print("  Investigating durability: w=0 vs w=1 (RAM) vs w=1, j=True (Disk Journal)")
-    console.print("[bold blue]" + "=" * 75 + "[/]")
+    console.print("=" * 75, style="bold blue")
 
     modes_to_test: list[tuple[str, WriteConcern, int, int]] = []
 
@@ -207,14 +207,14 @@ def main() -> None:
         results.append(res)
         time.sleep(1)
 
-    console.print("\n[bold blue]" + "=" * 80 + "[/]")
+    console.print("\n" + "=" * 80, style="bold blue")
     console.print("[bold white]Durability Comparison Matrix:[/]")
     console.print("[bold blue]" + "-" * 80 + "[/]")
     print(f"{'Mode':<28} | {'Ack/Sent':<10} | {'Recovered':<10} | {'Lost':<8} | {'Loss %':<8} | {'Durability':<15}")
     print("-" * 80)
     for r in results:
         print(f"{r['mode']:<28} | {r['sent_or_ack']:<10} | {r['recovered']:<10} | {r['lost']:<8} | {r['loss_pct']:<8} | {r['durability']:<15}")
-    console.print("[bold blue]" + "=" * 80 + "[/]\n")
+    console.print("=" * 80 + "\n", style="bold blue")
 
 
 if __name__ == "__main__":

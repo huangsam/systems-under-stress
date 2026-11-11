@@ -249,9 +249,9 @@ def test_lock_contention(driver: Driver, num_workers: int = 10, writes_per_worke
 
 
 def main() -> None:
-    console.print("[bold cyan]========================================================================[/]")
+    console.print("=" * 72, style="bold cyan")
     console.print("[bold cyan] Neo4j Limit Lab: Experiment 02 - Supernode Degradation & Lock Contention[/]")
-    console.print("[bold cyan]========================================================================[/]")
+    console.print("=" * 72, style="bold cyan")
 
     driver = get_driver()
     try:

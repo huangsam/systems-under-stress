@@ -166,10 +166,10 @@ def run_batched_insert(client: clickhouse_connect.driver.Client) -> None:
 
 
 def main() -> None:
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 01: ClickHouse Parts Explosion & Batching Limits[/]")
     print("Investigating MergeTree write mechanics and the TOO_MANY_PARTS threshold.")
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
 
     client = get_client()
 
@@ -179,9 +179,9 @@ def main() -> None:
     # Part 2: Clean batched insert
     run_batched_insert(client)
 
-    console.print("\n[bold green]=================================================================")
+    console.print("\n" + "=" * 65, style="bold green")
     print("SYSTEMS & PRODUCTION TAKEAWAYS")
-    console.print("[bold green]=================================================================[/]")
+    console.print("=" * 65, style="bold green")
     print("1. ClickHouse is NOT an OLTP database. Every INSERT statement writes a distinct")
     print("   filesystem directory containing compressed column data (.bin) and index marks (.mrk).")
     print("2. Treating ClickHouse like an OLTP store (Postgres) with single-row inserts guarantees catastrophic")

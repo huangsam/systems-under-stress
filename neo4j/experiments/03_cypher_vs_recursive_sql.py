@@ -132,10 +132,10 @@ def main() -> None:
         print("Start the dual-engine profile first: make up EXP=compare-sql")
         sys.exit(1)
 
-    console.print("[bold cyan]======================================================================[/]")
+    console.print("=" * 70, style="bold cyan")
     console.print("[bold cyan]Experiment 03: Multi-Hop Cypher (Neo4j) vs WITH RECURSIVE (PostgreSQL)[/]")
     print(f"Graph Topology: {NUM_NODES:,} services, branching factor = {BRANCHING}")
-    console.print("[bold cyan]======================================================================[/]\n")
+    console.print("=" * 70 + "\n", style="bold cyan")
 
     edges = build_edges()
     seed_postgres(edges)
@@ -157,9 +157,9 @@ def main() -> None:
             assert pg_cnt == neo_cnt, f"Mismatch at depth {depth}: PG={pg_cnt} vs Neo4j={neo_cnt}"
             print(f"{depth:>9} | {neo_cnt:>18,} | {pg_ms:>16.2f}ms | {neo_ms:>16.2f}ms")
 
-    console.print("\n[bold green]======================================================================")
+    console.print("\n" + "=" * 70, style="bold green")
     print("SYSTEMS TAKEAWAYS")
-    console.print("[bold green]======================================================================[/]")
+    console.print("=" * 70, style="bold green")
     print("1. Shallow Joins (1-3 hops): PostgreSQL B-Tree indexes are remarkably fast")
     print("   and often beat or match a graph database without adding operational complexity.")
     print("2. Deep / Variable Traversals (5+ hops): Relational WITH RECURSIVE must materialize")

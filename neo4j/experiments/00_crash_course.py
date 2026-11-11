@@ -32,9 +32,9 @@ console = Console()
 
 
 def main() -> None:
-    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
+    console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]Neo4j Crash Course: Property Graphs, Cypher & Traversals[/]")
-    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
+    console.print("=" * 70 + "\n", style="bold cyan")
 
     try:
         driver = GraphDatabase.driver(URI, auth=AUTH)

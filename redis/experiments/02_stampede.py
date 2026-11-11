@@ -174,10 +174,10 @@ async def main() -> None:
         print("Run 'make up EXP=stampede' first.")
         return
 
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 02: Cache Stampede (Thundering Herd) Simulation[/]")
     print("Testing 100 concurrent requests arriving on an expired hot key.")
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
 
     # Scenario 1: Naive Cache-Aside
     await run_scenario("1. Naive Cache-Aside (Unprotected)", worker_naive, client)
@@ -188,9 +188,9 @@ async def main() -> None:
     # Scenario 3: Probabilistic Early Refresh (XFetch on key near expiry)
     await run_scenario("3. Probabilistic Early Refresh (XFetch)", worker_xfetch, client, pre_seed=True)
 
-    console.print("\n[bold green]=================================================================")
+    console.print("\n" + "=" * 65, style="bold green")
     print("SYSTEMS TAKEAWAYS")
-    console.print("[bold green]=================================================================[/]")
+    console.print("=" * 65, style="bold green")
     print("1. Naive Cache-Aside causes a 1:1 surge into the primary DB upon key expiry.")
     print("2. Distributed Locks (SET NX PX) collapse 100 DB queries into EXACTLY 1 query.")
     print("3. Probabilistic early refresh eliminates cache miss latency entirely for users.")

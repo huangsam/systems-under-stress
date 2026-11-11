@@ -33,9 +33,9 @@ console = Console()
 
 
 def main() -> None:
-    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
+    console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]HashiCorp Vault Crash Course: Secrets Engines, Leases & Diagnostics[/]")
-    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
+    console.print("=" * 70 + "\n", style="bold cyan")
 
     client = hvac.Client(url=VAULT_ADDR, token=VAULT_TOKEN)
 

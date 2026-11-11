@@ -57,10 +57,10 @@ def main() -> None:
     db.drop_collection("unbounded_sensors")
     db.drop_collection("bucketed_sensors")
 
-    console.print("[bold cyan]======================================================================[/]")
+    console.print("=" * 70, style="bold cyan")
     console.print("[bold cyan]Experiment 03: MongoDB Unbounded Array Growth & the 16MB BSON Ceiling[/]")
     print(f"Hard BSON Document Limit: {format_bytes(BSON_MAX_BYTES)} ({BSON_MAX_BYTES:,} bytes)")
-    console.print("[bold cyan]======================================================================[/]\n")
+    console.print("=" * 70 + "\n", style="bold cyan")
 
     # 1. Part 1: Unbounded $push into a single document until 16MB crash
     console.print("[bold blue][*] Part 1: Appending 256KB event batches via $push until 16MB crash...[/]")
@@ -139,9 +139,9 @@ def main() -> None:
     print(f"    Total Bucket Documents Created : {num_buckets}")
     print(f"    Average Write Latency / Batch  : {bucket_elapsed_ms / 70:.2f}ms (vs {peak_latency_ms:.2f}ms peak on bloated doc)")
 
-    console.print("\n[bold green]======================================================================")
+    console.print("\n" + "=" * 70, style="bold green")
     print("SYSTEMS TAKEAWAYS")
-    console.print("[bold green]======================================================================[/]")
+    console.print("=" * 70, style="bold green")
     print("1. Never use unbounded $push arrays for activity logs, comments, or IoT telemetry.")
     print(f"2. Write amplification: Latency grew from {initial_latency_ms:.2f}ms to {peak_latency_ms:.2f}ms as WiredTiger")
     print("   had to reallocate and rewrite the entire multi-megabyte document on every update.")

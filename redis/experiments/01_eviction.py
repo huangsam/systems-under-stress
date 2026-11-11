@@ -53,11 +53,11 @@ def main() -> None:
     max_memory = int(info_mem.get("maxmemory", 0))
     policy = info_mem.get("maxmemory_policy", "unknown")
 
-    console.print("[bold blue]" + "=" * 65 + "[/]")
+    console.print("=" * 65, style="bold blue")
     console.print("[bold green]Redis Eviction Lab: Current Configuration[/]")
     print(f"  Max Memory Limit : {format_bytes(max_memory)} ({max_memory:,} bytes)")
     console.print(f"  Eviction Policy  : [bold yellow]{policy}[/]")
-    console.print("[bold blue]" + "=" * 65 + "[/]\n")
+    console.print("=" * 65 + "\n", style="bold blue")
 
     # 2. Reset database for clean run
     print("Flushing keyspace for a clean test run...")
@@ -133,9 +133,9 @@ def main() -> None:
     final_mem = client.info("memory")
     final_stats = client.info("stats")
 
-    console.print("\n" + "[bold green]" + "=" * 65)
+    console.print("\n" + "=" * 65, style="bold green")
     print("EXPERIMENT 01 SUMMARY REPORT")
-    console.print("[bold green]" + "=" * 65 + "[/]")
+    console.print("=" * 65, style="bold green")
     console.print(f"Policy Under Test     : [bold yellow]{policy}[/]")
     print(f"Peak Memory Reached   : {format_bytes(final_mem.get('used_memory_peak', 0))}")
     print(f"Current Memory Used   : {format_bytes(final_mem.get('used_memory', 0))}")

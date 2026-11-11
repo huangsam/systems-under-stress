@@ -48,10 +48,10 @@ def main() -> None:
         print("Start the container first: make up EXP=compression")
         sys.exit(1)
 
-    console.print("[bold cyan]======================================================================[/]")
+    console.print("=" * 70, style="bold cyan")
     console.print("[bold cyan]Experiment 03: ClickHouse Columnar Codecs & LowCardinality Compression[/]")
     print(f"Benchmarking {NUM_ROWS:,} rows across Uncompressed, LZ4, and Delta+ZSTD.")
-    console.print("[bold cyan]======================================================================[/]\n")
+    console.print("=" * 70 + "\n", style="bold cyan")
 
     # 1. Create three tables with identical logical schemas but different physical encodings
     client.command("DROP TABLE IF EXISTS telemetry_none")
@@ -156,9 +156,9 @@ def main() -> None:
     for name, ctype, codec, n_b, o_b, factor in col_rows:
         print(f"{name:<15} | {ctype:<24} | {codec:<24} | {format_bytes(n_b):>11} | {format_bytes(o_b):>11} | {factor:>8.1f}x")
 
-    console.print("\n[bold green]======================================================================")
+    console.print("\n" + "=" * 70, style="bold green")
     print("SYSTEMS TAKEAWAYS")
-    console.print("[bold green]======================================================================[/]")
+    console.print("=" * 70, style="bold green")
     print("1. Delta + ZSTD on monotonic timestamps stores only frame-to-frame differences")
     print("   (e.g. +1, +1, +1), collapsing megabytes of timestamps into a few kilobytes.")
     print("2. LowCardinality(String) replaces repeated strings with integer dictionary IDs,")

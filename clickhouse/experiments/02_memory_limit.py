@@ -207,10 +207,10 @@ def run_hyperloglog_comparison(client: clickhouse_connect.driver.Client) -> None
 
 
 def main() -> None:
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 02: Analytical Memory Saturation & Disk Spill[/]")
     print("Testing max_memory_usage limits, external aggregation, and HLL algorithms.")
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
 
     client = get_client()
 
@@ -230,9 +230,9 @@ def main() -> None:
     # Part 3: HLL comparison
     run_hyperloglog_comparison(client)
 
-    console.print("\n[bold green]=================================================================")
+    console.print("\n" + "=" * 65, style="bold green")
     print("SYSTEMS & PRODUCTION TAKEAWAYS")
-    console.print("[bold green]=================================================================[/]")
+    console.print("=" * 65, style="bold green")
     print("1. ClickHouse allocates memory aggressively for vector hash tables during GROUP BY.")
     print("   High-cardinality keys (like UUIDs or session IDs) scale RAM linearly with key count.")
     print("2. Memory exhaustion guards:")

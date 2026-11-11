@@ -130,12 +130,12 @@ def run_experiment() -> None:
     db = client[DB_NAME]
     coll = db[COLL_NAME]
 
-    console.print("[bold blue]" + "=" * 70 + "[/]")
+    console.print("=" * 70, style="bold blue")
     console.print("[bold green]  Experiment 01: MongoDB 100MB In-Memory Sort Ceiling[/]")
     print(f"  Target DB      : {DB_NAME}")
     print(f"  Collection     : {COLL_NAME}")
     print("  Default Cap    : 104,857,600 bytes (100MB internalQueryMaxBlockingSortMemoryUsage)")
-    console.print("[bold blue]" + "=" * 70 + "[/]\n")
+    console.print("=" * 70 + "\n", style="bold blue")
 
     # Ensure any previous index on timestamp is dropped
     for idx_name in coll.index_information():
@@ -248,14 +248,14 @@ def run_experiment() -> None:
     # -------------------------------------------------------------
     # Summary Comparison Table
     # -------------------------------------------------------------
-    console.print("\n[bold blue]" + "=" * 80 + "[/]")
+    console.print("\n" + "=" * 80, style="bold blue")
     console.print("[bold white]Execution Summary & Engine Behavior:[/]")
     console.print("[bold blue]" + "-" * 80 + "[/]")
     print(f"{'Strategy':<26} | {'Outcome':<18} | {'Sort Stage':<16} | {'Spill Disk':<10} | {'Latency':<8}")
     print("-" * 80)
     for row in results_table:
         print(f"{row['mode']:<26} | {row['status']:<18} | {row['sort_stage']:<16} | {row['disk_spill']:<10} | {row['time_ms']:<8}")
-    console.print("[bold blue]" + "=" * 80 + "[/]\n")
+    console.print("=" * 80 + "\n", style="bold blue")
 
 
 def main() -> None:

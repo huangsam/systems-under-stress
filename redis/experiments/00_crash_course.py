@@ -33,9 +33,9 @@ console = Console()
 
 
 def main() -> None:
-    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
+    console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]Redis Crash Course: Data Structures, Pipelining & Diagnostics[/]")
-    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
+    console.print("=" * 70 + "\n", style="bold cyan")
 
     r = redis.Redis(host=HOST, port=PORT, decode_responses=True)
 

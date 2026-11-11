@@ -54,10 +54,10 @@ def main() -> None:
         print("Start the container first: make up EXP=transit-crypto")
         sys.exit(1)
 
-    console.print("[bold cyan]======================================================================[/]")
+    console.print("=" * 70, style="bold cyan")
     console.print("[bold cyan]Experiment 03: Vault Transit Encryption-as-a-Service & Key Rotation[/]")
     print("Benchmarking HTTP crypto overhead, batching, and zero-downtime key rotation.")
-    console.print("[bold cyan]======================================================================[/]\n")
+    console.print("=" * 70 + "\n", style="bold cyan")
 
     # 1. Enable Transit secrets engine
     mounts = client.sys.list_mounted_secrets_engines()["data"]
@@ -133,9 +133,9 @@ def main() -> None:
 
     assert v1_blocked and plaintext_recovered == "SSN-999-00-0000"
 
-    console.print("\n[bold green]======================================================================")
+    console.print("\n" + "=" * 70, style="bold green")
     print("SYSTEMS TAKEAWAYS")
-    console.print("[bold green]======================================================================[/]")
+    console.print("=" * 70, style="bold green")
     print("1. Transit EaaS is CPU-fast (AES-NI) but HTTP-latency bound; always use")
     print(f"   'batch_input' ({speedup:.1f}x speedup) or Envelope Encryption (data keys) for bulk data.")
     print("2. Version-prefixed ciphertexts ('vault:v1:...', 'vault:v2:...') allow instant")

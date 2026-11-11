@@ -211,10 +211,10 @@ def main() -> None:
         print("  cd postgres && make up EXP=locks")
         return
 
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 02: PostgreSQL Lock Contention & Deadlock Detection[/]")
     print("Testing row-level exclusive locks and deadlock detection dynamics.")
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
 
     # Part 1: Hot row queue
     test_hot_row_contention()
@@ -225,9 +225,9 @@ def main() -> None:
     # Part 3: Ordered lock fix
     test_ordered_locking()
 
-    console.print("\n[bold green]=================================================================")
+    console.print("\n" + "=" * 65, style="bold green")
     print("SYSTEMS TAKEAWAYS")
-    console.print("[bold green]=================================================================[/]")
+    console.print("=" * 65, style="bold green")
     print("1. Hot rows serialize through exclusive row locks; no lost updates occur.")
     print("2. Deadlocks occur when concurrent transactions acquire locks out of order.")
     print("3. Deadlock detection is reactive (costly search in lock wait-graph).")

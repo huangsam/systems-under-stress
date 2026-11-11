@@ -72,11 +72,11 @@ def main() -> None:
 
     label, profile_name = get_active_profile(client)
 
-    console.print("[bold blue]" + "=" * 65 + "[/]")
+    console.print("=" * 65, style="bold blue")
     console.print("[bold green]Experiment 03: Redis Persistence & Crash Recovery[/]")
     console.print(f"  Active Mode    : [bold yellow]{label}[/]")
     print(f"  Profile Name   : {profile_name}")
-    console.print("[bold blue]" + "=" * 65 + "[/]\n")
+    console.print("=" * 65 + "\n", style="bold blue")
 
     # Clean existing data in-memory
     print("Flushing database for a clean test run...")
@@ -143,9 +143,9 @@ def main() -> None:
     loss_pct = (lost_writes / acknowledged * 100) if acknowledged > 0 else 0
 
     # Summary Report
-    console.print("\n[bold green]" + "=" * 65)
+    console.print("\n" + "=" * 65, style="bold green")
     print("EXPERIMENT 03 SUMMARY REPORT")
-    console.print("[bold green]" + "=" * 65 + "[/]")
+    console.print("=" * 65, style="bold green")
     console.print(f"Persistence Configuration   : [bold yellow]{label}[/]")
     print(f"Writes Acknowledged by Redis : {acknowledged:,}")
     console.print(f"Writes Recovered After Crash : [bold green]{survived:,}[/]")

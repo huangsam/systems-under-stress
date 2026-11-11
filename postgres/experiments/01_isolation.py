@@ -159,10 +159,10 @@ def main() -> None:
         print("  cd postgres && make up EXP=isolation")
         return
 
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 01: PostgreSQL Transaction Isolation & Write Skew[/]")
     print("Testing concurrency anomalies across MVCC isolation levels.")
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
 
     # 1. Dirty Read test
     test_dirty_read()
@@ -173,9 +173,9 @@ def main() -> None:
     # 3. Write Skew under Serializable
     run_write_skew_simulation(psycopg.IsolationLevel.SERIALIZABLE, "SERIALIZABLE")
 
-    console.print("\n[bold green]=================================================================")
+    console.print("\n" + "=" * 65, style="bold green")
     print("SYSTEMS TAKEAWAYS")
-    console.print("[bold green]=================================================================[/]")
+    console.print("=" * 65, style="bold green")
     print("1. PostgreSQL does not implement Dirty Reads; READ UNCOMMITTED = READ COMMITTED.")
     print("2. REPEATABLE READ protects against Phantom Reads but FAILS on Write Skew.")
     print("3. Write Skew can only be solved by: SELECT ... FOR UPDATE (explicit locking)")

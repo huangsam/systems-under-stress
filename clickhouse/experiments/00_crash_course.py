@@ -33,9 +33,9 @@ console = Console()
 
 
 def main() -> None:
-    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
+    console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]ClickHouse Crash Course: Columnar Engine & Vectorized Analytics[/]")
-    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
+    console.print("=" * 70 + "\n", style="bold cyan")
 
     try:
         client = clickhouse_connect.get_client(host=HOST, port=PORT, username="default", password="")

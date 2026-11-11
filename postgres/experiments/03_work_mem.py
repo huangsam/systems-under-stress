@@ -114,10 +114,10 @@ def main() -> None:
         print("  cd postgres && make up EXP=work-mem")
         return
 
-    console.print("[bold cyan]=================================================================[/]")
+    console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 03: PostgreSQL Memory Limits (work_mem) & Disk Spill[/]")
     print("Measuring sort performance across in-memory vs disk-spill boundaries.")
-    console.print("[bold cyan]=================================================================[/]\n")
+    console.print("=" * 65 + "\n", style="bold cyan")
 
     seed_data()
 
@@ -137,9 +137,9 @@ def main() -> None:
 
     speedup = res1["plan_time_ms"] / res2["plan_time_ms"] if res2["plan_time_ms"] > 0 else 1.0
 
-    console.print("\n[bold green]" + "=" * 65)
+    console.print("\n" + "=" * 65, style="bold green")
     print("EXPERIMENT 03 SUMMARY REPORT")
-    console.print("[bold green]" + "=" * 65 + "[/]")
+    console.print("=" * 65, style="bold green")
     print(f"With work_mem = 4MB  : {res1['sort_method']} ({res1['plan_time_ms']:.1f}ms)")
     print(f"With work_mem = 64MB : {res2['sort_method']} ({res2['plan_time_ms']:.1f}ms)")
     console.print(f"Performance Gain     : [bold green]{speedup:.1f}x Faster[/] in pure RAM")

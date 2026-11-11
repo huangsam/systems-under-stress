@@ -31,9 +31,9 @@ console = Console()
 
 
 def main() -> None:
-    console.print("\n[bold cyan]" + "=" * 70 + "[/]")
+    console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]PostgreSQL Crash Course: Relational Fundamentals & Diagnostics[/]")
-    console.print("[bold cyan]" + "=" * 70 + "[/]\n")
+    console.print("=" * 70 + "\n", style="bold cyan")
 
     try:
         conn = psycopg.connect(DB_CONN, autocommit=True)
