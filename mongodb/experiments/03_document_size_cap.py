@@ -141,7 +141,7 @@ def main() -> None:
 
     console.print("\n[bold green]======================================================================")
     print("SYSTEMS TAKEAWAYS")
-    console.print("======================================================================[/]")
+    console.print("[bold green]======================================================================[/]")
     print("1. Never use unbounded $push arrays for activity logs, comments, or IoT telemetry.")
     print(f"2. Write amplification: Latency grew from {initial_latency_ms:.2f}ms to {peak_latency_ms:.2f}ms as WiredTiger")
     print("   had to reallocate and rewrite the entire multi-megabyte document on every update.")

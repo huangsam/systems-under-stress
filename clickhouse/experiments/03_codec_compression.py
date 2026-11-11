@@ -158,7 +158,7 @@ def main() -> None:
 
     console.print("\n[bold green]======================================================================")
     print("SYSTEMS TAKEAWAYS")
-    console.print("======================================================================[/]")
+    console.print("[bold green]======================================================================[/]")
     print("1. Delta + ZSTD on monotonic timestamps stores only frame-to-frame differences")
     print("   (e.g. +1, +1, +1), collapsing megabytes of timestamps into a few kilobytes.")
     print("2. LowCardinality(String) replaces repeated strings with integer dictionary IDs,")

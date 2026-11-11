@@ -181,7 +181,7 @@ def main() -> None:
 
     console.print("\n[bold green]=================================================================")
     print("SYSTEMS & PRODUCTION TAKEAWAYS")
-    console.print("=================================================================[/]")
+    console.print("[bold green]=================================================================[/]")
     print("1. ClickHouse is NOT an OLTP database. Every INSERT statement writes a distinct")
     print("   filesystem directory containing compressed column data (.bin) and index marks (.mrk).")
     print("2. Treating ClickHouse like an OLTP store (Postgres) with single-row inserts guarantees catastrophic")

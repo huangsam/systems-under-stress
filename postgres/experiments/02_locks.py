@@ -227,7 +227,7 @@ def main() -> None:
 
     console.print("\n[bold green]=================================================================")
     print("SYSTEMS TAKEAWAYS")
-    console.print("=================================================================[/]")
+    console.print("[bold green]=================================================================[/]")
     print("1. Hot rows serialize through exclusive row locks; no lost updates occur.")
     print("2. Deadlocks occur when concurrent transactions acquire locks out of order.")
     print("3. Deadlock detection is reactive (costly search in lock wait-graph).")

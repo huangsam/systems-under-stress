@@ -135,7 +135,7 @@ def main() -> None:
 
     console.print("\n[bold green]======================================================================")
     print("SYSTEMS TAKEAWAYS")
-    console.print("======================================================================[/]")
+    console.print("[bold green]======================================================================[/]")
     print("1. Transit EaaS is CPU-fast (AES-NI) but HTTP-latency bound; always use")
     print(f"   'batch_input' ({speedup:.1f}x speedup) or Envelope Encryption (data keys) for bulk data.")
     print("2. Version-prefixed ciphertexts ('vault:v1:...', 'vault:v2:...') allow instant")

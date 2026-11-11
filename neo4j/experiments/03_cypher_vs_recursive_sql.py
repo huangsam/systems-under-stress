@@ -159,7 +159,7 @@ def main() -> None:
 
     console.print("\n[bold green]======================================================================")
     print("SYSTEMS TAKEAWAYS")
-    console.print("======================================================================[/]")
+    console.print("[bold green]======================================================================[/]")
     print("1. Shallow Joins (1-3 hops): PostgreSQL B-Tree indexes are remarkably fast")
     print("   and often beat or match a graph database without adding operational complexity.")
     print("2. Deep / Variable Traversals (5+ hops): Relational WITH RECURSIVE must materialize")

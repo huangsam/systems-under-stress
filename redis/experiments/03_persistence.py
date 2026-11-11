@@ -145,7 +145,7 @@ def main() -> None:
     # Summary Report
     console.print("\n[bold green]" + "=" * 65)
     print("EXPERIMENT 03 SUMMARY REPORT")
-    console.print("=" * 65 + "[/]")
+    console.print("[bold green]" + "=" * 65 + "[/]")
     console.print(f"Persistence Configuration   : [bold yellow]{label}[/]")
     print(f"Writes Acknowledged by Redis : {acknowledged:,}")
     console.print(f"Writes Recovered After Crash : [bold green]{survived:,}[/]")

@@ -190,7 +190,7 @@ async def main() -> None:
 
     console.print("\n[bold green]=================================================================")
     print("SYSTEMS TAKEAWAYS")
-    console.print("=================================================================[/]")
+    console.print("[bold green]=================================================================[/]")
     print("1. Naive Cache-Aside causes a 1:1 surge into the primary DB upon key expiry.")
     print("2. Distributed Locks (SET NX PX) collapse 100 DB queries into EXACTLY 1 query.")
     print("3. Probabilistic early refresh eliminates cache miss latency entirely for users.")

@@ -175,7 +175,7 @@ def main() -> None:
 
     console.print("\n[bold green]=================================================================")
     print("SYSTEMS TAKEAWAYS")
-    console.print("=================================================================[/]")
+    console.print("[bold green]=================================================================[/]")
     print("1. PostgreSQL does not implement Dirty Reads; READ UNCOMMITTED = READ COMMITTED.")
     print("2. REPEATABLE READ protects against Phantom Reads but FAILS on Write Skew.")
     print("3. Write Skew can only be solved by: SELECT ... FOR UPDATE (explicit locking)")

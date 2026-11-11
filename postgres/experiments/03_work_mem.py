@@ -139,7 +139,7 @@ def main() -> None:
 
     console.print("\n[bold green]" + "=" * 65)
     print("EXPERIMENT 03 SUMMARY REPORT")
-    console.print("=" * 65 + "[/]")
+    console.print("[bold green]" + "=" * 65 + "[/]")
     print(f"With work_mem = 4MB  : {res1['sort_method']} ({res1['plan_time_ms']:.1f}ms)")
     print(f"With work_mem = 64MB : {res2['sort_method']} ({res2['plan_time_ms']:.1f}ms)")
     console.print(f"Performance Gain     : [bold green]{speedup:.1f}x Faster[/] in pure RAM")

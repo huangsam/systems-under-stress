@@ -232,7 +232,7 @@ def main() -> None:
 
     console.print("\n[bold green]=================================================================")
     print("SYSTEMS & PRODUCTION TAKEAWAYS")
-    console.print("=================================================================[/]")
+    console.print("[bold green]=================================================================[/]")
     print("1. ClickHouse allocates memory aggressively for vector hash tables during GROUP BY.")
     print("   High-cardinality keys (like UUIDs or session IDs) scale RAM linearly with key count.")
     print("2. Memory exhaustion guards:")
