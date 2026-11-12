@@ -76,7 +76,7 @@ def wait_for_coordinator() -> Cluster:
         request_timeout=15.0,
         load_balancing_policy=WhiteListRoundRobinPolicy([HOST]),
     )
-    for attempt in range(1, 35):
+    for attempt in range(1, 45):
         try:
             cluster = Cluster(
                 contact_points=[HOST],
@@ -85,12 +85,18 @@ def wait_for_coordinator() -> Cluster:
                 connect_timeout=5.0,
             )
             session = cluster.connect()
-            session.execute("SELECT release_version FROM system.local")
-            log(f"Connected to Cassandra coordinator successfully (attempt {attempt}).", "[bold green]")
+            peers = list(session.execute("SELECT peer FROM system.peers"))
+            if len(peers) < 2:
+                log(f"Waiting for peer nodes to join cluster ({len(peers)}/2 peers discovered)...", "[dim]")
+                session.shutdown()
+                cluster.shutdown()
+                time.sleep(3)
+                continue
+            log(f"Connected to Cassandra coordinator with {len(peers) + 1} cluster nodes active (attempt {attempt}).", "[bold green]")
             return cluster
         except Exception:
             time.sleep(2)
-    log("Failed to connect to Cassandra. Make sure 'make up EXP=cluster-consistency' is running.", "[bold red]")
+    log("Failed to connect to Cassandra cluster. Make sure 'make up EXP=cluster-consistency' is running.", "[bold red]")
     sys.exit(1)
 
 

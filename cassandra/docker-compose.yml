@@ -11,7 +11,7 @@ x-cassandra-base: &cassandra-base
   environment:
     - MAX_HEAP_SIZE=512M
   healthcheck:
-    test: ["CMD-SHELL", "cqlsh -e \"DESCRIBE KEYSPACES\" || nodetool status | grep -q \"UN\" || exit 1"]
+    test: ["CMD-SHELL", "cqlsh -e \"DESCRIBE KEYSPACES\" || exit 1"]
     interval: 5s
     timeout: 5s
     retries: 25
