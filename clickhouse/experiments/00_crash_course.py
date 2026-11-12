@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 
 import clickhouse_connect
 from rich.console import Console
+from rich.markup import escape
 
 HOST = "127.0.0.1"
 PORT = 8123
@@ -40,14 +41,14 @@ def main() -> None:
     try:
         client = clickhouse_connect.get_client(host=HOST, port=PORT, username="default", password="")
     except Exception as e:
-        console.print(f"[bold red][!] Connection failed: {e}[/]")
-        print("Start the lab container first: cd clickhouse && make up EXP=parts-limit")
+        console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
+        console.print("Start the lab container first: cd clickhouse && make up EXP=parts-limit", markup=False, highlight=False, soft_wrap=True)
         sys.exit(1)
 
     # 1. Connectivity & Version
     console.print("[bold blue][*] 1. Server Version & Connectivity[/]")
     version = client.command("SELECT version()")
-    print(f"    ClickHouse Version: {version}")
+    console.print(f"    ClickHouse Version: {version}", markup=False, highlight=False, soft_wrap=True)
 
     # 2. Table Creation
     console.print("\n[bold blue][*] 2. Creating MergeTree Engine Table[/]")
@@ -61,7 +62,7 @@ def main() -> None:
         ) ENGINE = MergeTree()
         ORDER BY (metric_type, device_id, timestamp);
     """)
-    print(f"    Created table '{TABLE_NAME}' with specialized codecs (DoubleDelta, Gorilla, LowCardinality).")
+    console.print(f"    Created table '{TABLE_NAME}' with specialized codecs (DoubleDelta, Gorilla, LowCardinality).", markup=False, highlight=False, soft_wrap=True)
 
     # 3. Columnar Batch Insert
     console.print("\n[bold blue][*] 3. Columnar Batch Insert (Block Append)[/]")
@@ -81,7 +82,7 @@ def main() -> None:
         column_data,
         column_names=["timestamp", "device_id", "metric_type", "value"],
     )
-    print(f"    Appended {len(column_data):,} rows in a single compressed columnar block.")
+    console.print(f"    Appended {len(column_data):,} rows in a single compressed columnar block.", markup=False, highlight=False, soft_wrap=True)
 
     # 4. Vectorized Analytical Aggregation
     console.print("\n[bold blue][*] 4. Vectorized Analytical Aggregations[/]")
@@ -98,9 +99,9 @@ def main() -> None:
         ORDER BY metric_type;
     """
     results = client.query(query)
-    print("    Aggregated metrics across 10,000 measurements:")
+    console.print("    Aggregated metrics across 10,000 measurements:", markup=False, highlight=False, soft_wrap=True)
     for row in results.result_rows:
-        print(f"      - {row[0]}: count={row[1]}, min={row[2]}, avg={row[3]}, max={row[4]}, p95={row[5]}")
+        console.print(f"      - {row[0]}: count={row[1]}, min={row[2]}, avg={row[3]}, max={row[4]}, p95={row[5]}", markup=False, highlight=False, soft_wrap=True)
 
     # 5. Diagnostics: system.parts
     console.print("\n[bold blue][*] 5. Storage Introspection (system.parts)[/]")
@@ -116,11 +117,11 @@ def main() -> None:
     """
     parts = client.query(parts_query)
     for p in parts.result_rows:
-        print(f"    Active Part '{p[0]}': type={p[1]}, rows={p[2]}, compressed={p[3]}, uncompressed={p[4]}")
+        console.print(f"    Active Part '{p[0]}': type={p[1]}, rows={p[2]}, compressed={p[3]}, uncompressed={p[4]}", markup=False, highlight=False, soft_wrap=True)
 
     # Cleanup
     client.command(f"DROP TABLE IF EXISTS {TABLE_NAME}")
-    print(f"    Cleaned up demo table '{TABLE_NAME}'.")
+    console.print(f"    Cleaned up demo table '{TABLE_NAME}'.", markup=False, highlight=False, soft_wrap=True)
 
     console.print("\n[bold green][✓] ClickHouse Crash Course completed successfully![/]\n")
 

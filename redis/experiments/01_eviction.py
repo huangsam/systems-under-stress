@@ -43,9 +43,9 @@ def main() -> None:
         client.ping()
     except redis.ConnectionError:
         console.print("[bold red]Error: Cannot connect to Redis on 127.0.0.1:6379.[/]")
-        print("Please start an experiment container first:")
-        print("  make up EXP=eviction-lru   # for LRU eviction")
-        print("  make up EXP=eviction-noeviction # for OOM failure testing")
+        console.print("Please start an experiment container first:", markup=False, highlight=False, soft_wrap=True)
+        console.print("  make up EXP=eviction-lru   # for LRU eviction", markup=False, highlight=False, soft_wrap=True)
+        console.print("  make up EXP=eviction-noeviction # for OOM failure testing", markup=False, highlight=False, soft_wrap=True)
         sys.exit(1)
 
     # 1. Inspect current server settings
@@ -55,12 +55,12 @@ def main() -> None:
 
     console.print("=" * 65, style="bold blue")
     console.print("[bold green]Redis Eviction Lab: Current Configuration[/]")
-    print(f"  Max Memory Limit : {format_bytes(max_memory)} ({max_memory:,} bytes)")
+    console.print(f"  Max Memory Limit : {format_bytes(max_memory)} ({max_memory:,} bytes)", markup=False, highlight=False, soft_wrap=True)
     console.print(f"  Eviction Policy  : [bold yellow]{policy}[/]")
     console.print("=" * 65 + "\n", style="bold blue")
 
     # 2. Reset database for clean run
-    print("Flushing keyspace for a clean test run...")
+    console.print("Flushing keyspace for a clean test run...", markup=False, highlight=False, soft_wrap=True)
     client.flushall()
 
     # 3. Phase 1: Flood Redis with 10KB payloads until exceeding 16MB
@@ -68,7 +68,7 @@ def main() -> None:
     dummy_payload = "X" * PAYLOAD_SIZE
     TOTAL_ITEMS = 2500  # 2500 * 10KB = ~25MB of raw data (exceeds 16MB maxmemory)
 
-    print(f"[*] Phase 1: Inserting {TOTAL_ITEMS:,} items (10KB each, ~25MB total data)...")
+    console.print(f"[*] Phase 1: Inserting {TOTAL_ITEMS:,} items (10KB each, ~25MB total data)...", markup=False, highlight=False, soft_wrap=True)
 
     written = 0
     oom_errors = 0
@@ -85,7 +85,7 @@ def main() -> None:
                 oom_errors += 1
                 if oom_errors == 1:
                     console.print(f"\n[bold red][!] FIRST OOM HIT at item {i}![/]")
-                    print(f"    Redis Error Message: {err}")
+                    console.print(f"    Redis Error Message: {err}", markup=False, highlight=False, soft_wrap=True)
             else:
                 raise err
 
@@ -93,17 +93,17 @@ def main() -> None:
             curr_mem = client.info("memory").get("used_memory", 0)
             stats = client.info("stats")
             evicted = stats.get("evicted_keys", 0)
-            print(f"    Progress: {i + 1:>5}/{TOTAL_ITEMS} | Used Mem: {format_bytes(curr_mem):>8} | Evicted: {evicted:>5} | OOM Errors: {oom_errors:>4}")
+            console.print(f"    Progress: {i + 1:>5}/{TOTAL_ITEMS} | Used Mem: {format_bytes(curr_mem):>8} | Evicted: {evicted:>5} | OOM Errors: {oom_errors:>4}", markup=False, highlight=False, soft_wrap=True)
 
     duration = time.time() - start_time
-    print(f"\nPhase 1 Completed in {duration:.2f}s:")
-    print(f"  - Successfully written : {written:,}")
-    print(f"  - OOM rejections       : {oom_errors:,}")
+    console.print(f"\nPhase 1 Completed in {duration:.2f}s:", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"  - Successfully written : {written:,}", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"  - OOM rejections       : {oom_errors:,}", markup=False, highlight=False, soft_wrap=True)
 
     # 4. Phase 2: Skewed Read Test (Zipfian 80/20 simulation)
     # Hot keys: item:00000 to item:00099 (accessed 80% of the time)
     # Cold keys: item:00100 to item:02499 (accessed 20% of the time)
-    print("\n[*] Phase 2: Running 2,000 skewed reads (80% hot keys, 20% cold keys)...")
+    console.print("\n[*] Phase 2: Running 2,000 skewed reads (80% hot keys, 20% cold keys)...", markup=False, highlight=False, soft_wrap=True)
 
     # Access hot keys a few times first to establish frequency / recency
     for h in range(100):
@@ -134,24 +134,24 @@ def main() -> None:
     final_stats = client.info("stats")
 
     console.print("\n" + "=" * 65, style="bold green")
-    print("EXPERIMENT 01 SUMMARY REPORT")
+    console.print("EXPERIMENT 01 SUMMARY REPORT", markup=False, highlight=False, soft_wrap=True)
     console.print("=" * 65, style="bold green")
     console.print(f"Policy Under Test     : [bold yellow]{policy}[/]")
-    print(f"Peak Memory Reached   : {format_bytes(final_mem.get('used_memory_peak', 0))}")
-    print(f"Current Memory Used   : {format_bytes(final_mem.get('used_memory', 0))}")
+    console.print(f"Peak Memory Reached   : {format_bytes(final_mem.get('used_memory_peak', 0))}", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"Current Memory Used   : {format_bytes(final_mem.get('used_memory', 0))}", markup=False, highlight=False, soft_wrap=True)
     console.print(f"Total Keys Evicted    : [bold red]{final_stats.get('evicted_keys', 0):,}[/]")
     console.print(f"Hot Key Hit Ratio     : [bold green]{hot_ratio:.1f}%[/] ({hot_hits}/{hot_total})")
-    print(f"Cold Key Hit Ratio    : {cold_ratio:.1f}% ({cold_hits}/{cold_total})")
-    print("=" * 65)
+    console.print(f"Cold Key Hit Ratio    : {cold_ratio:.1f}% ({cold_hits}/{cold_total})", markup=False, highlight=False, soft_wrap=True)
+    console.print("=" * 65, markup=False, highlight=False, soft_wrap=True)
 
     if policy == "noeviction":
         console.print("\n[bold yellow][Takeaway - noeviction][/]")
-        print("Redis refused all writes once maxmemory was reached with OOM errors.")
-        print("Read requests continue to succeed, but write-heavy services fail hard without application fallback.")
+        console.print("Redis refused all writes once maxmemory was reached with OOM errors.", markup=False, highlight=False, soft_wrap=True)
+        console.print("Read requests continue to succeed, but write-heavy services fail hard without application fallback.", markup=False, highlight=False, soft_wrap=True)
     elif "lru" in policy:
         console.print("\n[bold yellow][Takeaway - allkeys-lru][/]")
-        print("Redis safely capped memory by evicting older/idle keys to make room for new writes.")
-        print(f"Hot keys maintained a {hot_ratio:.1f}% hit rate while cold keys were recycled automatically.")
+        console.print("Redis safely capped memory by evicting older/idle keys to make room for new writes.", markup=False, highlight=False, soft_wrap=True)
+        console.print(f"Hot keys maintained a {hot_ratio:.1f}% hit rate while cold keys were recycled automatically.", markup=False, highlight=False, soft_wrap=True)
 
 
 if __name__ == "__main__":

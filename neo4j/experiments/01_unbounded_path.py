@@ -29,6 +29,7 @@ import time
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape
 
 from neo4j import Driver, GraphDatabase
 
@@ -47,7 +48,7 @@ def get_driver() -> Driver:
 def wait_for_neo4j(driver: Driver, timeout_sec: int = 45) -> None:
     """Waits until Neo4j is responsive and ready for Cypher queries."""
     start = time.time()
-    print("[*] Connecting to Neo4j at bolt://127.0.0.1:7687...")
+    console.print("[*] Connecting to Neo4j at bolt://127.0.0.1:7687...", markup=False, highlight=False, soft_wrap=True)
     while time.time() - start < timeout_sec:
         try:
             with driver.session() as session:
@@ -111,8 +112,8 @@ def reset_and_seed_graph(driver: Driver, num_nodes: int = 2000, branching: int =
 def test_depth_explosion(driver: Driver, max_depth: int = 6) -> None:
     """Tests exponential scaling of path traversal from depth 1 to max_depth."""
     console.print("\n[bold blue][*] Part 1: Testing Unbounded Path Traversal MATCH (a)-[*1..d]->(b)...[/]")
-    print(f"{'Depth':<8}{'Paths Found':<16}{'DB Hits':<14}{'Server Time (ms)':<18}{'Wall Time (ms)':<16}{'Growth':<10}")
-    print("-" * 82)
+    console.print(f"{'Depth':<8}{'Paths Found':<16}{'DB Hits':<14}{'Server Time (ms)':<18}{'Wall Time (ms)':<16}{'Growth':<10}", markup=False, highlight=False, soft_wrap=True)
+    console.print("-" * 82, markup=False, highlight=False, soft_wrap=True)
 
     prev_paths = None
 
@@ -133,7 +134,7 @@ def test_depth_explosion(driver: Driver, max_depth: int = 6) -> None:
             growth = f"{path_count / prev_paths:.1f}x" if prev_paths and prev_paths > 0 else "-"
             prev_paths = path_count
 
-            print(f"{depth:<8}{path_count:<16,}{db_hits:<14,}{server_time_ms:<18.2f}{wall_elapsed_ms:<16.2f}{growth:<10}")
+            console.print(f"{depth:<8}{path_count:<16,}{db_hits:<14,}{server_time_ms:<18.2f}{wall_elapsed_ms:<16.2f}{growth:<10}", markup=False, highlight=False, soft_wrap=True)
 
 
 def test_shortest_path_comparison(driver: Driver, target_id: int = 500) -> None:
@@ -161,10 +162,10 @@ def test_shortest_path_comparison(driver: Driver, target_id: int = 500) -> None:
         sp_len = rec_sp["path_len"] if rec_sp else -1
         sp_db_hits = extract_total_db_hits(sum_sp.profile)
 
-        print(f"{'Algorithm':<28}{'Result':<18}{'DB Hits':<14}{'Latency (ms)':<14}")
-        print("-" * 74)
-        print(f"{'Exhaustive MATCH [*1..6]':<28}{f'{ex_paths} paths':<18}{ex_db_hits:<14,}{wall_ex_ms:<14.2f}")
-        print(f"{'shortestPath((a)-[*]-(b))':<28}{f'{sp_len} hops':<18}{sp_db_hits:<14,}{wall_sp_ms:<14.2f}")
+        console.print(f"{'Algorithm':<28}{'Result':<18}{'DB Hits':<14}{'Latency (ms)':<14}", markup=False, highlight=False, soft_wrap=True)
+        console.print("-" * 74, markup=False, highlight=False, soft_wrap=True)
+        console.print(f"{'Exhaustive MATCH [*1..6]':<28}{f'{ex_paths} paths':<18}{ex_db_hits:<14,}{wall_ex_ms:<14.2f}", markup=False, highlight=False, soft_wrap=True)
+        console.print(f"{'shortestPath((a)-[*]-(b))':<28}{f'{sp_len} hops':<18}{sp_db_hits:<14,}{wall_sp_ms:<14.2f}", markup=False, highlight=False, soft_wrap=True)
 
         if ex_db_hits > 0 and sp_db_hits > 0:
             reduction = ex_db_hits / sp_db_hits
@@ -184,7 +185,7 @@ def main() -> None:
         test_shortest_path_comparison(driver, target_id=500)
         console.print("\n[bold green][✓] Experiment 01 completed successfully.[/]")
     except Exception as e:
-        err_console.print(f"\n[bold red][!] Error running experiment:[/] {e}")
+        err_console.print(f"\n[bold red][!] Error running experiment:[/] {escape(str(e))}")
         sys.exit(1)
     finally:
         driver.close()

@@ -64,10 +64,10 @@ def main() -> None:
         client.ping()
     except redis.ConnectionError:
         console.print("[bold red]Error: Cannot connect to Redis on 127.0.0.1:6379.[/]")
-        print("Please start a persistence profile first:")
-        print("  make up EXP=persistence-rdb     # Test RDB crash data loss")
-        print("  make up EXP=persistence-aof     # Test AOF everysec durability")
-        print("  make up EXP=persistence-always  # Test AOF always zero-loss")
+        console.print("Please start a persistence profile first:", markup=False, highlight=False, soft_wrap=True)
+        console.print("  make up EXP=persistence-rdb     # Test RDB crash data loss", markup=False, highlight=False, soft_wrap=True)
+        console.print("  make up EXP=persistence-aof     # Test AOF everysec durability", markup=False, highlight=False, soft_wrap=True)
+        console.print("  make up EXP=persistence-always  # Test AOF always zero-loss", markup=False, highlight=False, soft_wrap=True)
         sys.exit(1)
 
     label, profile_name = get_active_profile(client)
@@ -75,16 +75,16 @@ def main() -> None:
     console.print("=" * 65, style="bold blue")
     console.print("[bold green]Experiment 03: Redis Persistence & Crash Recovery[/]")
     console.print(f"  Active Mode    : [bold yellow]{label}[/]")
-    print(f"  Profile Name   : {profile_name}")
+    console.print(f"  Profile Name   : {profile_name}", markup=False, highlight=False, soft_wrap=True)
     console.print("=" * 65 + "\n", style="bold blue")
 
     # Clean existing data in-memory
-    print("Flushing database for a clean test run...")
+    console.print("Flushing database for a clean test run...", markup=False, highlight=False, soft_wrap=True)
     client.flushall()
 
     # Phase 1: High-speed writes with pipeline
     TOTAL_WRITES = 5000
-    print(f"[*] Phase 1: Writing up to {TOTAL_WRITES:,} keys sequentially...")
+    console.print(f"[*] Phase 1: Writing up to {TOTAL_WRITES:,} keys sequentially...", markup=False, highlight=False, soft_wrap=True)
 
     pipe = client.pipeline(transaction=False)
     acknowledged = 0
@@ -105,18 +105,18 @@ def main() -> None:
 
     write_elapsed = time.perf_counter() - t0
     rate = acknowledged / write_elapsed if write_elapsed > 0 else 0
-    print(f"    Acknowledged {acknowledged:,} writes ({rate:,.0f} writes/sec).")
+    console.print(f"    Acknowledged {acknowledged:,} writes ({rate:,.0f} writes/sec).", markup=False, highlight=False, soft_wrap=True)
 
     # Phase 2: Ungraceful crash (SIGKILL / kill -9)
     console.print("\n[bold red][*] Phase 2: Killing container with SIGKILL (simulating ungraceful power loss)...[/]")
     run_cmd(["docker", "compose", "--profile", profile_name, "kill", "-s", "SIGKILL"])
     client.close()
 
-    print("    Container terminated abruptly without shutdown flush.")
+    console.print("    Container terminated abruptly without shutdown flush.", markup=False, highlight=False, soft_wrap=True)
     time.sleep(1.0)
 
     # Phase 3: Restart container preserving volume
-    print(f"\n[*] Phase 3: Restarting container via '{profile_name}' (mounting persisted volume)...")
+    console.print(f"\n[*] Phase 3: Restarting container via '{profile_name}' (mounting persisted volume)...", markup=False, highlight=False, soft_wrap=True)
     run_cmd(["docker", "compose", "--profile", profile_name, "up", "-d", "--wait"])
 
     # Reconnect
@@ -129,7 +129,7 @@ def main() -> None:
             time.sleep(0.5)
 
     # Phase 4: Audit recovered data
-    print("\n[*] Phase 4: Auditing recovered keys from disk...")
+    console.print("\n[*] Phase 4: Auditing recovered keys from disk...", markup=False, highlight=False, soft_wrap=True)
     survived = 0
     highest_survived = 0
 
@@ -144,26 +144,26 @@ def main() -> None:
 
     # Summary Report
     console.print("\n" + "=" * 65, style="bold green")
-    print("EXPERIMENT 03 SUMMARY REPORT")
+    console.print("EXPERIMENT 03 SUMMARY REPORT", markup=False, highlight=False, soft_wrap=True)
     console.print("=" * 65, style="bold green")
     console.print(f"Persistence Configuration   : [bold yellow]{label}[/]")
-    print(f"Writes Acknowledged by Redis : {acknowledged:,}")
+    console.print(f"Writes Acknowledged by Redis : {acknowledged:,}", markup=False, highlight=False, soft_wrap=True)
     console.print(f"Writes Recovered After Crash : [bold green]{survived:,}[/]")
-    print(f"Highest Key Recovered        : seq:{highest_survived:06d}")
+    console.print(f"Highest Key Recovered        : seq:{highest_survived:06d}", markup=False, highlight=False, soft_wrap=True)
     console.print(f"Total Lost Writes            : [bold red]{lost_writes:,}[/] ({loss_pct:.1f}%)")
-    print("=" * 65)
+    console.print("=" * 65, markup=False, highlight=False, soft_wrap=True)
 
     if lost_writes > 0:
         console.print(f"\n[bold red][!] DATA LOSS OBSERVED:[/] {lost_writes:,} confirmed writes disappeared on crash.")
         if "RDB" in label:
-            print("Why? RDB only snapshots periodically (e.g. every 60s). All in-memory writes")
-            print("since the last snapshot were completely lost when the process was killed.")
+            console.print("Why? RDB only snapshots periodically (e.g. every 60s). All in-memory writes", markup=False, highlight=False, soft_wrap=True)
+            console.print("since the last snapshot were completely lost when the process was killed.", markup=False, highlight=False, soft_wrap=True)
         elif "everysec" in label:
-            print("Why? AOF 'everysec' buffers writes in an OS buffer and fsyncs once per second.")
-            print("Writes from the final incomplete 1-second fsync window were lost.")
+            console.print("Why? AOF 'everysec' buffers writes in an OS buffer and fsyncs once per second.", markup=False, highlight=False, soft_wrap=True)
+            console.print("Writes from the final incomplete 1-second fsync window were lost.", markup=False, highlight=False, soft_wrap=True)
     else:
         console.print("\n[bold green][✓] ZERO DATA LOSS:[/] 100% of acknowledged writes were successfully recovered from disk!")
-        print("Every single command was synchronously fsync'd before returning to the client.")
+        console.print("Every single command was synchronously fsync'd before returning to the client.", markup=False, highlight=False, soft_wrap=True)
 
     client.close()
 

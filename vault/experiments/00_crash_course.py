@@ -23,6 +23,7 @@ import sys
 
 import hvac
 from rich.console import Console
+from rich.markup import escape
 
 VAULT_ADDR = os.getenv("VAULT_ADDR", "http://127.0.0.1:8200")
 VAULT_TOKEN = os.getenv("VAULT_TOKEN", "root")
@@ -44,14 +45,14 @@ def main() -> None:
         is_sealed = client.sys.is_sealed()
         health = client.sys.read_health_status(method="GET").json()
     except Exception as e:
-        console.print(f"[bold red][!] Connection failed: {e}[/]")
-        print("Start the lab container first: cd vault && make up EXP=dynamic-db")
+        console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
+        console.print("Start the lab container first: cd vault && make up EXP=dynamic-db", markup=False, highlight=False, soft_wrap=True)
         sys.exit(1)
 
     # 1. Health & Server Info
     console.print("[bold blue][*] 1. Server Health & Seal Status[/]")
-    print(f"    Vault Version: {health.get('version')}, Cluster: {health.get('cluster_name')}")
-    print(f"    Initialized: {is_init}, Sealed: {is_sealed}, Performance Standby: {health.get('performance_standby', False)}")
+    console.print(f"    Vault Version: {health.get('version')}, Cluster: {health.get('cluster_name')}", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"    Initialized: {is_init}, Sealed: {is_sealed}, Performance Standby: {health.get('performance_standby', False)}", markup=False, highlight=False, soft_wrap=True)
 
     # Ensure KV v2 engine is enabled at 'secret'
     mounts = client.sys.list_mounted_secrets_engines().get("data", {})
@@ -67,7 +68,7 @@ def main() -> None:
     read_v1 = client.secrets.kv.v2.read_secret_version(path=SECRET_PATH)
     v1_data = read_v1["data"]["data"]
     v1_meta = read_v1["data"]["metadata"]
-    print(f"    Written Secret v{v1_meta['version']}: {v1_data}")
+    console.print(f"    Written Secret v{v1_meta['version']}: {v1_data}", markup=False, highlight=False, soft_wrap=True)
 
     # Write Version 2
     console.print("\n[bold blue][*] 3. Secret Rotation (Creating Version 2)[/]")
@@ -78,36 +79,36 @@ def main() -> None:
     read_v2 = client.secrets.kv.v2.read_secret_version(path=SECRET_PATH)
     v2_data = read_v2["data"]["data"]
     v2_meta = read_v2["data"]["metadata"]
-    print(f"    Rotated to Secret v{v2_meta['version']}: {v2_data}")
+    console.print(f"    Rotated to Secret v{v2_meta['version']}: {v2_data}", markup=False, highlight=False, soft_wrap=True)
 
     # Read historical Version 1
     hist_v1 = client.secrets.kv.v2.read_secret_version(path=SECRET_PATH, version=1)
-    print(f"    Historical query (v1 api_key): '{hist_v1['data']['data']['api_key']}'")
+    console.print(f"    Historical query (v1 api_key): '{hist_v1['data']['data']['api_key']}'", markup=False, highlight=False, soft_wrap=True)
 
     # 4. Child Token Creation with TTL
     console.print("\n[bold blue][*] 4. Ephemeral Child Tokens & Lease Metadata[/]")
     new_token = client.auth.token.create(ttl="10m", renewable=True, display_name="crash-course-worker")
     auth_info = new_token["auth"]
     client_token = auth_info["client_token"]
-    print(f"    Created child token: {client_token[:15]}... (TTL: {auth_info['lease_duration']}s, Renewable: {auth_info['renewable']})")
+    console.print(f"    Created child token: {client_token[:15]}... (TTL: {auth_info['lease_duration']}s, Renewable: {auth_info['renewable']})", markup=False, highlight=False, soft_wrap=True)
 
     # Lookup token self info
     worker_client = hvac.Client(url=VAULT_ADDR, token=client_token)
     token_meta = worker_client.auth.token.lookup_self()["data"]
-    print(f"    Token accessor: {token_meta.get('accessor')}, Policies: {token_meta.get('policies')}")
+    console.print(f"    Token accessor: {token_meta.get('accessor')}, Policies: {token_meta.get('policies')}", markup=False, highlight=False, soft_wrap=True)
 
     # Revoke child token
     client.auth.token.revoke(token=client_token)
-    print("    Revoked child token.")
+    console.print("    Revoked child token.", markup=False, highlight=False, soft_wrap=True)
 
     # 5. Diagnostics
     console.print("\n[bold blue][*] 5. Mounted Secrets Engines & Auth Methods[/]")
     for path, cfg in mounts.items():
-        print(f"    - Mount: {path:<15} Type: {cfg.get('type'):<10} Desc: {cfg.get('description', '')}")
+        console.print(f"    - Mount: {path:<15} Type: {cfg.get('type'):<10} Desc: {cfg.get('description', '')}", markup=False, highlight=False, soft_wrap=True)
 
     # Cleanup
     client.secrets.kv.v2.delete_metadata_and_all_versions(path=SECRET_PATH)
-    print(f"    Cleaned up demo secret '{SECRET_PATH}' and all metadata.")
+    console.print(f"    Cleaned up demo secret '{SECRET_PATH}' and all metadata.", markup=False, highlight=False, soft_wrap=True)
 
     console.print("\n[bold green][✓] HashiCorp Vault Crash Course completed successfully![/]\n")
 

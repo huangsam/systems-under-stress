@@ -27,6 +27,7 @@ import time
 
 import hvac
 from rich.console import Console
+from rich.markup import escape
 
 VAULT_URL = "http://127.0.0.1:8200"
 VAULT_TOKEN = "root"
@@ -50,13 +51,13 @@ def main() -> None:
         if not client.sys.is_initialized():
             raise RuntimeError("Vault not initialized")
     except Exception as e:
-        console.print(f"[bold red]Error: Cannot connect to Vault on {VAULT_URL} ({e})[/]")
-        print("Start the container first: make up EXP=transit-crypto")
+        console.print(f"[bold red]Error: Cannot connect to Vault on {VAULT_URL} ({escape(str(e))})[/]")
+        console.print("Start the container first: make up EXP=transit-crypto", markup=False, highlight=False, soft_wrap=True)
         sys.exit(1)
 
     console.print("=" * 70, style="bold cyan")
     console.print("[bold cyan]Experiment 03: Vault Transit Encryption-as-a-Service & Key Rotation[/]")
-    print("Benchmarking HTTP crypto overhead, batching, and zero-downtime key rotation.")
+    console.print("Benchmarking HTTP crypto overhead, batching, and zero-downtime key rotation.", markup=False, highlight=False, soft_wrap=True)
     console.print("=" * 70 + "\n", style="bold cyan")
 
     # 1. Enable Transit secrets engine
@@ -72,7 +73,7 @@ def main() -> None:
         pass
 
     client.secrets.transit.create_key(name=KEY_NAME, key_type="aes256-gcm96")
-    print(f"[*] Created AES256-GCM96 transit key '{KEY_NAME}' (Version 1).")
+    console.print(f"[*] Created AES256-GCM96 transit key '{KEY_NAME}' (Version 1).", markup=False, highlight=False, soft_wrap=True)
 
     # 2. Part 1: Sequential HTTP Encryption vs Batched Encryption (200 records)
     NUM_RECORDS = 200
@@ -96,8 +97,8 @@ def main() -> None:
     batch_ops = NUM_RECORDS / (batch_ms / 1000)
 
     speedup = seq_ms / batch_ms if batch_ms > 0 else 1.0
-    print(f"    Sequential HTTP (200 calls) : {seq_ms:>7.1f}ms ({seq_ops:>7,.0f} records/sec)")
-    print(f"    Batched API (1 HTTP call)   : {batch_ms:>7.1f}ms ({batch_ops:>7,.0f} records/sec)")
+    console.print(f"    Sequential HTTP (200 calls) : {seq_ms:>7.1f}ms ({seq_ops:>7,.0f} records/sec)", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"    Batched API (1 HTTP call)   : {batch_ms:>7.1f}ms ({batch_ops:>7,.0f} records/sec)", markup=False, highlight=False, soft_wrap=True)
     console.print(f"    Batch Throughput Gain       : [bold green]{speedup:.1f}x Faster[/]")
 
     # 3. Part 2: Zero-Downtime Key Rotation & Server-Side Rewrap
@@ -108,7 +109,7 @@ def main() -> None:
     # Rotate key to Version 2
     client.secrets.transit.rotate_key(name=KEY_NAME)
     key_info = client.secrets.transit.read_key(name=KEY_NAME)["data"]
-    print(f"    Rotated '{KEY_NAME}' -> Latest Version: v{key_info['latest_version']}")
+    console.print(f"    Rotated '{KEY_NAME}' -> Latest Version: v{key_info['latest_version']}", markup=False, highlight=False, soft_wrap=True)
 
     # Rewrap v1 ciphertext to v2 without exposing plaintext
     rewrap_resp = client.secrets.transit.rewrap_data(name=KEY_NAME, ciphertext=sample_v1)
@@ -117,7 +118,7 @@ def main() -> None:
 
     # Enforce minimum decryption version = 2 (deprecating v1 keys after migration)
     client.secrets.transit.update_key_configuration(name=KEY_NAME, min_decryption_version=2)
-    print("    Enforced policy: min_decryption_version = 2 (v1 ciphertexts now blocked).")
+    console.print("    Enforced policy: min_decryption_version = 2 (v1 ciphertexts now blocked).", markup=False, highlight=False, soft_wrap=True)
 
     # Verify v1 is rejected while v2 succeeds
     try:
@@ -125,24 +126,24 @@ def main() -> None:
         v1_blocked = False
     except Exception as err:
         v1_blocked = True
-        print(f"    [✓] Legacy v1 decrypt blocked : {err}")
+        console.print(f"    [✓] Legacy v1 decrypt blocked : {err}", markup=False, highlight=False, soft_wrap=True)
 
     dec_v2 = client.secrets.transit.decrypt_data(name=KEY_NAME, ciphertext=sample_v2)
     plaintext_recovered = b64d(dec_v2["data"]["plaintext"])
-    print(f"    [✓] Upgraded v2 decrypt valid : '{plaintext_recovered}'")
+    console.print(f"    [✓] Upgraded v2 decrypt valid : '{plaintext_recovered}'", markup=False, highlight=False, soft_wrap=True)
 
     assert v1_blocked and plaintext_recovered == "SSN-999-00-0000"
 
     console.print("\n" + "=" * 70, style="bold green")
-    print("SYSTEMS TAKEAWAYS")
+    console.print("SYSTEMS TAKEAWAYS", markup=False, highlight=False, soft_wrap=True)
     console.print("=" * 70, style="bold green")
-    print("1. Transit EaaS is CPU-fast (AES-NI) but HTTP-latency bound; always use")
-    print(f"   'batch_input' ({speedup:.1f}x speedup) or Envelope Encryption (data keys) for bulk data.")
-    print("2. Version-prefixed ciphertexts ('vault:v1:...', 'vault:v2:...') allow instant")
-    print("   key rotation without breaking reads of existing database rows.")
-    print("3. 'rewrap' upgrades old ciphertexts to the newest key inside Vault without")
-    print("   ever transmitting plaintext over the network.")
-    print("======================================================================\n")
+    console.print("1. Transit EaaS is CPU-fast (AES-NI) but HTTP-latency bound; always use", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"   'batch_input' ({speedup:.1f}x speedup) or Envelope Encryption (data keys) for bulk data.", markup=False, highlight=False, soft_wrap=True)
+    console.print("2. Version-prefixed ciphertexts ('vault:v1:...', 'vault:v2:...') allow instant", markup=False, highlight=False, soft_wrap=True)
+    console.print("   key rotation without breaking reads of existing database rows.", markup=False, highlight=False, soft_wrap=True)
+    console.print("3. 'rewrap' upgrades old ciphertexts to the newest key inside Vault without", markup=False, highlight=False, soft_wrap=True)
+    console.print("   ever transmitting plaintext over the network.", markup=False, highlight=False, soft_wrap=True)
+    console.print("======================================================================\n", markup=False, highlight=False, soft_wrap=True)
 
 
 if __name__ == "__main__":

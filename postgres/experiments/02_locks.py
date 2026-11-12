@@ -72,14 +72,14 @@ def test_hot_row_contention() -> None:
     duration = time.perf_counter() - start_time
     final_balance = get_balance(1)
 
-    print("    Initial Balance  : $1,000.00")
-    print("    Expected Balance : $1,050.00")
+    console.print("    Initial Balance  : $1,000.00", markup=False, highlight=False, soft_wrap=True)
+    console.print("    Expected Balance : $1,050.00", markup=False, highlight=False, soft_wrap=True)
     console.print(f"    Final Balance    : [bold green]${final_balance:,.2f}[/]")
-    print(f"    Total Time       : {duration * 1000:.1f}ms ({NUM_WORKERS} updates serialized)")
+    console.print(f"    Total Time       : {duration * 1000:.1f}ms ({NUM_WORKERS} updates serialized)", markup=False, highlight=False, soft_wrap=True)
 
     if final_balance == 1050.00:
-        print("  [✓] PostgreSQL row-level locks successfully queued all 50 concurrent updates.")
-        print("      Zero lost updates occurred.")
+        console.print("  [✓] PostgreSQL row-level locks successfully queued all 50 concurrent updates.", markup=False, highlight=False, soft_wrap=True)
+        console.print("      Zero lost updates occurred.", markup=False, highlight=False, soft_wrap=True)
 
 
 # ----------------------------------------------------------------------
@@ -137,16 +137,16 @@ def test_deadlock() -> None:
     t1.join()
     t2.join()
 
-    print(f"    Transaction 1 Result : {results.get('Tx1 (Alice->Bob)')}")
-    print(f"    Transaction 2 Result : {results.get('Tx2 (Bob->Alice)')}")
+    console.print(f"    Transaction 1 Result : {results.get('Tx1 (Alice->Bob)')}", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"    Transaction 2 Result : {results.get('Tx2 (Bob->Alice)')}", markup=False, highlight=False, soft_wrap=True)
 
     has_deadlock = any("DEADLOCK_DETECTED" in r for r in results.values())
     has_commit = any("COMMITTED" in r for r in results.values())
 
     if has_deadlock and has_commit:
         console.print("  [bold green][✓] Deadlock successfully caught & resolved by PostgreSQL![/]")
-        print("      PostgreSQL's deadlock detector identified the wait-for cycle, aborted the")
-        print("      younger transaction (SQLSTATE 40P01), allowing the other transaction to commit.")
+        console.print("      PostgreSQL's deadlock detector identified the wait-for cycle, aborted the", markup=False, highlight=False, soft_wrap=True)
+        console.print("      younger transaction (SQLSTATE 40P01), allowing the other transaction to commit.", markup=False, highlight=False, soft_wrap=True)
 
 
 # ----------------------------------------------------------------------
@@ -193,12 +193,12 @@ def test_ordered_locking() -> None:
 
     console.print(f"    Successful Transfers : [bold green]{success_count} / 40[/]")
     console.print(f"    Deadlocks Caught     : [bold green]{deadlock_count}[/] (0 expected)")
-    print(f"    Alice Final Balance  : ${alice_bal:,.2f}")
-    print(f"    Bob Final Balance    : ${bob_bal:,.2f}")
-    print(f"    Total System Wealth  : ${alice_bal + bob_bal:,.2f} ($2,000.00 expected)")
+    console.print(f"    Alice Final Balance  : ${alice_bal:,.2f}", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"    Bob Final Balance    : ${bob_bal:,.2f}", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"    Total System Wealth  : ${alice_bal + bob_bal:,.2f} ($2,000.00 expected)", markup=False, highlight=False, soft_wrap=True)
 
     if deadlock_count == 0 and (alice_bal + bob_bal) == 2000.00:
-        print("  [✓] Zero deadlocks! Consistent lock ordering broke the circular wait condition.")
+        console.print("  [✓] Zero deadlocks! Consistent lock ordering broke the circular wait condition.", markup=False, highlight=False, soft_wrap=True)
 
 
 def main() -> None:
@@ -207,13 +207,13 @@ def main() -> None:
             pass
     except Exception:
         console.print("[bold red]Error: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.[/]")
-        print("Please start the locks container first:")
-        print("  cd postgres && make up EXP=locks")
+        console.print("Please start the locks container first:", markup=False, highlight=False, soft_wrap=True)
+        console.print("  cd postgres && make up EXP=locks", markup=False, highlight=False, soft_wrap=True)
         return
 
     console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 02: PostgreSQL Lock Contention & Deadlock Detection[/]")
-    print("Testing row-level exclusive locks and deadlock detection dynamics.")
+    console.print("Testing row-level exclusive locks and deadlock detection dynamics.", markup=False, highlight=False, soft_wrap=True)
     console.print("=" * 65, style="bold cyan")
 
     # Part 1: Hot row queue
@@ -226,13 +226,13 @@ def main() -> None:
     test_ordered_locking()
 
     console.print("\n" + "=" * 65, style="bold green")
-    print("SYSTEMS TAKEAWAYS")
+    console.print("SYSTEMS TAKEAWAYS", markup=False, highlight=False, soft_wrap=True)
     console.print("=" * 65, style="bold green")
-    print("1. Hot rows serialize through exclusive row locks; no lost updates occur.")
-    print("2. Deadlocks occur when concurrent transactions acquire locks out of order.")
-    print("3. Deadlock detection is reactive (costly search in lock wait-graph).")
-    print("4. Preventive fix: Always acquire locks in ascending primary key order.")
-    print("=================================================================\n")
+    console.print("1. Hot rows serialize through exclusive row locks; no lost updates occur.", markup=False, highlight=False, soft_wrap=True)
+    console.print("2. Deadlocks occur when concurrent transactions acquire locks out of order.", markup=False, highlight=False, soft_wrap=True)
+    console.print("3. Deadlock detection is reactive (costly search in lock wait-graph).", markup=False, highlight=False, soft_wrap=True)
+    console.print("4. Preventive fix: Always acquire locks in ascending primary key order.", markup=False, highlight=False, soft_wrap=True)
+    console.print("=================================================================\n", markup=False, highlight=False, soft_wrap=True)
 
 
 if __name__ == "__main__":

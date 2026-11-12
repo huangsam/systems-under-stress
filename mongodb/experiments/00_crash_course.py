@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 
 from pymongo import MongoClient
 from rich.console import Console
+from rich.markup import escape
 
 MONGO_URI = "mongodb://127.0.0.1:27017/"
 DB_NAME = "lab_db"
@@ -43,12 +44,12 @@ def main() -> None:
         ping_res = client.admin.command("ping")
         console.print(f"[bold blue][*] 1. Server Connectivity & Info (ping: {ping_res.get('ok')})[/]")
     except Exception as e:
-        console.print(f"[bold red][!] Connection failed: {e}[/]")
-        print("Start the lab container first: cd mongodb && make up EXP=unindexed-sort")
+        console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
+        console.print("Start the lab container first: cd mongodb && make up EXP=unindexed-sort", markup=False, highlight=False, soft_wrap=True)
         sys.exit(1)
 
     build_info = client.admin.command("buildInfo")
-    print(f"    MongoDB Version: {build_info.get('version')}, Git: {build_info.get('gitVersion')[:8]}")
+    console.print(f"    MongoDB Version: {build_info.get('version')}, Git: {build_info.get('gitVersion')[:8]}", markup=False, highlight=False, soft_wrap=True)
 
     db = client[DB_NAME]
     coll = db[COLL_NAME]
@@ -96,14 +97,14 @@ def main() -> None:
     ]
 
     res = coll.insert_many(sample_docs)
-    print(f"    Inserted {len(res.inserted_ids)} documents into '{COLL_NAME}'.")
+    console.print(f"    Inserted {len(res.inserted_ids)} documents into '{COLL_NAME}'.", markup=False, highlight=False, soft_wrap=True)
 
     # 3. Filter queries and atomic updates
     console.print("\n[bold blue][*] 3. Nested Query & Atomic Field Modification[/]")
     # Query using nested dot-notation
     found = coll.find_one({"pricing.base": {"$gte": 1000.0}})
     if found:
-        print(f"    High-value item found: '{found['name']}' at ${found['pricing']['base']}")
+        console.print(f"    High-value item found: '{found['name']}' at ${found['pricing']['base']}", markup=False, highlight=False, soft_wrap=True)
 
     # Atomic update ($inc and $push)
     coll.update_one(
@@ -112,7 +113,7 @@ def main() -> None:
     )
     updated = coll.find_one({"sku": "LAP-01"})
     if updated:
-        print(f"    Updated 'LAP-01' stock: {updated['stock']}, tags: {updated['tags']}")
+        console.print(f"    Updated 'LAP-01' stock: {updated['stock']}, tags: {updated['tags']}", markup=False, highlight=False, soft_wrap=True)
 
     # 4. Aggregation pipeline
     console.print("\n[bold blue][*] 4. Aggregation Pipeline ($match -> $group -> $sort)[/]")
@@ -129,21 +130,21 @@ def main() -> None:
         {"$sort": {"total_stock": -1}},
     ]
     cursor = coll.aggregate(pipeline)
-    print("    Aggregated results by category:")
+    console.print("    Aggregated results by category:", markup=False, highlight=False, soft_wrap=True)
     for doc in cursor:
-        print(f"      - Category: {doc['_id']}: {doc['item_count']} items, avg ${doc['avg_price']:.2f}, total stock {doc['total_stock']}")
+        console.print(f"      - Category: {doc['_id']}: {doc['item_count']} items, avg ${doc['avg_price']:.2f}, total stock {doc['total_stock']}", markup=False, highlight=False, soft_wrap=True)
 
     # 5. Diagnostics
     console.print("\n[bold blue][*] 5. Diagnostics & Collection Stats[/]")
     server_status = db.command("serverStatus")
     mem_info = server_status.get("mem", {})
     connections = server_status.get("connections", {})
-    print(f"    Resident Memory: {mem_info.get('resident')} MB, Virtual: {mem_info.get('virtual')} MB")
-    print(f"    Current Connections: {connections.get('current')} (Available: {connections.get('available')})")
+    console.print(f"    Resident Memory: {mem_info.get('resident')} MB, Virtual: {mem_info.get('virtual')} MB", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"    Current Connections: {connections.get('current')} (Available: {connections.get('available')})", markup=False, highlight=False, soft_wrap=True)
 
     # Cleanup
     coll.drop()
-    print(f"    Dropped demo collection '{COLL_NAME}'.")
+    console.print(f"    Dropped demo collection '{COLL_NAME}'.", markup=False, highlight=False, soft_wrap=True)
 
     console.print("\n[bold green][✓] MongoDB Crash Course completed successfully![/]\n")
 

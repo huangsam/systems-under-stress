@@ -33,6 +33,7 @@ from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.policies import WhiteListRoundRobinPolicy
 from rich.console import Console
+from rich.markup import escape
 
 COMPOSE_DIR = Path(__file__).resolve().parent.parent
 HOST = "127.0.0.1"
@@ -44,9 +45,9 @@ NUM_RECORDS = 5000
 console = Console()
 
 
-def log(msg: str, color: str = "[/]") -> None:
+def log(msg: str, color: str = "[dim]") -> None:
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    console.print(f"[dim][{timestamp}][/] {color}{msg}[/]", flush=True)
+    console.print(f"[dim][{timestamp}][/] {color}{escape(msg)}[/]")
 
 
 def wait_for_cassandra() -> Cluster:
@@ -105,9 +106,9 @@ def setup_schema(session) -> None:
 
 
 def run_experiment() -> None:
-    print("\n" + "=" * 70)
-    print("  EXPERIMENT 03: Wide Partitions & Hot-Spotting Anti-Patterns  ")
-    print("=" * 70 + "\n")
+    console.print("\n" + "=" * 70, markup=False, highlight=False, soft_wrap=True)
+    console.print("  EXPERIMENT 03: Wide Partitions & Hot-Spotting Anti-Patterns  ", markup=False, highlight=False, soft_wrap=True)
+    console.print("=" * 70 + "\n", markup=False, highlight=False, soft_wrap=True)
 
     cluster = wait_for_cassandra()
     session = cluster.connect()
@@ -147,21 +148,21 @@ def run_experiment() -> None:
         _rows_bucket = list(session.execute(f"SELECT * FROM {KEYSPACE}.bucketed_feed WHERE tenant_id = 'tenant_0' AND date_bucket = '2026-10-22' LIMIT 1000"))
         t_bucket_read = (time.perf_counter() - t0) * 1000
 
-        print("\n" + "=" * 70)
-        print("  PARTITION ARCHITECTURE COMPARISON")
-        print("=" * 70)
-        print(f"  Ingestion Strategy        : {'Monolithic (1 Partition)':<25} vs {'Bucketed (10 Partitions)':<25}")
-        print(f"  Write Duration            : {t_mono_write:.3f}s                   vs {t_bucket_write:.3f}s")
-        print(f"  Query Read Latency        : {t_mono_read:.2f} ms                  vs {t_bucket_read:.2f} ms")
+        console.print("\n" + "=" * 70, markup=False, highlight=False, soft_wrap=True)
+        console.print("  PARTITION ARCHITECTURE COMPARISON", markup=False, highlight=False, soft_wrap=True)
+        console.print("=" * 70, markup=False, highlight=False, soft_wrap=True)
+        console.print(f"  Ingestion Strategy        : {'Monolithic (1 Partition)':<25} vs {'Bucketed (10 Partitions)':<25}", markup=False, highlight=False, soft_wrap=True)
+        console.print(f"  Write Duration            : {t_mono_write:.3f}s                   vs {t_bucket_write:.3f}s", markup=False, highlight=False, soft_wrap=True)
+        console.print(f"  Query Read Latency        : {t_mono_read:.2f} ms                  vs {t_bucket_read:.2f} ms", markup=False, highlight=False, soft_wrap=True)
         console.print("  Partition Size Risk       : [red]CRITICAL (>100MB bloat)[/]   vs [green]SAFE (<10MB per bucket)[/]")
-        print("=" * 70 + "\n")
+        console.print("=" * 70 + "\n", markup=False, highlight=False, soft_wrap=True)
 
         console.print("[bold]Cassandra Partitioning Guardrails:[/]")
-        print("1. Maximum recommended partition size: 100MB (Hard limit ~2GB).")
-        print("2. Maximum recommended cells per partition: 100,000 cells.")
-        print("3. Wide partitions cause JVM heap spikes during read repair, compaction, and coordinator caching.")
-        print("4. Remediation: Introduce synthetic bucketing (e.g., date, week, or hash suffix) into partition key.")
-        print()
+        console.print("1. Maximum recommended partition size: 100MB (Hard limit ~2GB).", markup=False, highlight=False, soft_wrap=True)
+        console.print("2. Maximum recommended cells per partition: 100,000 cells.", markup=False, highlight=False, soft_wrap=True)
+        console.print("3. Wide partitions cause JVM heap spikes during read repair, compaction, and coordinator caching.", markup=False, highlight=False, soft_wrap=True)
+        console.print("4. Remediation: Introduce synthetic bucketing (e.g., date, week, or hash suffix) into partition key.", markup=False, highlight=False, soft_wrap=True)
+        console.print(markup=False, highlight=False, soft_wrap=True)
 
     finally:
         session.shutdown()

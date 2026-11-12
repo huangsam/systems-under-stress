@@ -34,14 +34,14 @@ def main() -> None:
     try:
         client.ping()
     except redis.ConnectionError:
-        print("Error: Could not connect to Redis on 127.0.0.1:6379.", file=sys.stderr)
-        print("Run 'make up EXP=eviction-lru' first.", file=sys.stderr)
+        err_console.print("Error: Could not connect to Redis on 127.0.0.1:6379.", markup=False, highlight=False, soft_wrap=True)
+        err_console.print("Run 'make up EXP=eviction-lru' first.", markup=False, highlight=False, soft_wrap=True)
         sys.exit(1)
 
     console.print("[bold cyan]=== Live Redis Stats Monitor (Ctrl+C to stop) ===[/]")
     header = f"{'Used Mem':>10} | {'Max Mem':>10} | {'Usage %':>8} | {'Evicted Keys':>14} | {'Total Keys':>12} | {'Hit Ratio':>10}"
-    print(header)
-    print("-" * len(header))
+    console.print(header, markup=False, highlight=False, soft_wrap=True)
+    console.print("-" * len(header), markup=False, highlight=False, soft_wrap=True)
 
     last_evicted = 0
     while True:
@@ -68,17 +68,20 @@ def main() -> None:
 
             evict_str = f"{evicted:,} (+{evict_diff})" if evict_diff > 0 else f"{evicted:,}"
 
-            print(
+            console.print(
                 f"{format_bytes(used):>10} | {format_bytes(max_mem):>10} | {usage_pct:>7.1f}% | {evict_str:>14} | {total_keys:>12,} | {hit_ratio:>9.1f}%",
                 end="\r",
-                flush=True,
+                markup=False,
+                highlight=False,
+                soft_wrap=True,
             )
+            console.file.flush()
             time.sleep(1.0)
         except KeyboardInterrupt:
-            print("\nStopped.")
+            console.print("\nStopped.", markup=False, highlight=False, soft_wrap=True)
             break
         except Exception as e:
-            print(f"\nError fetching stats: {e}")
+            console.print(f"\nError fetching stats: {e}", markup=False, highlight=False, soft_wrap=True)
             time.sleep(1.0)
 
 

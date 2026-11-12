@@ -22,6 +22,7 @@ import sys
 
 import psycopg
 from rich.console import Console
+from rich.markup import escape
 
 DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
 TABLE_NAME = "crash_course_items"
@@ -38,8 +39,8 @@ def main() -> None:
     try:
         conn = psycopg.connect(DB_CONN, autocommit=True)
     except Exception as e:
-        console.print(f"[bold red][!] Connection failed: {e}[/]")
-        print("Start the lab container first: cd postgres && make up EXP=isolation")
+        console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
+        console.print("Start the lab container first: cd postgres && make up EXP=isolation", markup=False, highlight=False, soft_wrap=True)
         sys.exit(1)
 
     with conn:
@@ -48,7 +49,7 @@ def main() -> None:
             console.print("[bold blue][*] 1. Server Version & Connectivity[/]")
             cur.execute("SELECT version();")
             version_str = cur.fetchone()[0]
-            print(f"    Version: {version_str.split(',')[0]}")
+            console.print(f"    Version: {version_str.split(',')[0]}", markup=False, highlight=False, soft_wrap=True)
 
             # 2. Schema DDL
             console.print("\n[bold blue][*] 2. Creating Demo Table[/]")
@@ -63,7 +64,7 @@ def main() -> None:
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 );
             """)
-            print(f"    Created table '{TABLE_NAME}'.")
+            console.print(f"    Created table '{TABLE_NAME}'.", markup=False, highlight=False, soft_wrap=True)
 
             # 3. Parameterized Insert & Batch Insert
             console.print("\n[bold blue][*] 3. Parameterized Inserts & Reads[/]")
@@ -72,7 +73,7 @@ def main() -> None:
                 ("Mechanical Keyboard", "KEY-001", 129.99, 15),
             )
             inserted_id = cur.fetchone()[0]
-            print(f"    Inserted single row with ID: {inserted_id}")
+            console.print(f"    Inserted single row with ID: {inserted_id}", markup=False, highlight=False, soft_wrap=True)
 
             batch_data = [
                 ("Gaming Mouse", "MOU-002", 59.50, 40),
@@ -83,18 +84,18 @@ def main() -> None:
                 f"INSERT INTO {TABLE_NAME} (name, sku, price, stock) VALUES (%s, %s, %s, %s);",
                 batch_data,
             )
-            print(f"    Batch-inserted {len(batch_data)} additional rows.")
+            console.print(f"    Batch-inserted {len(batch_data)} additional rows.", markup=False, highlight=False, soft_wrap=True)
 
             # Read back
             cur.execute(f"SELECT id, name, sku, price, stock FROM {TABLE_NAME} ORDER BY id;")
             rows = cur.fetchall()
-            print(f"    Total rows in {TABLE_NAME}: {len(rows)}")
+            console.print(f"    Total rows in {TABLE_NAME}: {len(rows)}", markup=False, highlight=False, soft_wrap=True)
             for r in rows:
-                print(f"      - ID {r[0]}: {r[1]} ({r[2]}) -> ${r[3]} [Stock: {r[4]}]")
+                console.print(f"      - ID {r[0]}: {r[1]} ({r[2]}) -> ${r[3]} [Stock: {r[4]}]", markup=False, highlight=False, soft_wrap=True)
 
             # Update
             cur.execute(f"UPDATE {TABLE_NAME} SET stock = stock - 2 WHERE sku = %s;", ("KEY-001",))
-            print("    Decremented stock for 'KEY-001'.")
+            console.print("    Decremented stock for 'KEY-001'.", markup=False, highlight=False, soft_wrap=True)
 
     # 4. Transactions: Commit vs Rollback
     console.print("\n[bold blue][*] 4. Transaction Semantics (Atomic Rollback)[/]")
@@ -103,12 +104,12 @@ def main() -> None:
             cur.execute(f"SELECT count(*) FROM {TABLE_NAME};")
             initial_count = cur.fetchone()[0]
 
-            print("    Beginning transaction, inserting candidate row...")
+            console.print("    Beginning transaction, inserting candidate row...", markup=False, highlight=False, soft_wrap=True)
             cur.execute(
                 f"INSERT INTO {TABLE_NAME} (name, sku, price, stock) VALUES (%s, %s, %s, %s);",
                 ("Aborted Product", "ABT-999", 9.99, 1),
             )
-            print("    Explicitly rolling back transaction...")
+            console.print("    Explicitly rolling back transaction...", markup=False, highlight=False, soft_wrap=True)
             tx_conn.rollback()
 
     with psycopg.connect(DB_CONN, autocommit=True) as conn:
@@ -116,7 +117,7 @@ def main() -> None:
             cur.execute(f"SELECT count(*) FROM {TABLE_NAME};")
             post_count = cur.fetchone()[0]
             assert post_count == initial_count, "Rollback invariant violated!"
-            print(f"    Verified row count unchanged ({post_count} rows). Rollback succeeded.")
+            console.print(f"    Verified row count unchanged ({post_count} rows). Rollback succeeded.", markup=False, highlight=False, soft_wrap=True)
 
             # 5. Diagnostics: pg_stat_activity & Table Footprint
             console.print("\n[bold blue][*] 5. Diagnostic Queries & Catalog Metadata[/]")
@@ -126,7 +127,7 @@ def main() -> None:
                 WHERE datname = current_database() AND pid != pg_backend_pid();
             """)
             backends = cur.fetchall()
-            print(f"    Concurrent backends on '{cur.connection.info.dbname}': {len(backends)}")
+            console.print(f"    Concurrent backends on '{cur.connection.info.dbname}': {len(backends)}", markup=False, highlight=False, soft_wrap=True)
 
             cur.execute(f"""
                 SELECT
@@ -135,11 +136,11 @@ def main() -> None:
                     pg_size_pretty(pg_indexes_size('{TABLE_NAME}')) AS index_size;
             """)
             sizes = cur.fetchone()
-            print(f"    Table '{TABLE_NAME}' Footprint: Total: {sizes[0]}, Heap: {sizes[1]}, Indexes: {sizes[2]}")
+            console.print(f"    Table '{TABLE_NAME}' Footprint: Total: {sizes[0]}, Heap: {sizes[1]}, Indexes: {sizes[2]}", markup=False, highlight=False, soft_wrap=True)
 
             # Cleanup
             cur.execute(f"DROP TABLE IF EXISTS {TABLE_NAME};")
-            print(f"    Cleaned up demo table '{TABLE_NAME}'.")
+            console.print(f"    Cleaned up demo table '{TABLE_NAME}'.", markup=False, highlight=False, soft_wrap=True)
 
     console.print("\n[bold green][✓] PostgreSQL Crash Course completed successfully![/]\n")
 

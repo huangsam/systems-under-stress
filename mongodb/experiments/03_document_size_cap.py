@@ -50,7 +50,7 @@ def main() -> None:
         client.admin.command("ping")
     except Exception:
         console.print("[bold red]Error: Cannot connect to MongoDB on 127.0.0.1:27017.[/]")
-        print("Start the container first: make up EXP=document-limits")
+        console.print("Start the container first: make up EXP=document-limits", markup=False, highlight=False, soft_wrap=True)
         sys.exit(1)
 
     db = client["lab_db"]
@@ -59,7 +59,7 @@ def main() -> None:
 
     console.print("=" * 70, style="bold cyan")
     console.print("[bold cyan]Experiment 03: MongoDB Unbounded Array Growth & the 16MB BSON Ceiling[/]")
-    print(f"Hard BSON Document Limit: {format_bytes(BSON_MAX_BYTES)} ({BSON_MAX_BYTES:,} bytes)")
+    console.print(f"Hard BSON Document Limit: {format_bytes(BSON_MAX_BYTES)} ({BSON_MAX_BYTES:,} bytes)", markup=False, highlight=False, soft_wrap=True)
     console.print("=" * 70 + "\n", style="bold cyan")
 
     # 1. Part 1: Unbounded $push into a single document until 16MB crash
@@ -98,8 +98,9 @@ def main() -> None:
                         ]
                     )
                 )[0]
-                print(
-                    f"    Batch {batch_num:>2}: Events={stats['count']:>5,} | BSON Size={format_bytes(stats['size']):>9} | Write Latency={elapsed_ms:>6.2f}ms"
+                console.print(
+                    f"    Batch {batch_num:>2}: Events={stats['count']:>5,} | BSON Size={format_bytes(stats['size']):>9} | Write Latency={elapsed_ms:>6.2f}ms",
+                markup=False, highlight=False, soft_wrap=True
                 )
         except (DocumentTooLarge, WriteError, OperationFailure) as err:
             stats = list(
@@ -111,8 +112,8 @@ def main() -> None:
                 )
             )[0]
             console.print(f"\n  [bold red][!] HARD 16MB CEILING BREACHED at Batch {batch_num}![/]")
-            print(f"      Document Size Before Rejection : {format_bytes(stats['size'])} ({stats['size']:,} bytes)")
-            print(f"      Error Code / Message           : {err}")
+            console.print(f"      Document Size Before Rejection : {format_bytes(stats['size'])} ({stats['size']:,} bytes)", markup=False, highlight=False, soft_wrap=True)
+            console.print(f"      Error Code / Message           : {err}", markup=False, highlight=False, soft_wrap=True)
             break
 
     # 2. Part 2: The Bucket Pattern (Capping array at 500 events per document)
@@ -135,19 +136,19 @@ def main() -> None:
     bucket_elapsed_ms = (time.perf_counter() - t_start) * 1000
     num_buckets = col_bucketed.count_documents({"sensor_id": "sensor-01"})
 
-    print(f"    Successfully wrote 70 batches ({70 * 64:,} events, ~18MB total) with ZERO errors!")
-    print(f"    Total Bucket Documents Created : {num_buckets}")
-    print(f"    Average Write Latency / Batch  : {bucket_elapsed_ms / 70:.2f}ms (vs {peak_latency_ms:.2f}ms peak on bloated doc)")
+    console.print(f"    Successfully wrote 70 batches ({70 * 64:,} events, ~18MB total) with ZERO errors!", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"    Total Bucket Documents Created : {num_buckets}", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"    Average Write Latency / Batch  : {bucket_elapsed_ms / 70:.2f}ms (vs {peak_latency_ms:.2f}ms peak on bloated doc)", markup=False, highlight=False, soft_wrap=True)
 
     console.print("\n" + "=" * 70, style="bold green")
-    print("SYSTEMS TAKEAWAYS")
+    console.print("SYSTEMS TAKEAWAYS", markup=False, highlight=False, soft_wrap=True)
     console.print("=" * 70, style="bold green")
-    print("1. Never use unbounded $push arrays for activity logs, comments, or IoT telemetry.")
-    print(f"2. Write amplification: Latency grew from {initial_latency_ms:.2f}ms to {peak_latency_ms:.2f}ms as WiredTiger")
-    print("   had to reallocate and rewrite the entire multi-megabyte document on every update.")
-    print("3. The Bucket Pattern ($lt threshold + upsert: true) splits streams into bounded")
-    print("   documents (~256KB each), keeping memory footprint and latency O(1).")
-    print("======================================================================\n")
+    console.print("1. Never use unbounded $push arrays for activity logs, comments, or IoT telemetry.", markup=False, highlight=False, soft_wrap=True)
+    console.print(f"2. Write amplification: Latency grew from {initial_latency_ms:.2f}ms to {peak_latency_ms:.2f}ms as WiredTiger", markup=False, highlight=False, soft_wrap=True)
+    console.print("   had to reallocate and rewrite the entire multi-megabyte document on every update.", markup=False, highlight=False, soft_wrap=True)
+    console.print("3. The Bucket Pattern ($lt threshold + upsert: true) splits streams into bounded", markup=False, highlight=False, soft_wrap=True)
+    console.print("   documents (~256KB each), keeping memory footprint and latency O(1).", markup=False, highlight=False, soft_wrap=True)
+    console.print("======================================================================\n", markup=False, highlight=False, soft_wrap=True)
 
     client.close()
 
