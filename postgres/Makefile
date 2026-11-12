@@ -2,6 +2,8 @@
 EXP ?= isolation
 SCRIPT ?= 01_isolation
 
+TARGET_SVC = $(if $(filter replication,$(EXP)),postgres-primary,$(EXP))
+
 .PHONY: help up down clean soft-reset run psql logs
 
 help:
@@ -20,6 +22,7 @@ help:
 	@echo "  - isolation       (Standard settings, testing write skew & dirty reads)"
 	@echo "  - locks           (deadlock_timeout=100ms, testing row lock contention)"
 	@echo "  - work-mem        (work_mem=4MB, testing sort spill-to-disk)"
+	@echo "  - replication     (Physical streaming replication, testing standby query conflicts)"
 
 up:
 	docker compose --profile $(EXP) up -d --wait
@@ -31,14 +34,14 @@ clean:
 	docker compose --profile "*" down -v
 
 soft-reset:
-	docker compose exec -T $(EXP) psql -U postgres -d lab_db -f /docker-entrypoint-initdb.d/init.sql
+	docker compose exec -T $(TARGET_SVC) psql -U postgres -d lab_db -f /docker-entrypoint-initdb.d/init.sql
 	@echo "==> PostgreSQL schema re-seeded."
 
 run:
 	uv run experiments/$(SCRIPT).py
 
 psql:
-	docker compose exec -it $(EXP) psql -U postgres -d lab_db
+	docker compose exec -it $(TARGET_SVC) psql -U postgres -d lab_db
 
 logs:
-	docker compose logs -f $(EXP)
+	docker compose logs -f $(TARGET_SVC)

@@ -13,12 +13,14 @@ postgres/
 ├── docker-compose.yml       # Pinned image, cgroups limits, profiles
 ├── Makefile                 # One-touch runner targets
 ├── initdb.d/
-│   └── init.sql             # Automatic schema initialization
+│   ├── init.sql             # Automatic schema initialization
+│   └── 01_replication.sh    # Replication role & pg_hba authorization
 ├── experiments/
 │   ├── 00_crash_course.py   # Baseline connectivity, CRUD & transactional rollback
 │   ├── 01_isolation.py      # Dirty reads & Write Skew (Repeatable Read vs Serializable)
 │   ├── 02_locks.py          # Hot row lock queues & deadlock detection
-│   └── 03_work_mem.py       # Sort spill-to-disk on low work_mem
+│   ├── 03_work_mem.py       # Sort spill-to-disk on low work_mem
+│   └── 04_replication_conflicts.py # Streaming replication lag, query conflict aborts & remediation
 └── README.md
 ```
 
@@ -108,12 +110,66 @@ make clean
 
 ---
 
+## Experiment 04: Physical Streaming Replication & Standby Query Conflicts
+
+### 1. Hypothesis & Objective
+- **Replication Baseline**: Primary streams WAL to a physical standby (`walreceiver`) with zero baseline byte lag (`pg_wal_lsn_diff(sent_lsn, replay_lsn) = 0`).
+- **Standby Query Cancellation Conflict (Recovery Conflict)**:
+  - When an analytical transaction on the standby holds an open MVCC snapshot (`REPEATABLE READ`), and concurrent `DELETE` and `VACUUM` operations on the primary prune dead row versions, the primary emits cleanup WAL records (`HEAP2_CLEAN` / `HEAP2_VACUUM`).
+  - Standby recovery pauses WAL replay up to `max_standby_streaming_delay = 1s`. Once the delay expires, the standby engine terminates the conflicting query with SQLSTATE `40001 serialization_failure`:
+    `terminating connection due to conflict with recovery`
+    `DETAIL: User query might have needed to see row versions that must be removed.`
+- **Remediation via `hot_standby_feedback = on`**:
+  - The standby advertises its oldest active transaction ID (`backend_xmin`) back upstream to the primary.
+  - The primary's VACUUM respects the standby's active snapshot and defers physical tuple removal until the standby transaction commits, eliminating query cancellations.
+
+### 2. Configuration & Constraints
+- **Nodes**: 1 Primary (`postgres-primary` on `127.0.0.1:5432`), 1 Standby (`postgres-standby` on `127.0.0.1:5433`)
+- **Docker Image**: `postgres:18.6-alpine`
+- **Resource Constraints**: `memory: 128M`, `cpus: '0.75'` per container
+- **Replication Parameters**:
+  - Primary: `wal_level=replica`, `max_wal_senders=5`, `max_replication_slots=5`, `hot_standby=on`
+  - Standby: boots via `pg_basebackup -R`, `max_standby_streaming_delay=1s`, `hot_standby=on`
+
+### 3. How to Run
+```bash
+cd postgres
+
+# 1. Start primary and standby containers
+make up EXP=replication
+
+# 2. Run the streaming replication & conflict experiment
+make run SCRIPT=04_replication_conflicts
+
+# 3. Fast soft-reset or clean teardown
+make soft-reset EXP=replication
+make clean
+```
+
+### 4. Empirical Results
+
+| Test Phase | Workload / Scenario | Standby Feedback | Outcome | Observed Failure Signature / Metric |
+|---|---|---|---|---|
+| **Phase 1: Status** | Baseline replication link | `off` | **Healthy Streaming** | Byte Lag: `0 B`, state: `streaming (async)` |
+| **Phase 2: Conflict** | Long snapshot + Primary `VACUUM` | `off` | **`ABORTED (40001)`** | `terminating connection due to conflict with recovery` (`delay > 1.0s`) |
+| **Phase 3: Remediation** | Long snapshot + Primary `VACUUM` | **`on`** | **`COMMITTED` (Success)** | Standby `backend_xmin` pinned on primary; `10,000` rows preserved |
+
+### 5. Production & Systems Takeaways
+1. **The Replication Conflict Dilemma**: In PostgreSQL physical streaming replication, the standby is not an independent storage layer; it is an exact physical mirror of data pages replaying WAL. When primary `VACUUM` erases dead row versions from pages, the standby must apply those changes or stop replaying WAL.
+2. **`max_standby_streaming_delay` Tradeoff**:
+   - Setting a low delay (e.g., `1s` to `30s`) protects replication freshness but causes frequent cancellations of analytical reporting queries on read replicas.
+   - Setting a high delay (or `-1` for unlimited) protects long-running queries but allows replication lag to grow unboundedly, delaying replica freshness and failover readiness.
+3. **`hot_standby_feedback` Costs**: Enabling `hot_standby_feedback = on` completely eliminates snapshot conflicts, but shifts the cost to the primary: long-running analytical queries on replicas prevent the primary from vacuuming dead tuples, causing primary table bloat and WAL bloat.
+
+---
+
 ## Primary Sources & Deep-Dive References
 
 - [PostgreSQL Documentation: Chapter 13 – Concurrency Control & Isolation Levels](https://www.postgresql.org/docs/current/transaction-iso.html) – Official specification for dirty read immunity, repeatable read snapshot guarantees, and SSI serialization failures.
 - Cahill, Rohm, Fekete (ACM SIGMOD 2008): [*Serializable Isolation for Snapshot Databases*](https://courses.cs.washington.edu/courses/cse544/11wi/papers/cahill-sigmod08.pdf) – Foundational paper behind SSI, accompanied by [Ports & Grittner (VLDB 2012): Serializable Snapshot Isolation in PostgreSQL](https://vldb.org/pvldb/vol5/p1850_danrkports_vldb2012.pdf) and the [PostgreSQL SSI Internal Architecture Wiki](https://wiki.postgresql.org/wiki/SSI).
 - [PostgreSQL Documentation: Explicit Locking & Deadlock Detection](https://www.postgresql.org/docs/current/explicit-locking.html) – Granular explanation of row-level exclusive locks (`FOR UPDATE`), lock queues, and `deadlock_timeout` detection cycles.
 - [PostgreSQL Documentation: Resource Consumption (`work_mem`)](https://www.postgresql.org/docs/current/runtime-config-resource.html#GUC-WORK-MEM) – Official documentation on memory limits for internal sort operations and hash tables before spilling to temporary disk files.
+- [PostgreSQL Documentation: Chapter 27 – High Availability, Load Balancing, and Replication (Handling Query Conflicts)](https://www.postgresql.org/docs/current/hot-standby.html#HOT-STANDBY-CONFLICT) – Official guide to replication query conflicts, `max_standby_streaming_delay`, and `hot_standby_feedback`.
 
 ---
 

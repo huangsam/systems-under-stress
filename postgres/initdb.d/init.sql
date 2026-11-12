@@ -14,7 +14,9 @@ CREATE TABLE IF NOT EXISTS accounts (
     balance NUMERIC(12, 2) NOT NULL DEFAULT 1000.00
 );
 
--- Seed initial data
+-- Seed initial data (truncate first for clean soft-reset)
+TRUNCATE TABLE doctors, accounts RESTART IDENTITY;
+
 INSERT INTO doctors (name, on_call) VALUES 
     ('Dr. Alice', TRUE),
     ('Dr. Bob', TRUE);
