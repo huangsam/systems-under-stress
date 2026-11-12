@@ -2,6 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "pyyaml>=6.0.1",
+#     "rich>=13.7.0",
 # ]
 # ///
 """
@@ -17,29 +18,44 @@ from __future__ import annotations
 
 import sys
 from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+from rich.console import Console
+from rich.table import Table
+
+console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 COMPOSE_FILES = sorted(REPO_ROOT.glob("*/docker-compose.yml"))
-
 SENSITIVE_PREFIXES = ("/", "~", "/var/run/docker.sock")
 
 
-def audit_compose_file(path: Path) -> list[str]:
-    rel_path = path.relative_to(REPO_ROOT)
-    errors: list[str] = []
+@dataclass
+class AuditResult:
+    rel_path: str
+    service_count: int = 0
+    errors: list[str] = field(default_factory=list)
+
+
+def audit_compose_file(path: Path) -> AuditResult:
+    rel_path = str(path.relative_to(REPO_ROOT))
+    result = AuditResult(rel_path=rel_path)
 
     try:
         with open(path) as f:
             data = yaml.safe_load(f) or {}
     except Exception as exc:
-        return [f"{rel_path}: Failed to parse YAML: {exc}"]
+        result.errors.append(f"Failed to parse YAML: {exc}")
+        return result
 
     services = data.get("services", {})
+    result.service_count = len(services)
     if not services:
-        return [f"{rel_path}: No services defined"]
+        result.errors.append("No services defined")
+        return result
 
     named_volumes = set(data.get("volumes", {}).keys()) if data.get("volumes") else set()
     vol_to_profiles: dict[str, set[tuple[str, ...]]] = defaultdict(set)
@@ -52,61 +68,102 @@ def audit_compose_file(path: Path) -> list[str]:
         deploy = sdef.get("deploy", {})
         limits = deploy.get("resources", {}).get("limits", {})
         if not limits.get("cpus") or not limits.get("memory"):
-            errors.append(f"{rel_path} [{sname}]: Missing deploy.resources.limits (both cpus and memory required)")
+            result.errors.append(f"[{sname}] Missing deploy.resources.limits (both cpus and memory required)")
 
         # Invariant 2: Loopback-only port binding
         ports = sdef.get("ports", [])
         for p in ports:
             if isinstance(p, str):
                 if not p.startswith("127.0.0.1:"):
-                    errors.append(f"{rel_path} [{sname}]: Port '{p}' must explicitly bind to 127.0.0.1")
+                    result.errors.append(f"[{sname}] Port '{p}' must explicitly bind to 127.0.0.1")
             elif isinstance(p, dict):
                 host_ip = p.get("host_ip", "")
                 if host_ip != "127.0.0.1":
-                    errors.append(f"{rel_path} [{sname}]: Port host_ip '{host_ip}' must be 127.0.0.1")
+                    result.errors.append(f"[{sname}] Port host_ip '{host_ip}' must be 127.0.0.1")
 
         # Invariant 3: Deterministic readiness healthcheck
         hc = sdef.get("healthcheck", {})
         if not hc.get("test"):
-            errors.append(f"{rel_path} [{sname}]: Missing healthcheck.test")
+            result.errors.append(f"[{sname}] Missing healthcheck.test")
 
         # Invariant 4 & 5: Volume safety and profile isolation
         profs = tuple(sorted(sdef.get("profiles", ["default"])))
         for v in sdef.get("volumes", []):
             vol_target = v.split(":")[0] if isinstance(v, str) else v.get("source", "")
             if vol_target.startswith(SENSITIVE_PREFIXES):
-                errors.append(f"{rel_path} [{sname}]: Sensitive host mount '{vol_target}' is forbidden")
+                result.errors.append(f"[{sname}] Sensitive host mount '{vol_target}' is forbidden")
             elif not vol_target.startswith("."):
                 # Named volume
                 if vol_target not in named_volumes:
-                    errors.append(f"{rel_path} [{sname}]: Mounts undefined named volume '{vol_target}'")
+                    result.errors.append(f"[{sname}] Mounts undefined named volume '{vol_target}'")
                 vol_to_profiles[vol_target].add(profs)
 
     # Invariant 5: Verify no named volumes shared across different profile sets
     for vol, prof_sets in vol_to_profiles.items():
         if len(prof_sets) > 1:
-            errors.append(f"{rel_path}: Named volume '{vol}' is shared across distinct profiles: {[list(p) for p in prof_sets]}")
+            result.errors.append(f"Named volume '{vol}' shared across distinct profiles: {[list(p) for p in prof_sets]}")
 
-    return errors
+    return result
 
 
 def main() -> int:
     if not COMPOSE_FILES:
-        print("ERROR: No docker-compose.yml files found to audit.", file=sys.stderr)
+        console.print("[bold red]ERROR: No docker-compose.yml files found to audit.[/]")
         return 1
 
-    all_errors: list[str] = []
-    for cf in COMPOSE_FILES:
-        errs = audit_compose_file(cf)
-        all_errors.extend(errs)
+    results = [audit_compose_file(cf) for cf in COMPOSE_FILES]
+    total_services = sum(r.service_count for r in results)
+    total_errors = sum(len(r.errors) for r in results)
 
-    if all_errors:
-        print("Safety & Compose Invariant Violations Found:", file=sys.stderr)
-        for err in all_errors:
-            print(f"  ❌ {err}", file=sys.stderr)
+    table = Table(
+        title="Compose Safety & Host Invariant Audit",
+        header_style="bold cyan",
+        border_style="dim",
+    )
+    table.add_column("Compose File", style="bold")
+    table.add_column("Services", justify="right")
+    table.add_column("Resource Limits", justify="center")
+    table.add_column("Loopback (127.0.0.1)", justify="center")
+    table.add_column("Healthchecks", justify="center")
+    table.add_column("Volume Isolation", justify="center")
+    table.add_column("Status", justify="center")
+
+    for r in results:
+        status = "[bold green]PASS[/]" if not r.errors else "[bold red]FAIL[/]"
+        has_limits_err = any("limits" in e for e in r.errors)
+        has_port_err = any("Port" in e for e in r.errors)
+        has_hc_err = any("healthcheck" in e for e in r.errors)
+        has_vol_err = any("volume" in e.lower() or "mount" in e.lower() for e in r.errors)
+
+        c_lim = "[red]FAIL[/]" if has_limits_err else "[green]PASS[/]"
+        c_port = "[red]FAIL[/]" if has_port_err else "[green]PASS[/]"
+        c_hc = "[red]FAIL[/]" if has_hc_err else "[green]PASS[/]"
+        c_vol = "[red]FAIL[/]" if has_vol_err else "[green]PASS[/]"
+
+        table.add_row(
+            r.rel_path,
+            str(r.service_count),
+            c_lim,
+            c_port,
+            c_hc,
+            c_vol,
+            status,
+        )
+
+    console.print()
+    console.print(table)
+    console.print()
+
+    if total_errors > 0:
+        console.print(f"[bold red]Found {total_errors} Invariant Violation(s):[/]\n")
+        for r in results:
+            if r.errors:
+                console.print(f"[bold yellow]{r.rel_path}:[/]")
+                for err in r.errors:
+                    console.print(f"  [red]❌[/] {err}")
         return 1
 
-    print(f"✅ Verified {len(COMPOSE_FILES)} compose files against all repository safety invariants.")
+    console.print(f"[bold green]✔ All {len(results)} Compose files and {total_services} services strictly comply with AGENTS.md safety invariants.[/]\n")
     return 0
 
 
