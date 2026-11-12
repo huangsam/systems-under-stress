@@ -13,3 +13,8 @@ __pycache__/
 *.log
 *.rdb
 *.aof
+
+# Personal or temporary directories
+brainstorm/
+scratch/
+playground/
