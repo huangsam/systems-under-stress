@@ -112,8 +112,8 @@ def allocate_until_oom(chunk_size_bytes: int = 4 * 1024 * 1024) -> None:
     chunk_mb = chunk_size_bytes / (1024 * 1024)
     pid = os.getpid()
 
-    print(f"[*] Memory Allocator Worker started (PID: {pid})...")
-    print(f"[*] Allocation chunk size: {chunk_mb:.1f} MB (dirtying 4KB pages)")
+    plain_console.print(f"[*] Memory Allocator Worker started (PID: {pid})...")
+    plain_console.print(f"[*] Allocation chunk size: {chunk_mb:.1f} MB (dirtying 4KB pages)")
 
     for step in range(1, 100):
         # Allocate chunk
@@ -139,7 +139,7 @@ def allocate_until_oom(chunk_size_bytes: int = 4 * 1024 * 1024) -> None:
             except Exception:
                 pass
 
-        print(f"  [Chunk #{step:02d}] Allocated +{chunk_mb:.1f} MB (Total: {total_mb:.1f} MB){rss_str}")
+        plain_console.print(f"  [Chunk #{step:02d}] Allocated +{chunk_mb:.1f} MB (Total: {total_mb:.1f} MB){rss_str}")
         sys.stdout.flush()
         time.sleep(0.05)
 

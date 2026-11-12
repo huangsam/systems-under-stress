@@ -13,7 +13,7 @@ x-neo4j-base: &neo4j-base
     resources:
       limits:
         cpus: '1.0'
-        memory: 512M
+        memory: 768M
   healthcheck:
     test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:7474 || exit 1"]
     interval: 5s
@@ -33,7 +33,7 @@ services:
       - neo4j-traversal-data:/data
 
   # Profile: supernode - Exp 02: Dense Supernodes & Lock Contention
-  # Limits: 512MB RAM, hub node with 30,000+ relationships
+  # Limits: 768MB RAM, hub node with 30,000+ relationships
   # Objective: Tests pointer-chasing read degradation and exclusive write-lock contention
   # Runner: make up EXP=supernode && make run SCRIPT=02_supernode
   supernode:

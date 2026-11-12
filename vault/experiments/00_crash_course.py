@@ -44,10 +44,11 @@ def main() -> None:
     try:
         is_init = client.sys.is_initialized()
         is_sealed = client.sys.is_sealed()
-        health = client.sys.read_health_status(method="GET").json()
+        health_res = client.sys.read_health_status(method="GET")
+        health = health_res.json() if hasattr(health_res, "json") else health_res
     except Exception as e:
         console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
-        plain_console.print("Start the lab container first: cd vault && make up EXP=dynamic-db")
+        plain_console.print("Start the lab container first: cd vault && make up EXP=dynamic-creds")
         sys.exit(1)
 
     # 1. Health & Server Info

@@ -41,13 +41,21 @@ def main() -> None:
     console.print("[bold green]Apache Cassandra Crash Course: Partition Keys & CQL Mechanics[/]")
     console.print("=" * 70 + "\n", style="bold cyan")
 
-    try:
-        cluster = Cluster([HOST], port=PORT)
-        session = cluster.connect()
-    except Exception as e:
-        console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
-        plain_console.print("Start the lab container first: cd cassandra && make up EXP=tombstones")
-        sys.exit(1)
+    import time
+
+    session = None
+    cluster = None
+    for attempt in range(1, 25):
+        try:
+            cluster = Cluster([HOST], port=PORT, connect_timeout=5.0)
+            session = cluster.connect()
+            break
+        except Exception as e:
+            if attempt == 24:
+                console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
+                plain_console.print("Start the lab container first: cd cassandra && make up EXP=tombstones")
+                sys.exit(1)
+            time.sleep(2)
 
     try:
         # 1. Cluster Metadata & Connectivity

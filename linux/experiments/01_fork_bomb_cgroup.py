@@ -28,8 +28,7 @@ import time
 
 from rich.console import Console
 
-console = Console()
-plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def get_cgroup_pids_paths() -> tuple[str | None, str | None]:
@@ -76,19 +75,19 @@ def read_file_safe(path: str | None) -> str:
 
 
 def run_experiment() -> None:
-    plain_console.print("=" * 70)
-    plain_console.print(" Linux Kernel Primitives Lab - Experiment 01: Cgroups PID Limit")
-    plain_console.print("=" * 70)
+    console.print("=" * 70)
+    console.print(" Linux Kernel Primitives Lab - Experiment 01: Cgroups PID Limit")
+    console.print("=" * 70)
 
     # 1. Host Invariant Check: Protect macOS host
     if platform.system() != "Linux":
-        plain_console.print(f"\n[SECURITY GUARD] Detected host OS: {platform.system()} ({platform.release()}).")
-        plain_console.print("Linux cgroups controllers (/sys/fs/cgroup) are exclusive to the Linux kernel.")
-        plain_console.print("An unconstrained fork bomb must NEVER be executed directly on the host machine.")
-        plain_console.print("\nPlease run this experiment inside the isolated Linux container:")
-        plain_console.print("    cd linux")
-        plain_console.print("    make up EXP=pid-limit")
-        plain_console.print("    make run EXP=pid-limit SCRIPT=01_fork_bomb_cgroup\n")
+        console.print(f"\n[SECURITY GUARD] Detected host OS: {platform.system()} ({platform.release()}).")
+        console.print("Linux cgroups controllers (/sys/fs/cgroup) are exclusive to the Linux kernel.")
+        console.print("An unconstrained fork bomb must NEVER be executed directly on the host machine.")
+        console.print("\nPlease run this experiment inside the isolated Linux container:")
+        console.print("    cd linux")
+        console.print("    make up EXP=pid-limit")
+        console.print("    make run EXP=pid-limit SCRIPT=01_fork_bomb_cgroup\n")
         sys.exit(0)
 
     # 2. Inspect Linux environment & cgroup controllers
@@ -96,17 +95,17 @@ def run_experiment() -> None:
     pids_max = read_file_safe(pids_max_file)
     initial_pids = read_file_safe(pids_curr_file)
 
-    plain_console.print(f"[*] Kernel Version  : {platform.uname().release}")
-    plain_console.print(f"[*] Current PID     : {os.getpid()}")
-    plain_console.print(f"[*] cgroup pids.max : {pids_max} (path: {pids_max_file})")
-    plain_console.print(f"[*] Initial Tasks   : {initial_pids} (path: {pids_curr_file})")
+    console.print(f"[*] Kernel Version  : {platform.uname().release}")
+    console.print(f"[*] Current PID     : {os.getpid()}")
+    console.print(f"[*] cgroup pids.max : {pids_max} (path: {pids_max_file})")
+    console.print(f"[*] Initial Tasks   : {initial_pids} (path: {pids_curr_file})")
 
     if pids_max == "max" or pids_max == "N/A":
-        plain_console.print("[!] WARNING: cgroups pids.max is unconstrained or not detected.")
-        plain_console.print("    Ensure the container was started with `pids: 40` limit.")
+        console.print("[!] WARNING: cgroups pids.max is unconstrained or not detected.")
+        console.print("    Ensure the container was started with `pids: 40` limit.")
 
     # 3. Controlled Process Spawning Loop
-    plain_console.print("\n--- Phase 1: Controlled Process Spawning (Approaching Cgroup Ceiling) ---")
+    console.print("\n--- Phase 1: Controlled Process Spawning (Approaching Cgroup Ceiling) ---")
     pipe_r, pipe_w = os.pipe()
     children = []
     spawn_count = 0
@@ -131,7 +130,7 @@ def run_experiment() -> None:
                     children.append(pid)
                     spawn_count += 1
                     curr = read_file_safe(pids_curr_file)
-                    plain_console.print(f"  [Spawned Child #{i:02d}] PID: {pid:<6} | cgroups pids.current: {curr} / {pids_max}")
+                    console.print(f"  [Spawned Child #{i:02d}] PID: {pid:<6} | cgroups pids.current: {curr} / {pids_max}")
                     # Brief pause for telemetry observation
                     time.sleep(0.02)
 
@@ -139,25 +138,25 @@ def run_experiment() -> None:
                 if exc.errno == errno.EAGAIN:  # Errno 11: Resource temporarily unavailable
                     hit_limit = True
                     curr = read_file_safe(pids_curr_file)
-                    plain_console.print("\n" + "#" * 70)
-                    plain_console.print("  >>> SUCCESS: HIT CGROUP PID LIMIT <<<")
-                    plain_console.print(f"  Exact Exception Caught : {type(exc).__name__}: [Errno {exc.errno}] {os.strerror(exc.errno)}")
-                    plain_console.print(f"  Total Children Spawned : {spawn_count}")
-                    plain_console.print(f"  Cgroup Tasks At Failure: {curr} / {pids_max}")
-                    plain_console.print("#" * 70)
+                    console.print("\n" + "#" * 70)
+                    console.print("  >>> SUCCESS: HIT CGROUP PID LIMIT <<<")
+                    console.print(f"  Exact Exception Caught : {type(exc).__name__}: [Errno {exc.errno}] {os.strerror(exc.errno)}")
+                    console.print(f"  Total Children Spawned : {spawn_count}")
+                    console.print(f"  Cgroup Tasks At Failure: {curr} / {pids_max}")
+                    console.print("#" * 70)
                     break
                 else:
-                    plain_console.print(f"\n[!] Unexpected OSError: {exc}")
+                    console.print(f"\n[!] Unexpected OSError: {exc}")
                     raise
 
         if not hit_limit:
-            plain_console.print(f"\n[!] Warning: Spawned {spawn_count} processes without hitting EAGAIN.")
-            plain_console.print("    Check docker-compose.yml resource limits.")
+            console.print(f"\n[!] Warning: Spawned {spawn_count} processes without hitting EAGAIN.")
+            console.print("    Check docker-compose.yml resource limits.")
 
     finally:
         # 4. Deterministic Teardown & Hygiene
-        plain_console.print("\n--- Phase 2: Deterministic Teardown & Zombie Reaping ---")
-        plain_console.print(f"[*] Notifying {len(children)} child processes to exit via pipe signal...")
+        console.print("\n--- Phase 2: Deterministic Teardown & Zombie Reaping ---")
+        console.print(f"[*] Notifying {len(children)} child processes to exit via pipe signal...")
         try:
             # Closing the write end causes children to receive EOF on os.read()
             os.close(pipe_w)
@@ -175,24 +174,24 @@ def run_experiment() -> None:
                 pass
 
         final_curr = read_file_safe(pids_curr_file)
-        plain_console.print(f"[*] Reaped {reaped} child processes.")
-        plain_console.print(f"[*] Restored cgroups pids.current: {final_curr} / {pids_max}")
+        console.print(f"[*] Reaped {reaped} child processes.")
+        console.print(f"[*] Restored cgroups pids.current: {final_curr} / {pids_max}")
 
     # 5. Systems Takeaways & Interview Angles
-    plain_console.print("\n" + "=" * 70)
-    plain_console.print(" Systems & Production Takeaways:")
-    plain_console.print("=" * 70)
-    plain_console.print(" 1. The Cgroup v2 `pids` Controller:")
-    plain_console.print("    Prevents fork bombs (:(){ :|:& };:) and runaway concurrency leaks.")
-    plain_console.print("    Unlike `ulimit -u` (RLIMIT_NPROC), which is scoped per UID, cgroups")
-    plain_console.print("    enforce limits across the entire control group hierarchy.")
-    plain_console.print(" 2. Kernel Failure Signature:")
-    plain_console.print("    clone() / fork() syscall returns EAGAIN (Errno 11).")
-    plain_console.print("    The kernel does not kill existing processes; it simply halts new task creation.")
-    plain_console.print(" 3. Host Isolation:")
-    plain_console.print("    The macOS host kernel and neighbouring containers experienced ZERO CPU/PID")
-    plain_console.print("    exhaustion, demonstrating strict namespace and cgroup isolation.")
-    plain_console.print("=" * 70)
+    console.print("\n" + "=" * 70)
+    console.print(" Systems & Production Takeaways:")
+    console.print("=" * 70)
+    console.print(" 1. The Cgroup v2 `pids` Controller:")
+    console.print("    Prevents fork bombs (:(){ :|:& };:) and runaway concurrency leaks.")
+    console.print("    Unlike `ulimit -u` (RLIMIT_NPROC), which is scoped per UID, cgroups")
+    console.print("    enforce limits across the entire control group hierarchy.")
+    console.print(" 2. Kernel Failure Signature:")
+    console.print("    clone() / fork() syscall returns EAGAIN (Errno 11).")
+    console.print("    The kernel does not kill existing processes; it simply halts new task creation.")
+    console.print(" 3. Host Isolation:")
+    console.print("    The macOS host kernel and neighbouring containers experienced ZERO CPU/PID")
+    console.print("    exhaustion, demonstrating strict namespace and cgroup isolation.")
+    console.print("=" * 70)
 
 
 if __name__ == "__main__":

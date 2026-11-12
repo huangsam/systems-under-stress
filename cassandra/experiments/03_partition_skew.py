@@ -54,7 +54,7 @@ def log(msg: str, color: str = "[dim]") -> None:
 def wait_for_cassandra() -> Cluster:
     log("Connecting to Cassandra on 127.0.0.1:9042...", "[bold cyan]")
     profile = ExecutionProfile(
-        request_timeout=20.0,
+        request_timeout=60.0,
         load_balancing_policy=WhiteListRoundRobinPolicy([HOST]),
     )
     for attempt in range(1, 30):

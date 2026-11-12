@@ -10,7 +10,7 @@ This lab uses a single [`docker-compose.yml`](./docker-compose.yml) with **Docke
 
 ```text
 neo4j/
-├── docker-compose.yml       # Pinned image, cgroups limits (512MB RAM), JVM heap caps (384MB), profiles
+├── docker-compose.yml       # Pinned image, cgroups limits (768MB RAM), JVM heap caps (384MB), profiles
 ├── Makefile                 # One-touch runner targets (up, run, soft-reset, cypher-shell, clean)
 ├── experiments/
 │   ├── 00_crash_course.py            # Property graphs, Cypher traversals & dbms.components
@@ -25,7 +25,7 @@ All test scripts declare client dependencies inline via [PEP 723](https://peps.p
 ### Host Safety & Resource Caps
 - **Docker Image**: `neo4j:5.26.32-community`
 - **Host Port Binding**: `127.0.0.1:7474` (HTTP Browser), `127.0.0.1:7687` (Bolt binary protocol)
-- **Cgroups Resource Limits**: `memory: 512M`, `cpus: '1.0'`
+- **Cgroups Resource Limits**: `memory: 768M`, `cpus: '1.0'`
 - **JVM Constraints**:
   - `NEO4J_server_memory_heap_initial__size: 256m`
   - `NEO4J_server_memory_heap_max__size: 384m`
