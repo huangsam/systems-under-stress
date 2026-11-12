@@ -31,10 +31,11 @@ DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def seed_data() -> None:
-    console.print("[*] Preparing 150,000 test rows in 'analytics_events' table...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("[*] Preparing 150,000 test rows in 'analytics_events' table...")
     with psycopg.connect(DB_CONN, autocommit=True) as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -50,10 +51,10 @@ def seed_data() -> None:
             cur.execute("SELECT count(*) FROM analytics_events;")
             count = cur.fetchone()[0]
             if count >= 150000:
-                console.print(f"    Table already seeded with {count:,} rows.", markup=False, highlight=False, soft_wrap=True)
+                plain_console.print(f"    Table already seeded with {count:,} rows.")
                 return
 
-            console.print("    Generating 150,000 synthetic rows (using generate_series)...", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print("    Generating 150,000 synthetic rows (using generate_series)...")
             t0 = time.perf_counter()
             cur.execute("""
             TRUNCATE TABLE analytics_events;
@@ -65,7 +66,7 @@ def seed_data() -> None:
                 NOW() - (random() * interval '30 days')
             FROM generate_series(1, 150000) AS g;
             """)
-            console.print(f"    Seeded 150,000 rows in {time.perf_counter() - t0:.2f}s.", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"    Seeded 150,000 rows in {time.perf_counter() - t0:.2f}s.")
 
 
 def run_explain_sort(work_mem_setting: str | None = None) -> dict:
@@ -110,13 +111,13 @@ def main() -> None:
             pass
     except Exception:
         console.print("[bold red]Error: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.[/]")
-        console.print("Please start the work-mem container first:", markup=False, highlight=False, soft_wrap=True)
-        console.print("  cd postgres && make up EXP=work-mem", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("Please start the work-mem container first:")
+        plain_console.print("  cd postgres && make up EXP=work-mem")
         return
 
     console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 03: PostgreSQL Memory Limits (work_mem) & Disk Spill[/]")
-    console.print("Measuring sort performance across in-memory vs disk-spill boundaries.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("Measuring sort performance across in-memory vs disk-spill boundaries.")
     console.print("=" * 65 + "\n", style="bold cyan")
 
     seed_data()
@@ -124,35 +125,35 @@ def main() -> None:
     # 1. Run with container default work_mem (4MB)
     console.print("\n[bold blue][*] Test 1: Sorting with default work_mem (4MB)...[/]")
     res1 = run_explain_sort(None)
-    console.print(f"    Effective work_mem  : {res1['work_mem']}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Effective work_mem  : {res1['work_mem']}")
     console.print(f"    Sort Method         : [bold red]{res1['sort_method']}[/]")
-    console.print(f"    Engine Execution    : {res1['plan_time_ms']:.1f}ms", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Engine Execution    : {res1['plan_time_ms']:.1f}ms")
 
     # 2. Run with tuned session work_mem (64MB)
     console.print("\n[bold blue][*] Test 2: Sorting with tuned session work_mem (64MB)...[/]")
     res2 = run_explain_sort("64MB")
-    console.print(f"    Effective work_mem  : {res2['work_mem']}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Effective work_mem  : {res2['work_mem']}")
     console.print(f"    Sort Method         : [bold green]{res2['sort_method']}[/]")
-    console.print(f"    Engine Execution    : {res2['plan_time_ms']:.1f}ms", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Engine Execution    : {res2['plan_time_ms']:.1f}ms")
 
     speedup = res1["plan_time_ms"] / res2["plan_time_ms"] if res2["plan_time_ms"] > 0 else 1.0
 
     console.print("\n" + "=" * 65, style="bold green")
-    console.print("EXPERIMENT 03 SUMMARY REPORT", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("EXPERIMENT 03 SUMMARY REPORT")
     console.print("=" * 65, style="bold green")
-    console.print(f"With work_mem = 4MB  : {res1['sort_method']} ({res1['plan_time_ms']:.1f}ms)", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"With work_mem = 64MB : {res2['sort_method']} ({res2['plan_time_ms']:.1f}ms)", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"With work_mem = 4MB  : {res1['sort_method']} ({res1['plan_time_ms']:.1f}ms)")
+    plain_console.print(f"With work_mem = 64MB : {res2['sort_method']} ({res2['plan_time_ms']:.1f}ms)")
     console.print(f"Performance Gain     : [bold green]{speedup:.1f}x Faster[/] in pure RAM")
-    console.print("=" * 65, markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("=" * 65)
 
     console.print("\n[bold yellow][Systems Takeaway - The work_mem Multiplier Dilemma][/]")
-    console.print("Why not set work_mem = 1GB globally on your database server?", markup=False, highlight=False, soft_wrap=True)
-    console.print("work_mem is NOT a server-wide cap. It is allocated PER SORT/HASH NODE per query.", markup=False, highlight=False, soft_wrap=True)
-    console.print("If 100 concurrent queries each contain 3 joins/sorts:", markup=False, highlight=False, soft_wrap=True)
-    console.print("  100 connections * 3 nodes * 1GB work_mem = 300GB RAM!", markup=False, highlight=False, soft_wrap=True)
-    console.print("The Linux kernel OOM Killer would immediately terminate PostgreSQL.", markup=False, highlight=False, soft_wrap=True)
-    console.print("Best Practice: Keep global work_mem modest (4MB-16MB) and elevate it only", markup=False, highlight=False, soft_wrap=True)
-    console.print("for specific analytical queries via 'SET LOCAL work_mem = ...'.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("Why not set work_mem = 1GB globally on your database server?")
+    plain_console.print("work_mem is NOT a server-wide cap. It is allocated PER SORT/HASH NODE per query.")
+    plain_console.print("If 100 concurrent queries each contain 3 joins/sorts:")
+    plain_console.print("  100 connections * 3 nodes * 1GB work_mem = 300GB RAM!")
+    plain_console.print("The Linux kernel OOM Killer would immediately terminate PostgreSQL.")
+    plain_console.print("Best Practice: Keep global work_mem modest (4MB-16MB) and elevate it only")
+    plain_console.print("for specific analytical queries via 'SET LOCAL work_mem = ...'.")
 
 
 if __name__ == "__main__":

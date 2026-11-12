@@ -43,6 +43,7 @@ COLL_NAME = "durability_test"
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def run_compose_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -66,8 +67,8 @@ def ensure_container_ready() -> MongoClient:
             time.sleep(1)
 
     console.print("[bold red][ERROR] Unable to connect to MongoDB on 127.0.0.1:27017.[/]")
-    console.print("Please ensure the durability container is up:", markup=False, highlight=False, soft_wrap=True)
-    console.print("  cd mongodb && make up EXP=durability", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("Please ensure the durability container is up:")
+    plain_console.print("  cd mongodb && make up EXP=durability")
     sys.exit(1)
 
 
@@ -81,7 +82,7 @@ def test_write_concern_durability(
     w_val = write_concern.document.get("w", 1)
     j_val = write_concern.document.get("j", False)
     console.print(f"[bold yellow]Testing Mode: {mode_name}[/] (w={w_val}, j={j_val})")
-    console.print("-" * 70, markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("-" * 70)
 
     client = ensure_container_ready()
     db = client[DB_NAME]
@@ -89,7 +90,7 @@ def test_write_concern_durability(
 
     # Clean collection
     coll.drop()
-    console.print("  [*] Dropped test collection for clean baseline.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("  [*] Dropped test collection for clean baseline.")
 
     ack_count = 0
     sent_count = 0
@@ -125,19 +126,19 @@ def test_write_concern_durability(
     t.start()
 
     # Monitor until kill threshold is reached
-    console.print(f"  [*] Firing rapid writes (target kill trigger at ~{kill_after:,} writes)...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"  [*] Firing rapid writes (target kill trigger at ~{kill_after:,} writes)...")
     while (sent_count < kill_after if w_val == 0 else ack_count < kill_after) and not writer_done.is_set():
         time.sleep(0.005)
 
     effective_reported = sent_count if w_val == 0 else ack_count
-    console.print(f"  [*] Trigger reached ({effective_reported:,} writes recorded).", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"  [*] Trigger reached ({effective_reported:,} writes recorded).")
     console.print("  [bold red][*] Terminating container abruptly via SIGKILL (kill -9)...[/]")
 
     # Send SIGKILL to the container
     try:
         run_compose_cmd(["kill", "-s", "SIGKILL", "durability"])
     except Exception as e:
-        console.print(f"    Notice: kill command failed or completed: {e}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Notice: kill command failed or completed: {e}")
 
     stop_writing.set()
     writer_done.wait(timeout=2.0)
@@ -145,13 +146,13 @@ def test_write_concern_durability(
 
     reported_total = sent_count if w_val == 0 else ack_count
     ops_sec = reported_total / write_duration if write_duration > 0 else 0
-    console.print(f"    Writes before crash : {reported_total:,} ({ops_sec:,.0f} ops/sec)", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Writes before crash : {reported_total:,} ({ops_sec:,.0f} ops/sec)")
 
-    console.print("  [*] Container down. Restarting container to test WiredTiger crash recovery...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("  [*] Container down. Restarting container to test WiredTiger crash recovery...")
     restart_t0 = time.perf_counter()
     new_client = ensure_container_ready()
     restart_sec = time.perf_counter() - restart_t0
-    console.print(f"  [+] MongoDB restarted and healthy in {restart_sec:.2f}s.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"  [+] MongoDB restarted and healthy in {restart_sec:.2f}s.")
 
     # Audit recovered data
     rec_coll = new_client[DB_NAME][COLL_NAME]
@@ -163,8 +164,8 @@ def test_write_concern_durability(
     loss_pct = (lost_writes / reported_total * 100.0) if reported_total > 0 else 0.0
 
     console.print(f"  [bold cyan]Audit Results for {mode_name}:[/]")
-    console.print(f"    Client Acknowledged / Sent : {reported_total:,}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"    Recovered Documents in DB  : {recovered_count:,} (highest seq={max_seq:,})", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Client Acknowledged / Sent : {reported_total:,}")
+    plain_console.print(f"    Recovered Documents in DB  : {recovered_count:,} (highest seq={max_seq:,})")
     console.print(f"    Lost Writes                : [bold {'red' if lost_writes > 0 else 'green'}]{lost_writes:,} ({loss_pct:.1f}%)[/]")
 
     return {
@@ -190,7 +191,7 @@ def main() -> None:
 
     console.print("=" * 75, style="bold blue")
     console.print("[bold green]  Experiment 02: MongoDB Write Concerns & Crash Recovery (SIGKILL)[/]")
-    console.print("  Investigating durability: w=0 vs w=1 (RAM) vs w=1, j=True (Disk Journal)", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("  Investigating durability: w=0 vs w=1 (RAM) vs w=1, j=True (Disk Journal)")
     console.print("=" * 75, style="bold blue")
 
     modes_to_test: list[tuple[str, WriteConcern, int, int]] = []
@@ -211,10 +212,10 @@ def main() -> None:
     console.print("\n" + "=" * 80, style="bold blue")
     console.print("[bold white]Durability Comparison Matrix:[/]")
     console.print("[bold blue]" + "-" * 80 + "[/]")
-    console.print(f"{'Mode':<28} | {'Ack/Sent':<10} | {'Recovered':<10} | {'Lost':<8} | {'Loss %':<8} | {'Durability':<15}", markup=False, highlight=False, soft_wrap=True)
-    console.print("-" * 80, markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"{'Mode':<28} | {'Ack/Sent':<10} | {'Recovered':<10} | {'Lost':<8} | {'Loss %':<8} | {'Durability':<15}")
+    plain_console.print("-" * 80)
     for r in results:
-        console.print(f"{r['mode']:<28} | {r['sent_or_ack']:<10} | {r['recovered']:<10} | {r['lost']:<8} | {r['loss_pct']:<8} | {r['durability']:<15}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"{r['mode']:<28} | {r['sent_or_ack']:<10} | {r['recovered']:<10} | {r['lost']:<8} | {r['loss_pct']:<8} | {r['durability']:<15}")
     console.print("=" * 80 + "\n", style="bold blue")
 
 

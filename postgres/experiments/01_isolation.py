@@ -31,6 +31,7 @@ DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def reset_doctors() -> None:
@@ -89,7 +90,7 @@ def test_dirty_read() -> None:
         console.print("  [bold red][!] Dirty read occurred![/]")
     else:
         console.print("  [bold green][✓] Dirty read prevented:[/] Session B only saw committed data.")
-        console.print("      PostgreSQL treats READ UNCOMMITTED as READ COMMITTED under its MVCC engine.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("      PostgreSQL treats READ UNCOMMITTED as READ COMMITTED under its MVCC engine.")
 
 
 # ----------------------------------------------------------------------
@@ -136,17 +137,17 @@ def run_write_skew_simulation(isolation_level: psycopg.IsolationLevel, label: st
 
     remaining = count_on_call()
 
-    console.print(f"    Dr. Alice Result : {results.get('Dr. Alice')}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"    Dr. Bob Result   : {results.get('Dr. Bob')}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Dr. Alice Result : {results.get('Dr. Alice')}")
+    plain_console.print(f"    Dr. Bob Result   : {results.get('Dr. Bob')}")
     console.print(f"    Doctors Still On Call : [bold {'red' if remaining == 0 else 'green'}]{remaining}[/] (Required: >= 1)")
 
     if remaining == 0:
         console.print("  [bold red][!] WRITE SKEW ANOMALY OCCURRED![/]")
-        console.print("      Both transactions read overlapping snapshots, updated non-overlapping rows,", markup=False, highlight=False, soft_wrap=True)
-        console.print("      and committed successfully - violating the global system invariant.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("      Both transactions read overlapping snapshots, updated non-overlapping rows,")
+        plain_console.print("      and committed successfully - violating the global system invariant.")
     else:
         console.print("  [bold green][✓] INVARIANT PRESERVED BY SERIALIZABLE SNAPSHOT ISOLATION (SSI)![/]")
-        console.print("      PostgreSQL detected the rw-antidependency cycle and aborted one transaction.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("      PostgreSQL detected the rw-antidependency cycle and aborted one transaction.")
 
 
 def main() -> None:
@@ -155,13 +156,13 @@ def main() -> None:
             pass
     except Exception:
         console.print("[bold red]Error: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.[/]")
-        console.print("Please start the container first:", markup=False, highlight=False, soft_wrap=True)
-        console.print("  cd postgres && make up EXP=isolation", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("Please start the container first:")
+        plain_console.print("  cd postgres && make up EXP=isolation")
         return
 
     console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 01: PostgreSQL Transaction Isolation & Write Skew[/]")
-    console.print("Testing concurrency anomalies across MVCC isolation levels.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("Testing concurrency anomalies across MVCC isolation levels.")
     console.print("=" * 65, style="bold cyan")
 
     # 1. Dirty Read test
@@ -174,13 +175,13 @@ def main() -> None:
     run_write_skew_simulation(psycopg.IsolationLevel.SERIALIZABLE, "SERIALIZABLE")
 
     console.print("\n" + "=" * 65, style="bold green")
-    console.print("SYSTEMS TAKEAWAYS", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("SYSTEMS TAKEAWAYS")
     console.print("=" * 65, style="bold green")
-    console.print("1. PostgreSQL does not implement Dirty Reads; READ UNCOMMITTED = READ COMMITTED.", markup=False, highlight=False, soft_wrap=True)
-    console.print("2. REPEATABLE READ protects against Phantom Reads but FAILS on Write Skew.", markup=False, highlight=False, soft_wrap=True)
-    console.print("3. Write Skew can only be solved by: SELECT ... FOR UPDATE (explicit locking)", markup=False, highlight=False, soft_wrap=True)
-    console.print("   or true SERIALIZABLE isolation (with automatic client retry on 40001).", markup=False, highlight=False, soft_wrap=True)
-    console.print("=================================================================\n", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("1. PostgreSQL does not implement Dirty Reads; READ UNCOMMITTED = READ COMMITTED.")
+    plain_console.print("2. REPEATABLE READ protects against Phantom Reads but FAILS on Write Skew.")
+    plain_console.print("3. Write Skew can only be solved by: SELECT ... FOR UPDATE (explicit locking)")
+    plain_console.print("   or true SERIALIZABLE isolation (with automatic client retry on 40001).")
+    plain_console.print("=================================================================\n")
 
 
 if __name__ == "__main__":

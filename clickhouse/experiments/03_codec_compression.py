@@ -31,6 +31,7 @@ NUM_ROWS = 500_000
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def format_bytes(b: int) -> str:
@@ -46,12 +47,12 @@ def main() -> None:
         client = clickhouse_connect.get_client(host="127.0.0.1", port=8123)
     except Exception as e:
         console.print(f"[bold red]Error: Could not connect to ClickHouse on 127.0.0.1:8123 ({escape(str(e))})[/]")
-        console.print("Start the container first: make up EXP=compression", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("Start the container first: make up EXP=compression")
         sys.exit(1)
 
     console.print("=" * 70, style="bold cyan")
     console.print("[bold cyan]Experiment 03: ClickHouse Columnar Codecs & LowCardinality Compression[/]")
-    console.print(f"Benchmarking {NUM_ROWS:,} rows across Uncompressed, LZ4, and Delta+ZSTD.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"Benchmarking {NUM_ROWS:,} rows across Uncompressed, LZ4, and Delta+ZSTD.")
     console.print("=" * 70 + "\n", style="bold cyan")
 
     # 1. Create three tables with identical logical schemas but different physical encodings
@@ -107,11 +108,11 @@ def main() -> None:
     """
 
     for tbl in ["telemetry_none", "telemetry_lz4", "telemetry_optimized"]:
-        console.print(f"[*] Inserting {NUM_ROWS:,} rows into '{tbl}' and compacting parts...", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"[*] Inserting {NUM_ROWS:,} rows into '{tbl}' and compacting parts...")
         t0 = time.perf_counter()
         client.command(f"INSERT INTO {tbl} {seed_sql}")
         client.command(f"OPTIMIZE TABLE {tbl} FINAL")
-        console.print(f"    Completed in {(time.perf_counter() - t0) * 1000:.0f}ms", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Completed in {(time.perf_counter() - t0) * 1000:.0f}ms")
 
     # 3. Query system.columns for exact physical vs uncompressed disk sizes
     console.print("\n[bold blue][*] Auditing Disk Storage via system.columns:[/]\n")
@@ -129,10 +130,10 @@ def main() -> None:
     """).result_rows
 
     header = f"{'Table Variant':<24} | {'Raw Uncompressed':>16} | {'On-Disk Compressed':>18} | {'Compression Ratio':>18}"
-    console.print(header, markup=False, highlight=False, soft_wrap=True)
-    console.print("-" * len(header), markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(header)
+    plain_console.print("-" * len(header))
     for tbl, raw_b, disk_b, ratio in rows:
-        console.print(f"{tbl:<24} | {format_bytes(raw_b):>16} | {format_bytes(disk_b):>18} | {ratio:>17.2f}x", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"{tbl:<24} | {format_bytes(raw_b):>16} | {format_bytes(disk_b):>18} | {ratio:>17.2f}x")
 
     # 4. Per-column breakdown on telemetry_optimized vs telemetry_none
     console.print("\n[bold blue][*] Per-Column Compression Breakdown (Optimized vs Uncompressed):[/]\n")
@@ -152,20 +153,20 @@ def main() -> None:
     """).result_rows
 
     col_header = f"{'Column':<15} | {'Type':<24} | {'Codec':<24} | {'None Size':>11} | {'Opt Size':>11} | {'Savings':>9}"
-    console.print(col_header, markup=False, highlight=False, soft_wrap=True)
-    console.print("-" * len(col_header), markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(col_header)
+    plain_console.print("-" * len(col_header))
     for name, ctype, codec, n_b, o_b, factor in col_rows:
-        console.print(f"{name:<15} | {ctype:<24} | {codec:<24} | {format_bytes(n_b):>11} | {format_bytes(o_b):>11} | {factor:>8.1f}x", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"{name:<15} | {ctype:<24} | {codec:<24} | {format_bytes(n_b):>11} | {format_bytes(o_b):>11} | {factor:>8.1f}x")
 
     console.print("\n" + "=" * 70, style="bold green")
-    console.print("SYSTEMS TAKEAWAYS", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("SYSTEMS TAKEAWAYS")
     console.print("=" * 70, style="bold green")
-    console.print("1. Delta + ZSTD on monotonic timestamps stores only frame-to-frame differences", markup=False, highlight=False, soft_wrap=True)
-    console.print("   (e.g. +1, +1, +1), collapsing megabytes of timestamps into a few kilobytes.", markup=False, highlight=False, soft_wrap=True)
-    console.print("2. LowCardinality(String) replaces repeated strings with integer dictionary IDs,", markup=False, highlight=False, soft_wrap=True)
-    console.print("   reducing both disk I/O and GROUP BY hash-table memory by 10x+.", markup=False, highlight=False, soft_wrap=True)
-    console.print("3. Less disk size = fewer IOPS = more data resident in the Linux page cache.", markup=False, highlight=False, soft_wrap=True)
-    console.print("======================================================================\n", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("1. Delta + ZSTD on monotonic timestamps stores only frame-to-frame differences")
+    plain_console.print("   (e.g. +1, +1, +1), collapsing megabytes of timestamps into a few kilobytes.")
+    plain_console.print("2. LowCardinality(String) replaces repeated strings with integer dictionary IDs,")
+    plain_console.print("   reducing both disk I/O and GROUP BY hash-table memory by 10x+.")
+    plain_console.print("3. Less disk size = fewer IOPS = more data resident in the Linux page cache.")
+    plain_console.print("======================================================================\n")
 
 
 if __name__ == "__main__":

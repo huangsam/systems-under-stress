@@ -43,6 +43,7 @@ PAYLOAD_SIZE = 1_100  # ~1.1 KB payload per doc -> 100,000 docs ≈ 115 MB BSON
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def get_client() -> MongoClient:
@@ -51,8 +52,8 @@ def get_client() -> MongoClient:
         client.admin.command("ping")
     except ConnectionFailure:
         console.print("[bold red][ERROR] Cannot connect to MongoDB on 127.0.0.1:27017.[/]")
-        console.print("\nPlease start the 'unindexed-sort' container first:", markup=False, highlight=False, soft_wrap=True)
-        console.print("  cd mongodb && make up EXP=unindexed-sort\n", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("\nPlease start the 'unindexed-sort' container first:")
+        plain_console.print("  cd mongodb && make up EXP=unindexed-sort\n")
         sys.exit(1)
     return client
 
@@ -60,14 +61,14 @@ def get_client() -> MongoClient:
 def seed_orders(coll: pymongo.collection.Collection, force: bool = False) -> None:
     current_count = coll.count_documents({})
     if current_count >= TARGET_DOCS and not force:
-        console.print(f"[*] Collection '{COLL_NAME}' already seeded with {current_count:,} documents.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"[*] Collection '{COLL_NAME}' already seeded with {current_count:,} documents.")
         return
 
     if force or current_count > 0:
-        console.print(f"[*] Resetting collection '{COLL_NAME}'...", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"[*] Resetting collection '{COLL_NAME}'...")
         coll.drop()
 
-    console.print(f"[*] Generating & inserting {TARGET_DOCS:,} documents (~115MB total BSON)...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Generating & inserting {TARGET_DOCS:,} documents (~115MB total BSON)...")
     t0 = time.perf_counter()
 
     batch_size = 10_000
@@ -89,11 +90,11 @@ def seed_orders(coll: pymongo.collection.Collection, force: bool = False) -> Non
         coll.insert_many(batch, ordered=False)
         inserted = batch_start + len(batch)
         pct = (inserted / TARGET_DOCS) * 100
-        console.print(f"    Inserted {inserted:,}/{TARGET_DOCS:,} ({pct:.0f}%)", end="\r", markup=False, highlight=False, soft_wrap=True)
-        console.file.flush()
+        plain_console.print(f"    Inserted {inserted:,}/{TARGET_DOCS:,} ({pct:.0f}%)", end="\r")
+        plain_console.file.flush()
 
     elapsed = time.perf_counter() - t0
-    console.print(f"\n[+] Seeding complete in {elapsed:.2f}s ({TARGET_DOCS / elapsed:,.0f} docs/sec).", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"\n[+] Seeding complete in {elapsed:.2f}s ({TARGET_DOCS / elapsed:,.0f} docs/sec).")
 
 
 def extract_sort_details(plan_stats: dict[str, Any]) -> dict[str, Any]:
@@ -134,15 +135,15 @@ def run_experiment() -> None:
 
     console.print("=" * 70, style="bold blue")
     console.print("[bold green]  Experiment 01: MongoDB 100MB In-Memory Sort Ceiling[/]")
-    console.print(f"  Target DB      : {DB_NAME}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"  Collection     : {COLL_NAME}", markup=False, highlight=False, soft_wrap=True)
-    console.print("  Default Cap    : 104,857,600 bytes (100MB internalQueryMaxBlockingSortMemoryUsage)", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"  Target DB      : {DB_NAME}")
+    plain_console.print(f"  Collection     : {COLL_NAME}")
+    plain_console.print("  Default Cap    : 104,857,600 bytes (100MB internalQueryMaxBlockingSortMemoryUsage)")
     console.print("=" * 70 + "\n", style="bold blue")
 
     # Ensure any previous index on timestamp is dropped
     for idx_name in coll.index_information():
         if "timestamp" in idx_name:
-            console.print(f"[*] Dropping prior index: {idx_name}", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"[*] Dropping prior index: {idx_name}")
             coll.drop_index(idx_name)
 
     seed_orders(coll)
@@ -153,7 +154,7 @@ def run_experiment() -> None:
     # Scenario 1: Unindexed Sort with allow_disk_use(False) (Strict In-Memory)
     # -------------------------------------------------------------
     console.print("\n[bold yellow][Scenario 1] Unindexed Sort with allow_disk_use(False) (In-Memory Only)[/]")
-    console.print("  Query: db.orders.find().sort('timestamp', -1).allow_disk_use(False)", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("  Query: db.orders.find().sort('timestamp', -1).allow_disk_use(False)")
     t0 = time.perf_counter()
     try:
         cursor = coll.find({}).sort("timestamp", -1).allow_disk_use(False)
@@ -172,8 +173,8 @@ def run_experiment() -> None:
     except OperationFailure as err:
         elapsed_ms = (time.perf_counter() - t0) * 1000
         console.print(f"  [bold red][EXPECTED FAILURE CAUGHT][/] in {elapsed_ms:.1f}ms:")
-        console.print(f"    Error Code    : {err.code}", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"    Error Details : {err.details.get('errmsg', str(err))}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Error Code    : {err.code}")
+        plain_console.print(f"    Error Details : {err.details.get('errmsg', str(err))}")
         results_table.append(
             {
                 "mode": "Unindexed (allow_disk_use=False)",
@@ -188,7 +189,7 @@ def run_experiment() -> None:
     # Scenario 2: Unindexed Sort with allowDiskUse=True (Spills to Disk)
     # -------------------------------------------------------------
     console.print("\n[bold yellow][Scenario 2] Unindexed Sort WITH allowDiskUse=True (Spill to Disk)[/]")
-    console.print("  Query: db.orders.find().sort('timestamp', -1).allow_disk_use(True)", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("  Query: db.orders.find().sort('timestamp', -1).allow_disk_use(True)")
     t0 = time.perf_counter()
     try:
         explain_plan = coll.find({}).sort("timestamp", -1).allow_disk_use(True).explain()
@@ -199,9 +200,9 @@ def run_experiment() -> None:
         elapsed_ms = (time.perf_counter() - t0) * 1000
 
         console.print(f"  [bold green][SUCCESS][/] Completed in {elapsed_ms:.1f}ms (Explain: {details['executionTimeMillis']}ms)")
-        console.print(f"    Docs Examined : {details['totalDocsExamined']:,}", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"    Used Disk     : {details['usedDisk']} (Spilled temporary sort run to disk)", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"    Top Doc ID    : {top5[0]['order_id']} (ts={top5[0]['timestamp']})", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Docs Examined : {details['totalDocsExamined']:,}")
+        plain_console.print(f"    Used Disk     : {details['usedDisk']} (Spilled temporary sort run to disk)")
+        plain_console.print(f"    Top Doc ID    : {top5[0]['order_id']} (ts={top5[0]['timestamp']})")
         results_table.append(
             {
                 "mode": "Unindexed (allowDiskUse)",
@@ -218,12 +219,12 @@ def run_experiment() -> None:
     # Scenario 3: Indexed Sort (B-Tree Index Scan - 0 Sort Memory)
     # -------------------------------------------------------------
     console.print("\n[bold yellow][Scenario 3] Indexed Sort (B-Tree Index on {'timestamp': -1})[/]")
-    console.print("  Creating index: db.orders.create_index([('timestamp', -1)])...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("  Creating index: db.orders.create_index([('timestamp', -1)])...")
     idx_t0 = time.perf_counter()
     coll.create_index([("timestamp", -1)], name="idx_timestamp_desc")
-    console.print(f"  Index created in {(time.perf_counter() - idx_t0) * 1000:.1f}ms.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"  Index created in {(time.perf_counter() - idx_t0) * 1000:.1f}ms.")
 
-    console.print("  Query: db.orders.find().sort('timestamp', -1)", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("  Query: db.orders.find().sort('timestamp', -1)")
     t0 = time.perf_counter()
     explain_plan = coll.find({}, {"order_id": 1, "timestamp": 1}).sort("timestamp", -1).explain()
     details = extract_sort_details(explain_plan)
@@ -233,10 +234,10 @@ def run_experiment() -> None:
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
     console.print(f"  [bold green][SUCCESS][/] Completed in {elapsed_ms:.1f}ms (Explain: {details['executionTimeMillis']}ms)")
-    console.print(f"    Sort Stage    : {'Eliminated (IXSCAN only)' if not details['has_sort_stage'] else 'SORT'}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"    Index Used    : {details['has_ixscan_stage']} (B-Tree backward traversal)", markup=False, highlight=False, soft_wrap=True)
-    console.print("    Sort Memory   : 0 bytes (Streaming pipeline)", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"    Top Doc ID    : {top5[0]['order_id']} (ts={top5[0]['timestamp']})", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Sort Stage    : {'Eliminated (IXSCAN only)' if not details['has_sort_stage'] else 'SORT'}")
+    plain_console.print(f"    Index Used    : {details['has_ixscan_stage']} (B-Tree backward traversal)")
+    plain_console.print("    Sort Memory   : 0 bytes (Streaming pipeline)")
+    plain_console.print(f"    Top Doc ID    : {top5[0]['order_id']} (ts={top5[0]['timestamp']})")
     results_table.append(
         {
             "mode": "Indexed Sort (B-Tree)",
@@ -253,10 +254,10 @@ def run_experiment() -> None:
     console.print("\n" + "=" * 80, style="bold blue")
     console.print("[bold white]Execution Summary & Engine Behavior:[/]")
     console.print("[bold blue]" + "-" * 80 + "[/]")
-    console.print(f"{'Strategy':<26} | {'Outcome':<18} | {'Sort Stage':<16} | {'Spill Disk':<10} | {'Latency':<8}", markup=False, highlight=False, soft_wrap=True)
-    console.print("-" * 80, markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"{'Strategy':<26} | {'Outcome':<18} | {'Sort Stage':<16} | {'Spill Disk':<10} | {'Latency':<8}")
+    plain_console.print("-" * 80)
     for row in results_table:
-        console.print(f"{row['mode']:<26} | {row['status']:<18} | {row['sort_stage']:<16} | {row['disk_spill']:<10} | {row['time_ms']:<8}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"{row['mode']:<26} | {row['status']:<18} | {row['sort_stage']:<16} | {row['disk_spill']:<10} | {row['time_ms']:<8}")
     console.print("=" * 80 + "\n", style="bold blue")
 
 

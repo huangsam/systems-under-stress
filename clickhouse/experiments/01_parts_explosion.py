@@ -29,12 +29,13 @@ from rich.console import Console
 from rich.markup import escape
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 try:
     import clickhouse_connect
     from clickhouse_connect.driver.exceptions import DatabaseError
 except ImportError:
-    console.print("clickhouse-connect not found. Run this script via 'uv run experiments/01_parts_explosion.py'", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("clickhouse-connect not found. Run this script via 'uv run experiments/01_parts_explosion.py'")
     sys.exit(1)
 
 HOST = "127.0.0.1"
@@ -59,9 +60,9 @@ def get_client() -> clickhouse_connect.driver.Client:
         return client
     except Exception as err:
         console.print("[bold red][!] Error: Unable to connect to ClickHouse at 127.0.0.1:8123.[/]")
-        console.print(f"    Details: {err}", markup=False, highlight=False, soft_wrap=True)
-        console.print("\nPlease start the target profile first:", markup=False, highlight=False, soft_wrap=True)
-        console.print("    cd clickhouse && make up EXP=parts-limit\n", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Details: {err}")
+        plain_console.print("\nPlease start the target profile first:")
+        plain_console.print("    cd clickhouse && make up EXP=parts-limit\n")
         sys.exit(1)
 
 
@@ -93,9 +94,9 @@ def reset_table(client: clickhouse_connect.driver.Client, table: str) -> None:
 
 def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
     console.print("\n[bold blue][*] Part 1: Rapid Un-Batched Single-Row Inserts (Testing Merge Capacity)...[/]")
-    console.print("    Target Table : parts_test (MergeTree)", markup=False, highlight=False, soft_wrap=True)
-    console.print("    Thresholds   : parts_to_delay_insert=80, parts_to_throw_insert=120", markup=False, highlight=False, soft_wrap=True)
-    console.print("    Firing up to 500 single-row inserts without batching...\n", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("    Target Table : parts_test (MergeTree)")
+    plain_console.print("    Thresholds   : parts_to_delay_insert=80, parts_to_throw_insert=120")
+    plain_console.print("    Firing up to 500 single-row inserts without batching...\n")
 
     reset_table(client, TABLE_NAME)
 
@@ -121,8 +122,8 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
                 active_parts = get_active_parts(client, TABLE_NAME)
                 console.print(f"\n  [bold red][!] WRITE REJECTED AT INSERT #{inserted_count + 1}![/]")
                 console.print(f"      Active parts in system.parts : [bold red]{len(active_parts)}[/]")
-                console.print("      ClickHouse Error Code         : 252 (TOO_MANY_PARTS)", markup=False, highlight=False, soft_wrap=True)
-                console.print(f"      Engine Message                : {err_msg.strip()}", markup=False, highlight=False, soft_wrap=True)
+                plain_console.print("      ClickHouse Error Code         : 252 (TOO_MANY_PARTS)")
+                plain_console.print(f"      Engine Message                : {err_msg.strip()}")
                 break
             else:
                 console.print(f"\n  [bold red][!] Unexpected error: {escape(str(err))}[/]")
@@ -133,10 +134,10 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
 
     if not too_many_parts_hit:
         active_parts = get_active_parts(client, TABLE_NAME)
-        console.print(f"\n  [*] Loop finished without error. Active parts: {len(active_parts)}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"\n  [*] Loop finished without error. Active parts: {len(active_parts)}")
     else:
         console.print("\n  [bold green][✓] Failure Reproduced:[/] ClickHouse backpressure mechanism successfully throttled")
-        console.print("      writes because background compaction could not keep pace with point inserts.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("      writes because background compaction could not keep pace with point inserts.")
 
 
 def run_batched_insert(client: clickhouse_connect.driver.Client) -> None:
@@ -144,10 +145,10 @@ def run_batched_insert(client: clickhouse_connect.driver.Client) -> None:
     reset_table(client, TABLE_NAME)
 
     batch_size = 2000
-    console.print(f"    Generating {batch_size:,} records in client memory...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Generating {batch_size:,} records in client memory...")
     batch_data = [[i, f"batched-payload-{i:05d}"] for i in range(1, batch_size + 1)]
 
-    console.print(f"    Sending 1 batch of {batch_size:,} rows in a single network roundtrip...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Sending 1 batch of {batch_size:,} rows in a single network roundtrip...")
     start_time = time.perf_counter()
     client.insert(TABLE_NAME, batch_data, column_names=["id", "payload"])
     elapsed = time.perf_counter() - start_time
@@ -156,19 +157,19 @@ def run_batched_insert(client: clickhouse_connect.driver.Client) -> None:
     total_rows = client.command(f"SELECT count() FROM {TABLE_NAME}")
 
     console.print("\n    Batch Status          : [bold green]SUCCESS[/]")
-    console.print(f"    Total Rows in Table   : {total_rows:,}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Total Rows in Table   : {total_rows:,}")
     console.print(f"    Active Parts Created  : [bold green]{len(active_parts)}[/] (Entire batch written as 1 contiguous part)")
-    console.print(f"    Duration              : {elapsed * 1000:.2f} ms ({batch_size / max(elapsed, 0.001):,.0f} rows/sec)", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Duration              : {elapsed * 1000:.2f} ms ({batch_size / max(elapsed, 0.001):,.0f} rows/sec)")
 
     if active_parts:
         part_name, part_rows, part_bytes = active_parts[0]
-        console.print(f"    Part Disk Descriptor  : name={part_name}, rows={part_rows}, compressed_bytes={part_bytes}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Part Disk Descriptor  : name={part_name}, rows={part_rows}, compressed_bytes={part_bytes}")
 
 
 def main() -> None:
     console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 01: ClickHouse Parts Explosion & Batching Limits[/]")
-    console.print("Investigating MergeTree write mechanics and the TOO_MANY_PARTS threshold.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("Investigating MergeTree write mechanics and the TOO_MANY_PARTS threshold.")
     console.print("=" * 65, style="bold cyan")
 
     client = get_client()
@@ -180,18 +181,18 @@ def main() -> None:
     run_batched_insert(client)
 
     console.print("\n" + "=" * 65, style="bold green")
-    console.print("SYSTEMS & PRODUCTION TAKEAWAYS", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("SYSTEMS & PRODUCTION TAKEAWAYS")
     console.print("=" * 65, style="bold green")
-    console.print("1. ClickHouse is NOT an OLTP database. Every INSERT statement writes a distinct", markup=False, highlight=False, soft_wrap=True)
-    console.print("   filesystem directory containing compressed column data (.bin) and index marks (.mrk).", markup=False, highlight=False, soft_wrap=True)
-    console.print("2. Treating ClickHouse like an OLTP store (Postgres) with single-row inserts guarantees catastrophic", markup=False, highlight=False, soft_wrap=True)
-    console.print("   TOO_MANY_PARTS (Code: 252) failures and disk metadata thrashing.", markup=False, highlight=False, soft_wrap=True)
-    console.print("3. Best practices for ClickHouse ingestion:", markup=False, highlight=False, soft_wrap=True)
-    console.print("   - Batch inserts on client side (>= 1,000 to 100,000 rows per batch).", markup=False, highlight=False, soft_wrap=True)
-    console.print("   - Use an ingestion buffer: Apache Kafka, Vector, FluentBit, or Redis Streams.", markup=False, highlight=False, soft_wrap=True)
-    console.print("   - Enable ClickHouse native Async Inserts: SET async_insert = 1, wait_for_async_insert = 1", markup=False, highlight=False, soft_wrap=True)
-    console.print("     (ClickHouse will internally buffer point writes in RAM into batched parts).", markup=False, highlight=False, soft_wrap=True)
-    console.print("=================================================================\n", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("1. ClickHouse is NOT an OLTP database. Every INSERT statement writes a distinct")
+    plain_console.print("   filesystem directory containing compressed column data (.bin) and index marks (.mrk).")
+    plain_console.print("2. Treating ClickHouse like an OLTP store (Postgres) with single-row inserts guarantees catastrophic")
+    plain_console.print("   TOO_MANY_PARTS (Code: 252) failures and disk metadata thrashing.")
+    plain_console.print("3. Best practices for ClickHouse ingestion:")
+    plain_console.print("   - Batch inserts on client side (>= 1,000 to 100,000 rows per batch).")
+    plain_console.print("   - Use an ingestion buffer: Apache Kafka, Vector, FluentBit, or Redis Streams.")
+    plain_console.print("   - Enable ClickHouse native Async Inserts: SET async_insert = 1, wait_for_async_insert = 1")
+    plain_console.print("     (ClickHouse will internally buffer point writes in RAM into batched parts).")
+    plain_console.print("=================================================================\n")
 
 
 if __name__ == "__main__":

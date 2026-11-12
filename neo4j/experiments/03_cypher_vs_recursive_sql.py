@@ -38,6 +38,7 @@ BRANCHING = 3
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def build_edges() -> list[tuple[int, int]]:
@@ -51,7 +52,7 @@ def build_edges() -> list[tuple[int, int]]:
 
 
 def seed_postgres(edges: list[tuple[int, int]]) -> None:
-    console.print(f"[*] Seeding PostgreSQL with {NUM_NODES:,} nodes and {len(edges):,} directed edges...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Seeding PostgreSQL with {NUM_NODES:,} nodes and {len(edges):,} directed edges...")
     with psycopg.connect(PG_DSN, autocommit=True) as conn:
         with conn.cursor() as cur:
             cur.execute("DROP TABLE IF EXISTS service_deps;")
@@ -70,7 +71,7 @@ def seed_postgres(edges: list[tuple[int, int]]) -> None:
 
 
 def seed_neo4j(driver, edges: list[tuple[int, int]]) -> None:
-    console.print(f"[*] Seeding Neo4j with {NUM_NODES:,} nodes and {len(edges):,} relationships...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Seeding Neo4j with {NUM_NODES:,} nodes and {len(edges):,} relationships...")
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
         session.run("CREATE CONSTRAINT service_id_unique IF NOT EXISTS FOR (s:Service) REQUIRE s.id IS UNIQUE")
@@ -130,12 +131,12 @@ def main() -> None:
         pg_conn = psycopg.connect(PG_DSN, autocommit=True)
     except Exception as e:
         console.print(f"[bold red]Error connecting to Neo4j or PostgreSQL ({escape(str(e))})[/]")
-        console.print("Start the dual-engine profile first: make up EXP=compare-sql", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("Start the dual-engine profile first: make up EXP=compare-sql")
         sys.exit(1)
 
     console.print("=" * 70, style="bold cyan")
     console.print("[bold cyan]Experiment 03: Multi-Hop Cypher (Neo4j) vs WITH RECURSIVE (PostgreSQL)[/]")
-    console.print(f"Graph Topology: {NUM_NODES:,} services, branching factor = {BRANCHING}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"Graph Topology: {NUM_NODES:,} services, branching factor = {BRANCHING}")
     console.print("=" * 70 + "\n", style="bold cyan")
 
     edges = build_edges()
@@ -149,25 +150,25 @@ def main() -> None:
 
         console.print("\n[bold blue][*] Benchmarking Multi-Hop Traversal Latency (Depths 1 to 7):[/]\n")
         header = f"{'Hop Depth':>9} | {'Distinct Reachable':>18} | {'Postgres CTE (ms)':>18} | {'Neo4j Cypher (ms)':>18}"
-        console.print(header, markup=False, highlight=False, soft_wrap=True)
-        console.print("-" * len(header), markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(header)
+        plain_console.print("-" * len(header))
 
         for depth in range(1, 8):
             pg_cnt, pg_ms = query_postgres_depth(pg_conn, depth)
             neo_cnt, neo_ms = query_neo4j_depth(session, depth)
             assert pg_cnt == neo_cnt, f"Mismatch at depth {depth}: PG={pg_cnt} vs Neo4j={neo_cnt}"
-            console.print(f"{depth:>9} | {neo_cnt:>18,} | {pg_ms:>16.2f}ms | {neo_ms:>16.2f}ms", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"{depth:>9} | {neo_cnt:>18,} | {pg_ms:>16.2f}ms | {neo_ms:>16.2f}ms")
 
     console.print("\n" + "=" * 70, style="bold green")
-    console.print("SYSTEMS TAKEAWAYS", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("SYSTEMS TAKEAWAYS")
     console.print("=" * 70, style="bold green")
-    console.print("1. Shallow Joins (1-3 hops): PostgreSQL B-Tree indexes are remarkably fast", markup=False, highlight=False, soft_wrap=True)
-    console.print("   and often beat or match a graph database without adding operational complexity.", markup=False, highlight=False, soft_wrap=True)
-    console.print("2. Deep / Variable Traversals (5+ hops): Relational WITH RECURSIVE must materialize", markup=False, highlight=False, soft_wrap=True)
-    console.print("   intermediate worktables and repeatedly probe B-Tree indexes O(log N) per hop.", markup=False, highlight=False, soft_wrap=True)
-    console.print("3. Index-Free Adjacency: Neo4j stores direct physical pointers on each node record,", markup=False, highlight=False, soft_wrap=True)
-    console.print("   making hop traversal an O(1) memory pointer chase per relationship.", markup=False, highlight=False, soft_wrap=True)
-    console.print("======================================================================\n", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("1. Shallow Joins (1-3 hops): PostgreSQL B-Tree indexes are remarkably fast")
+    plain_console.print("   and often beat or match a graph database without adding operational complexity.")
+    plain_console.print("2. Deep / Variable Traversals (5+ hops): Relational WITH RECURSIVE must materialize")
+    plain_console.print("   intermediate worktables and repeatedly probe B-Tree indexes O(log N) per hop.")
+    plain_console.print("3. Index-Free Adjacency: Neo4j stores direct physical pointers on each node record,")
+    plain_console.print("   making hop traversal an O(1) memory pointer chase per relationship.")
+    plain_console.print("======================================================================\n")
 
     pg_conn.close()
     driver.close()

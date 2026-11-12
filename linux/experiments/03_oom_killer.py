@@ -36,6 +36,7 @@ import time
 from rich.console import Console
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def get_cgroup_memory_paths() -> tuple[str | None, str | None, str | None]:
@@ -148,19 +149,19 @@ def run_experiment() -> None:
     parser.add_argument("--direct", action="store_true", help="Directly trigger OOM in the calling process")
     args = parser.parse_args()
 
-    console.print("=" * 70, markup=False, highlight=False, soft_wrap=True)
-    console.print(" Linux Kernel Primitives Lab - Experiment 03: Kernel OOM Killer (Exit 137)", markup=False, highlight=False, soft_wrap=True)
-    console.print("=" * 70, markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("=" * 70)
+    plain_console.print(" Linux Kernel Primitives Lab - Experiment 03: Kernel OOM Killer (Exit 137)")
+    plain_console.print("=" * 70)
 
     # 1. Host Invariant Check
     if platform.system() != "Linux":
-        console.print(f"\n[SECURITY GUARD] Detected host OS: {platform.system()} ({platform.release()}).", markup=False, highlight=False, soft_wrap=True)
-        console.print("The Linux OOM Killer and memory cgroups controllers are exclusive to Linux.", markup=False, highlight=False, soft_wrap=True)
-        console.print("Running an uncontrolled memory exhaustion script on macOS can freeze the host.", markup=False, highlight=False, soft_wrap=True)
-        console.print("\nPlease run this experiment inside the isolated Linux container:", markup=False, highlight=False, soft_wrap=True)
-        console.print("    cd linux", markup=False, highlight=False, soft_wrap=True)
-        console.print("    make up EXP=oom-killer", markup=False, highlight=False, soft_wrap=True)
-        console.print("    make run EXP=oom-killer SCRIPT=03_oom_killer\n", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"\n[SECURITY GUARD] Detected host OS: {platform.system()} ({platform.release()}).")
+        plain_console.print("The Linux OOM Killer and memory cgroups controllers are exclusive to Linux.")
+        plain_console.print("Running an uncontrolled memory exhaustion script on macOS can freeze the host.")
+        plain_console.print("\nPlease run this experiment inside the isolated Linux container:")
+        plain_console.print("    cd linux")
+        plain_console.print("    make up EXP=oom-killer")
+        plain_console.print("    make run EXP=oom-killer SCRIPT=03_oom_killer\n")
         sys.exit(0)
 
     # 2. Inspect Linux environment & cgroup memory controllers
@@ -180,19 +181,19 @@ def run_experiment() -> None:
 
     initial_events = parse_memory_events(mem_events_file)
 
-    console.print(f"[*] Kernel Release         : {platform.uname().release}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"[*] cgroups memory.max     : {mem_max_mb} ({mem_max_file})", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"[*] cgroups memory.current : {mem_curr_mb} ({mem_curr_file})", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"[*] Initial memory.events  : {initial_events}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Kernel Release         : {platform.uname().release}")
+    plain_console.print(f"[*] cgroups memory.max     : {mem_max_mb} ({mem_max_file})")
+    plain_console.print(f"[*] cgroups memory.current : {mem_curr_mb} ({mem_curr_file})")
+    plain_console.print(f"[*] Initial memory.events  : {initial_events}")
 
     if args.direct:
         # Direct mode: allocates until kernel kills the current process
-        console.print("\n--- Direct Mode: Allocating in-process until OOM termination ---", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("\n--- Direct Mode: Allocating in-process until OOM termination ---")
         allocate_until_oom()
         return
 
     # 3. Observer Mode: Fork worker, track telemetry, capture exit code 137
-    console.print("\n--- Phase 1: Forking Worker Child for Controlled OOM Observation ---", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("\n--- Phase 1: Forking Worker Child for Controlled OOM Observation ---")
     sys.stdout.flush()
 
     child_pid = os.fork()
@@ -201,36 +202,36 @@ def run_experiment() -> None:
         try:
             allocate_until_oom()
         except Exception as e:
-            console.print(f"[Child Exception] {e}", markup=False, highlight=False, soft_wrap=True)
-            console.file.flush()
+            plain_console.print(f"[Child Exception] {e}")
+            plain_console.file.flush()
             os._exit(1)
         os._exit(0)
 
     # Parent process: monitor child and wait for kernel termination
-    console.print(f"[*] Parent (PID: {os.getpid()}) monitoring Child (PID: {child_pid})...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Parent (PID: {os.getpid()}) monitoring Child (PID: {child_pid})...")
 
     # Wait for child process status
     _, status = os.waitpid(child_pid, 0)
 
-    console.print("\n" + "#" * 70, markup=False, highlight=False, soft_wrap=True)
-    console.print("  >>> SUCCESS: DETECTED PROCESS TERMINATION BY LINUX KERNEL <<<", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("\n" + "#" * 70)
+    plain_console.print("  >>> SUCCESS: DETECTED PROCESS TERMINATION BY LINUX KERNEL <<<")
 
     if os.WIFSIGNALED(status):
         term_sig = os.WTERMSIG(status)
         exit_code = 128 + term_sig
-        console.print(f"  Termination Reason : Process killed by Signal {term_sig}", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"  Signal Name        : {signal_name(term_sig)}", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"  Calculated Exit    : 128 + {term_sig} = EXIT CODE {exit_code}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"  Termination Reason : Process killed by Signal {term_sig}")
+        plain_console.print(f"  Signal Name        : {signal_name(term_sig)}")
+        plain_console.print(f"  Calculated Exit    : 128 + {term_sig} = EXIT CODE {exit_code}")
     elif os.WIFEXITED(status):
         exit_code = os.WEXITSTATUS(status)
-        console.print(f"  Termination Reason : Process exited normally with code {exit_code}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"  Termination Reason : Process exited normally with code {exit_code}")
     else:
         exit_code = -1
-        console.print("  Termination Reason : Process stopped or unhandled", markup=False, highlight=False, soft_wrap=True)
-    console.print("#" * 70, markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("  Termination Reason : Process stopped or unhandled")
+    plain_console.print("#" * 70)
 
     # 4. Inspect Post-Mortem Cgroup Memory Events
-    console.print("\n--- Phase 2: Post-Mortem Cgroup Telemetry Inspection ---", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("\n--- Phase 2: Post-Mortem Cgroup Telemetry Inspection ---")
     final_events = parse_memory_events(mem_events_file)
     final_curr_raw = read_file_safe(mem_curr_file)
     try:
@@ -238,30 +239,30 @@ def run_experiment() -> None:
     except Exception:
         final_curr_mb = final_curr_raw
 
-    console.print(f"[*] Post-mortem memory.current : {final_curr_mb}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"[*] Post-mortem memory.events  : {final_events}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Post-mortem memory.current : {final_curr_mb}")
+    plain_console.print(f"[*] Post-mortem memory.events  : {final_events}")
 
     oom_kills = final_events.get("oom_kill", 0) - initial_events.get("oom_kill", 0)
-    console.print(f"[*] Net kernel oom_kill count  : +{oom_kills}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Net kernel oom_kill count  : +{oom_kills}")
 
     # 5. Systems Takeaways & Interview Angles
-    console.print("\n" + "=" * 70, markup=False, highlight=False, soft_wrap=True)
-    console.print(" Systems & Production Takeaways:", markup=False, highlight=False, soft_wrap=True)
-    console.print("=" * 70, markup=False, highlight=False, soft_wrap=True)
-    console.print(" 1. The Anatomy of Exit Code 137:", markup=False, highlight=False, soft_wrap=True)
-    console.print("    In Linux, when a process dies from a signal, shells and Docker report:", markup=False, highlight=False, soft_wrap=True)
-    console.print("        Exit Code = 128 + Signal Number", markup=False, highlight=False, soft_wrap=True)
-    console.print("    Signal 9 is SIGKILL. Therefore: 128 + 9 = 137.", markup=False, highlight=False, soft_wrap=True)
-    console.print("    In Docker and Kubernetes (OOMKilled), exit code 137 is the definitive", markup=False, highlight=False, soft_wrap=True)
-    console.print("    signature that the Linux kernel OOM Killer terminated the container.", markup=False, highlight=False, soft_wrap=True)
-    console.print(" 2. Why Swap Disabled Matters (`memswap_limit == memory`):", markup=False, highlight=False, soft_wrap=True)
-    console.print("    If swap is enabled, the kernel pushes inactive dirty pages to disk,", markup=False, highlight=False, soft_wrap=True)
-    console.print("    causing severe disk thrashing (high I/O wait) before finally OOM killing.", markup=False, highlight=False, soft_wrap=True)
-    console.print("    Disabling swap makes OOM enforcement immediate and deterministic.", markup=False, highlight=False, soft_wrap=True)
-    console.print(" 3. `memory.events` in Cgroups v2:", markup=False, highlight=False, soft_wrap=True)
-    console.print("    The `memory.events` interface exposes high-precision counters (`oom`, `oom_kill`,", markup=False, highlight=False, soft_wrap=True)
-    console.print("    `max`) without needing to parse `/var/log/messages` or `dmesg`.", markup=False, highlight=False, soft_wrap=True)
-    console.print("=" * 70, markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("\n" + "=" * 70)
+    plain_console.print(" Systems & Production Takeaways:")
+    plain_console.print("=" * 70)
+    plain_console.print(" 1. The Anatomy of Exit Code 137:")
+    plain_console.print("    In Linux, when a process dies from a signal, shells and Docker report:")
+    plain_console.print("        Exit Code = 128 + Signal Number")
+    plain_console.print("    Signal 9 is SIGKILL. Therefore: 128 + 9 = 137.")
+    plain_console.print("    In Docker and Kubernetes (OOMKilled), exit code 137 is the definitive")
+    plain_console.print("    signature that the Linux kernel OOM Killer terminated the container.")
+    plain_console.print(" 2. Why Swap Disabled Matters (`memswap_limit == memory`):")
+    plain_console.print("    If swap is enabled, the kernel pushes inactive dirty pages to disk,")
+    plain_console.print("    causing severe disk thrashing (high I/O wait) before finally OOM killing.")
+    plain_console.print("    Disabling swap makes OOM enforcement immediate and deterministic.")
+    plain_console.print(" 3. `memory.events` in Cgroups v2:")
+    plain_console.print("    The `memory.events` interface exposes high-precision counters (`oom`, `oom_kill`,")
+    plain_console.print("    `max`) without needing to parse `/var/log/messages` or `dmesg`.")
+    plain_console.print("=" * 70)
 
 
 def signal_name(sig: int) -> str:

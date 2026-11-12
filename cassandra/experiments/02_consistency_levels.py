@@ -57,6 +57,7 @@ TABLE = "accounts"
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def log(msg: str, color: str = "[dim]") -> None:
@@ -151,21 +152,21 @@ def evaluate_levels(session, scenario_name: str, base_id: int) -> dict[str, str]
         ("ALL", ConsistencyLevel.ALL),
     ]
     results = {}
-    console.print(f"\n--- Testing Scenario: {scenario_name} ---", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"\n--- Testing Scenario: {scenario_name} ---")
     for name, cl in levels:
         success, elapsed, msg = test_write_read(session, cl, base_id, name)
         status = "[green][PASS][/]" if success else "[red][FAIL][/]"
         results[name] = "PASS" if success else "FAIL"
-        console.print(f"  {name:7s} | {status} {msg}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"  {name:7s} | {status} {msg}")
         base_id += 1
     return results
 
 
 def run_experiment() -> None:
-    console.print("\n" + "=" * 70, markup=False, highlight=False, soft_wrap=True)
-    console.print("  EXPERIMENT 02: Tunable Consistency & PACELC in Practice  ", markup=False, highlight=False, soft_wrap=True)
-    console.print("  3-Node Mini-Cluster (RF = 3: node1, node2, node3)       ", markup=False, highlight=False, soft_wrap=True)
-    console.print("=" * 70 + "\n", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("\n" + "=" * 70)
+    plain_console.print("  EXPERIMENT 02: Tunable Consistency & PACELC in Practice  ")
+    plain_console.print("  3-Node Mini-Cluster (RF = 3: node1, node2, node3)       ")
+    plain_console.print("=" * 70 + "\n")
 
     cluster = wait_for_coordinator()
     session = cluster.connect()
@@ -224,30 +225,30 @@ def run_experiment() -> None:
         # ---------------------------------------------------------
         # PACELC Trade-Off Matrix Display
         # ---------------------------------------------------------
-        console.print("\n" + "=" * 70, markup=False, highlight=False, soft_wrap=True)
-        console.print("  PACELC AVAILABILITY MATRIX UNDER NODE DEGRADATION", markup=False, highlight=False, soft_wrap=True)
-        console.print("=" * 70, markup=False, highlight=False, soft_wrap=True)
-        console.print(f"  {'Cluster State':<30} | {'ONE (req 1)':<12} | {'QUORUM (req 2)':<14} | {'ALL (req 3)':<12}", markup=False, highlight=False, soft_wrap=True)
-        console.print("  " + "-" * 66, markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("\n" + "=" * 70)
+        plain_console.print("  PACELC AVAILABILITY MATRIX UNDER NODE DEGRADATION")
+        plain_console.print("=" * 70)
+        plain_console.print(f"  {'Cluster State':<30} | {'ONE (req 1)':<12} | {'QUORUM (req 2)':<14} | {'ALL (req 3)':<12}")
+        plain_console.print("  " + "-" * 66)
         for state, one_res, q_res, all_res in matrix:
             c_one = f"[green]{one_res}[/]" if one_res == "PASS" else f"[red]{one_res}[/]"
             c_q = f"[green]{q_res}[/]" if q_res == "PASS" else f"[red]{q_res}[/]"
             c_all = f"[green]{all_res}[/]" if all_res == "PASS" else f"[red]{all_res}[/]"
-            console.print(f"  {state:<30} | {c_one:<21} | {c_q:<23} | {c_all:<21}", markup=False, highlight=False, soft_wrap=True)
-        console.print("=" * 70 + "\n", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"  {state:<30} | {c_one:<21} | {c_q:<23} | {c_all:<21}")
+        plain_console.print("=" * 70 + "\n")
 
         console.print("[bold]PACELC & Cassandra Distributed Systems Takeaways:[/]")
-        console.print("1. In PACELC: if Partitioned (P): trade-off between Availability (A) and Consistency (C).", markup=False, highlight=False, soft_wrap=True)
-        console.print("2. When 1 node dies (2 alive):", markup=False, highlight=False, soft_wrap=True)
-        console.print("   - QUORUM still succeeds because floor(3/2) + 1 = 2 live replicas.", markup=False, highlight=False, soft_wrap=True)
-        console.print("   - ALL fails immediately with UnavailableException (cannot satisfy 3/3).", markup=False, highlight=False, soft_wrap=True)
-        console.print("3. When 2 nodes die (1 alive):", markup=False, highlight=False, soft_wrap=True)
-        console.print("   - QUORUM fails (needs 2, only 1 available). Prioritizes Consistency over Availability.", markup=False, highlight=False, soft_wrap=True)
-        console.print("   - ONE succeeds. Prioritizes Availability over Consistency (risk of stale reads).", markup=False, highlight=False, soft_wrap=True)
-        console.print("4. Strong Consistency Formula: Read Consistency + Write Consistency > Replication Factor.", markup=False, highlight=False, soft_wrap=True)
-        console.print("   - QUORUM Write (2) + QUORUM Read (2) = 4 > 3 (RF). Guarantees strong consistency (Pigeonhole principle).", markup=False, highlight=False, soft_wrap=True)
-        console.print("   - ONE Write (1) + ONE Read (1) = 2 <= 3. Eventual consistency only.", markup=False, highlight=False, soft_wrap=True)
-        console.print(markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("1. In PACELC: if Partitioned (P): trade-off between Availability (A) and Consistency (C).")
+        plain_console.print("2. When 1 node dies (2 alive):")
+        plain_console.print("   - QUORUM still succeeds because floor(3/2) + 1 = 2 live replicas.")
+        plain_console.print("   - ALL fails immediately with UnavailableException (cannot satisfy 3/3).")
+        plain_console.print("3. When 2 nodes die (1 alive):")
+        plain_console.print("   - QUORUM fails (needs 2, only 1 available). Prioritizes Consistency over Availability.")
+        plain_console.print("   - ONE succeeds. Prioritizes Availability over Consistency (risk of stale reads).")
+        plain_console.print("4. Strong Consistency Formula: Read Consistency + Write Consistency > Replication Factor.")
+        plain_console.print("   - QUORUM Write (2) + QUORUM Read (2) = 4 > 3 (RF). Guarantees strong consistency (Pigeonhole principle).")
+        plain_console.print("   - ONE Write (1) + ONE Read (1) = 2 <= 3. Eventual consistency only.")
+        plain_console.print()
 
     finally:
         session.shutdown()

@@ -48,6 +48,7 @@ ROLE_MAX_TTL = "1m"
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 err_console = Console(stderr=True)
 
 
@@ -59,7 +60,7 @@ def print_banner(title: str) -> None:
 
 def setup_postgres_seed_data() -> None:
     """Pre-seeds a test table in PostgreSQL to verify dynamic read access."""
-    console.print(f"[*] Seeding PostgreSQL table at {POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Seeding PostgreSQL table at {POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}...")
     conn_str = f"postgresql://{ROOT_PG_USER}:{ROOT_PG_PASS}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
     with psycopg.connect(conn_str, autocommit=True) as conn:
         with conn.cursor() as cur:
@@ -83,17 +84,17 @@ def setup_postgres_seed_data() -> None:
 
 def configure_vault_database_engine(client: hvac.Client) -> None:
     """Mounts database secrets engine, connects to Postgres, and defines dynamic role."""
-    console.print("[*] Inspecting Vault mounted secrets engines...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("[*] Inspecting Vault mounted secrets engines...")
     mounts = client.sys.list_mounted_secrets_engines().get("data", {})
 
     if "database/" not in mounts:
-        console.print("[*] Mounting database secrets engine at 'database/'...", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("[*] Mounting database secrets engine at 'database/'...")
         client.sys.enable_secrets_engine(backend_type="database", path="database")
         console.print("[bold green][+] Database secrets engine mounted successfully.[/]")
     else:
         console.print("[bold yellow][!] Database secrets engine already mounted at 'database/'.[/]")
 
-    console.print("[*] Configuring Vault database connection plugin for PostgreSQL...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("[*] Configuring Vault database connection plugin for PostgreSQL...")
     # Vault connects to PostgreSQL inside the Docker network at hostname 'postgres'
     vault_pg_conn_url = f"postgresql://{{{{username}}}}:{{{{password}}}}@postgres:5432/{POSTGRES_DB}?sslmode=disable"
 
@@ -131,7 +132,7 @@ def configure_vault_database_engine(client: hvac.Client) -> None:
         'DROP ROLE IF EXISTS "{{name}}";',
     ]
 
-    console.print(f"[*] Defining dynamic role '{ROLE_NAME}' (TTL: {ROLE_TTL}, Max TTL: {ROLE_MAX_TTL})...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Defining dynamic role '{ROLE_NAME}' (TTL: {ROLE_TTL}, Max TTL: {ROLE_MAX_TTL})...")
     try:
         client.secrets.database.create_role(
             name=ROLE_NAME,
@@ -164,7 +165,7 @@ def test_dynamic_credentials_lifecycle() -> None:
     configure_vault_database_engine(client)
 
     print_banner("2. Request Ephemeral Dynamic Credentials from Vault")
-    console.print(f"[*] Requesting credentials for role '{ROLE_NAME}'...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Requesting credentials for role '{ROLE_NAME}'...")
     start_time = time.perf_counter()
     creds_resp = client.secrets.database.generate_credentials(name=ROLE_NAME)
     gen_duration = (time.perf_counter() - start_time) * 1000
@@ -179,10 +180,10 @@ def test_dynamic_credentials_lifecycle() -> None:
     console.print(f"    - Generated Username : [bold magenta]{username}[/]")
     console.print(f"    - Generated Password : [bold magenta][REDACTED {len(password)} chars][/]")
     console.print(f"    - Lease ID           : [bold yellow]{lease_id}[/]")
-    console.print(f"    - Lease Duration     : {lease_duration}s (Renewable: {renewable})", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    - Lease Duration     : {lease_duration}s (Renewable: {renewable})")
 
     print_banner("3. Connect to PostgreSQL Using Dynamic Role")
-    console.print(f"[*] Connecting to {POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB} as '{username}'...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Connecting to {POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB} as '{username}'...")
     dynamic_conn_str = f"postgresql://{username}:{password}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
     with psycopg.connect(dynamic_conn_str, autocommit=True, connect_timeout=3) as conn:
@@ -190,17 +191,17 @@ def test_dynamic_credentials_lifecycle() -> None:
             cur.execute("SELECT current_user, session_user;")
             curr_user, sess_user = cur.fetchone()
             console.print("[bold green][+] Authenticated successfully to PostgreSQL![/]")
-            console.print(f"    - Current DB User : {curr_user}", markup=False, highlight=False, soft_wrap=True)
-            console.print(f"    - Session User    : {sess_user}", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"    - Current DB User : {curr_user}")
+            plain_console.print(f"    - Session User    : {sess_user}")
 
             cur.execute("SELECT classification_level, secret_payload FROM vault_classified_vault;")
             level, payload = cur.fetchone()
             console.print("[bold green][+] Query Execution Succeeded:[/]")
-            console.print(f"    - Classification  : {level}", markup=False, highlight=False, soft_wrap=True)
-            console.print(f"    - Secret Payload  : {payload}", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"    - Classification  : {level}")
+            plain_console.print(f"    - Secret Payload  : {payload}")
 
     print_banner("4. Cryptographic Revocation: Sever Access via Vault Lease Revocation")
-    console.print(f"[*] Revoking lease '{lease_id}' via Vault API...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Revoking lease '{lease_id}' via Vault API...")
     revoke_start = time.perf_counter()
     client.sys.revoke_lease(lease_id=lease_id)
     revoke_duration = (time.perf_counter() - revoke_start) * 1000
@@ -214,7 +215,7 @@ def test_dynamic_credentials_lifecycle() -> None:
         console.print(f"[bold green][+] Vault confirmed lease lookup failure (revoked/purged): {escape(str(exc))}[/]")
 
     print_banner("5. Verification: Prove PostgreSQL Immediately Rejects Revoked User")
-    console.print(f"[*] Attempting new connection using revoked username '{username}'...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"[*] Attempting new connection using revoked username '{username}'...")
 
     rejected = False
     try:
@@ -231,10 +232,10 @@ def test_dynamic_credentials_lifecycle() -> None:
         sys.exit(1)
 
     print_banner("Summary: Dynamic Database Credentials Invariants")
-    console.print("  1. No static credentials shared across services or operators.", markup=False, highlight=False, soft_wrap=True)
-    console.print("  2. Unique per-client username allocated deterministically on request.", markup=False, highlight=False, soft_wrap=True)
-    console.print("  3. Centralized revocation instantly drops database privileges and role.", markup=False, highlight=False, soft_wrap=True)
-    console.print("  4. Total elapsed time for credential creation + revocation cascade: < 100ms.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("  1. No static credentials shared across services or operators.")
+    plain_console.print("  2. Unique per-client username allocated deterministically on request.")
+    plain_console.print("  3. Centralized revocation instantly drops database privileges and role.")
+    plain_console.print("  4. Total elapsed time for credential creation + revocation cascade: < 100ms.")
     console.print("[bold green]\n=== Dynamic Secrets Lab Completed Successfully ===[/]\n")
 
 
@@ -242,7 +243,7 @@ if __name__ == "__main__":
     try:
         test_dynamic_credentials_lifecycle()
     except KeyboardInterrupt:
-        console.print("\n[!] Aborted by user.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("\n[!] Aborted by user.")
         sys.exit(130)
     except Exception as err:
         err_console.print(f"\n[bold red][ERROR] {escape(str(err))}[/]")

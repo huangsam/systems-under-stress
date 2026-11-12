@@ -31,6 +31,7 @@ CONCURRENT_REQUESTS = 100
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 class MockDatabase:
@@ -159,10 +160,10 @@ async def run_scenario(name: str, worker_fn, client: aioredis.Redis, pre_seed: b
     db_hits = db.query_count
     cache_hits = sum(1 for r in results if "cache" in r["source"])
 
-    console.print(f"    Total Client Requests : {CONCURRENT_REQUESTS}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"    Elapsed Time          : {duration * 1000:.1f}ms", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Total Client Requests : {CONCURRENT_REQUESTS}")
+    plain_console.print(f"    Elapsed Time          : {duration * 1000:.1f}ms")
     console.print(f"    Database Query Count  : [bold {'red' if db_hits > 10 else 'green'}]{db_hits}[/]")
-    console.print(f"    Served from Cache     : {cache_hits}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Served from Cache     : {cache_hits}")
 
 
 async def main() -> None:
@@ -171,12 +172,12 @@ async def main() -> None:
         await client.ping()
     except Exception:
         console.print("[bold red]Error: Cannot connect to Redis on 127.0.0.1:6379.[/]")
-        console.print("Run 'make up EXP=stampede' first.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("Run 'make up EXP=stampede' first.")
         return
 
     console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 02: Cache Stampede (Thundering Herd) Simulation[/]")
-    console.print("Testing 100 concurrent requests arriving on an expired hot key.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("Testing 100 concurrent requests arriving on an expired hot key.")
     console.print("=" * 65, style="bold cyan")
 
     # Scenario 1: Naive Cache-Aside
@@ -189,12 +190,12 @@ async def main() -> None:
     await run_scenario("3. Probabilistic Early Refresh (XFetch)", worker_xfetch, client, pre_seed=True)
 
     console.print("\n" + "=" * 65, style="bold green")
-    console.print("SYSTEMS TAKEAWAYS", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("SYSTEMS TAKEAWAYS")
     console.print("=" * 65, style="bold green")
-    console.print("1. Naive Cache-Aside causes a 1:1 surge into the primary DB upon key expiry.", markup=False, highlight=False, soft_wrap=True)
-    console.print("2. Distributed Locks (SET NX PX) collapse 100 DB queries into EXACTLY 1 query.", markup=False, highlight=False, soft_wrap=True)
-    console.print("3. Probabilistic early refresh eliminates cache miss latency entirely for users.", markup=False, highlight=False, soft_wrap=True)
-    console.print("=================================================================\n", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("1. Naive Cache-Aside causes a 1:1 surge into the primary DB upon key expiry.")
+    plain_console.print("2. Distributed Locks (SET NX PX) collapse 100 DB queries into EXACTLY 1 query.")
+    plain_console.print("3. Probabilistic early refresh eliminates cache miss latency entirely for users.")
+    plain_console.print("=================================================================\n")
 
     await client.aclose()
 

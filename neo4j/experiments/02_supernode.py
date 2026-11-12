@@ -42,6 +42,7 @@ AUTH = ("neo4j", "password123")
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 err_console = Console(stderr=True)
 
 
@@ -51,7 +52,7 @@ def get_driver() -> Driver:
 
 def wait_for_neo4j(driver: Driver, timeout_sec: int = 45) -> None:
     start = time.time()
-    console.print("[*] Connecting to Neo4j at bolt://127.0.0.1:7687...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("[*] Connecting to Neo4j at bolt://127.0.0.1:7687...")
     while time.time() - start < timeout_sec:
         try:
             with driver.session() as session:
@@ -103,7 +104,7 @@ def reset_and_seed_supernode(driver: Driver, supernode_edges: int = 50000, spars
                 """,
                 {"start_idx": start_idx, "end_idx": end_idx},
             )
-            console.print(f"    -> Inserted {(b + 1) * batch_size:,} / {supernode_edges:,} supernode edges...", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"    -> Inserted {(b + 1) * batch_size:,} / {supernode_edges:,} supernode edges...")
 
         # Seed sparse node edges
         session.run(
@@ -143,18 +144,18 @@ def test_traversal_degradation(driver: Driver) -> None:
         wall_super_ms = (time.perf_counter() - t1) * 1000.0
         hits_super = extract_total_db_hits(sum_super.profile)
 
-        console.print(f"{'Target Node Type':<22}{'Degree':<14}{'DB Hits':<14}{'Server Time (ms)':<18}{'Wall Time (ms)':<14}", markup=False, highlight=False, soft_wrap=True)
-        console.print("-" * 82, markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"{'Target Node Type':<22}{'Degree':<14}{'DB Hits':<14}{'Server Time (ms)':<18}{'Wall Time (ms)':<14}")
+        plain_console.print("-" * 82)
         server_sparse_ms = sum_sparse.result_available_after + sum_sparse.result_consumed_after
         server_super_ms = sum_super.result_available_after + sum_super.result_consumed_after
 
-        console.print(f"{'Sparse Node':<22}{'10':<14}{hits_sparse:<14,}{server_sparse_ms:<18.2f}{wall_sparse_ms:<14.2f}", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"{'Dense Supernode':<22}{'50,000':<14}{hits_super:<14,}{server_super_ms:<18.2f}{wall_super_ms:<14.2f}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"{'Sparse Node':<22}{'10':<14}{hits_sparse:<14,}{server_sparse_ms:<18.2f}{wall_sparse_ms:<14.2f}")
+        plain_console.print(f"{'Dense Supernode':<22}{'50,000':<14}{hits_super:<14,}{server_super_ms:<18.2f}{wall_super_ms:<14.2f}")
 
         if hits_sparse > 0:
             hits_ratio = hits_super / hits_sparse
             console.print(f"\n[[bold yellow]![/]] Traversing through the Supernode required [bold red]{hits_ratio:,.0f}x[/] more DB hits")
-            console.print("    due to sequentially traversing the 50,000-pointer relationship record chain.", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print("    due to sequentially traversing the 50,000-pointer relationship record chain.")
 
 
 def test_lock_contention(driver: Driver, num_workers: int = 10, writes_per_worker: int = 25) -> None:
@@ -187,7 +188,7 @@ def test_lock_contention(driver: Driver, num_workers: int = 10, writes_per_worke
                 latencies.append((time.perf_counter() - t_start) * 1000.0)
         return latencies
 
-    console.print("  -> Running Workload A: High Contention (All threads locking the Supernode)...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("  -> Running Workload A: High Contention (All threads locking the Supernode)...")
     wall_start = time.perf_counter()
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = [executor.submit(worker_contended, wid) for wid in range(num_workers)]
@@ -214,7 +215,7 @@ def test_lock_contention(driver: Driver, num_workers: int = 10, writes_per_worke
                 latencies.append((time.perf_counter() - t_start) * 1000.0)
         return latencies
 
-    console.print("  -> Running Workload B: Zero Contention (Each thread locking independent hubs)...", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("  -> Running Workload B: Zero Contention (Each thread locking independent hubs)...")
     wall_start = time.perf_counter()
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = [executor.submit(worker_uncontended, wid) for wid in range(num_workers)]
@@ -235,15 +236,15 @@ def test_lock_contention(driver: Driver, num_workers: int = 10, writes_per_worke
     p95_u = statistics.quantiles(all_uncontended_latencies, n=20)[18]
     max_u = max(all_uncontended_latencies)
 
-    console.print("\n" + "=" * 82, markup=False, highlight=False, soft_wrap=True)
-    console.print(f"{'Metric':<30}{'Supernode Contention':<26}{'Partitioned Hubs':<26}", markup=False, highlight=False, soft_wrap=True)
-    console.print("=" * 82, markup=False, highlight=False, soft_wrap=True)
-    console.print(f"{'Total Duration':<30}{f'{wall_contended_sec:.2f} s':<26}{f'{wall_uncontended_sec:.2f} s':<26}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"{'Throughput':<30}{f'{throughput_contended:.1f} writes/s':<26}{f'{throughput_uncontended:.1f} writes/s':<26}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"{'P50 Latency':<30}{f'{p50_c:.2f} ms':<26}{f'{p50_u:.2f} ms':<26}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"{'P95 Latency':<30}{f'{p95_c:.2f} ms':<26}{f'{p95_u:.2f} ms':<26}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"{'Max Latency':<30}{f'{max_c:.2f} ms':<26}{f'{max_u:.2f} ms':<26}", markup=False, highlight=False, soft_wrap=True)
-    console.print("=" * 82, markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("\n" + "=" * 82)
+    plain_console.print(f"{'Metric':<30}{'Supernode Contention':<26}{'Partitioned Hubs':<26}")
+    plain_console.print("=" * 82)
+    plain_console.print(f"{'Total Duration':<30}{f'{wall_contended_sec:.2f} s':<26}{f'{wall_uncontended_sec:.2f} s':<26}")
+    plain_console.print(f"{'Throughput':<30}{f'{throughput_contended:.1f} writes/s':<26}{f'{throughput_uncontended:.1f} writes/s':<26}")
+    plain_console.print(f"{'P50 Latency':<30}{f'{p50_c:.2f} ms':<26}{f'{p50_u:.2f} ms':<26}")
+    plain_console.print(f"{'P95 Latency':<30}{f'{p95_c:.2f} ms':<26}{f'{p95_u:.2f} ms':<26}")
+    plain_console.print(f"{'Max Latency':<30}{f'{max_c:.2f} ms':<26}{f'{max_u:.2f} ms':<26}")
+    plain_console.print("=" * 82)
 
     latency_ratio = p95_c / p95_u if p95_u > 0 else 1.0
     console.print(f"\n[[bold yellow]![/]] Supernode exclusive lock serialization increased P95 write latency by [bold red]{latency_ratio:.1f}x[/].")

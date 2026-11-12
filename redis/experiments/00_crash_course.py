@@ -31,6 +31,7 @@ PORT = 6379
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def main() -> None:
@@ -45,19 +46,19 @@ def main() -> None:
         console.print(f"[bold blue][*] 1. Server Connectivity & Info (PING: {pong})[/]")
     except Exception as e:
         console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
-        console.print("Start the lab container first: cd redis && make up EXP=eviction-lru", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("Start the lab container first: cd redis && make up EXP=eviction-lru")
         sys.exit(1)
 
     info = r.info("server")
-    console.print(f"    Redis Version: {info.get('redis_version')}, Mode: {info.get('redis_mode')}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Redis Version: {info.get('redis_version')}, Mode: {info.get('redis_mode')}")
 
     # 2. Strings & TTL
     console.print("\n[bold blue][*] 2. Strings & Key Expiration (TTL)[/]")
     r.set("cc:user:101:name", "Alice")
     r.set("cc:user:101:session", "token-xyz789", ex=10)
-    console.print(f"    SET cc:user:101:name -> '{r.get('cc:user:101:name')}'", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    SET cc:user:101:name -> '{r.get('cc:user:101:name')}'")
     ttl = r.ttl("cc:user:101:session")
-    console.print(f"    SETEX cc:user:101:session -> '{r.get('cc:user:101:session')}' (TTL remaining: {ttl}s)", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    SETEX cc:user:101:session -> '{r.get('cc:user:101:session')}' (TTL remaining: {ttl}s)")
 
     # 3. Hashes
     console.print("\n[bold blue][*] 3. Hash Structures (HSET, HGETALL, HINCRBY)[/]")
@@ -65,9 +66,9 @@ def main() -> None:
     r.hset(cart_key, mapping={"item:laptop": "1", "item:mouse": "2"})
     r.hincrby(cart_key, "item:mouse", 1)
     cart_contents = r.hgetall(cart_key)
-    console.print(f"    Cart contents for {cart_key}:", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Cart contents for {cart_key}:")
     for k, v in cart_contents.items():
-        console.print(f"      - {k}: {v}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"      - {k}: {v}")
 
     # 4. Sets and Lists
     console.print("\n[bold blue][*] 4. Lists & Sets[/]")
@@ -76,13 +77,13 @@ def main() -> None:
     r.rpush(queue_key, "job_alpha", "job_beta", "job_gamma")
     job_count = r.llen(queue_key)
     jobs = r.lrange(queue_key, 0, -1)
-    console.print(f"    List {queue_key} ({job_count} items): {jobs}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    List {queue_key} ({job_count} items): {jobs}")
 
     tags_key = "cc:article:42:tags"
     r.delete(tags_key)
     r.sadd(tags_key, "database", "redis", "in-memory", "redis")  # duplicate ignored
     members = r.smembers(tags_key)
-    console.print(f"    Set {tags_key} (cardinality {r.scard(tags_key)}): {members}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Set {tags_key} (cardinality {r.scard(tags_key)}): {members}")
 
     # 5. Pipelining
     console.print("\n[bold blue][*] 5. Atomic Counters & Pipelining[/]")
@@ -92,23 +93,23 @@ def main() -> None:
     for _ in range(5):
         pipe.incr(counter_key)
     results = pipe.execute()
-    console.print(f"    Pipelined 5 INCR operations in 1 round-trip: final value = {results[-1]}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Pipelined 5 INCR operations in 1 round-trip: final value = {results[-1]}")
 
     # 6. Diagnostics
     console.print("\n[bold blue][*] 6. Memory & Engine Diagnostics[/]")
     mem = r.info("memory")
     stats = r.info("stats")
-    console.print(f"    Used Memory: {mem.get('used_memory_human')} (Peak: {mem.get('used_memory_peak_human')})", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"    Total Connections Received: {stats.get('total_connections_received')}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"    Total Commands Processed: {stats.get('total_commands_processed')}", markup=False, highlight=False, soft_wrap=True)
-    console.print(f"    Instantaneous Ops/sec: {stats.get('instantaneous_ops_per_sec')}", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Used Memory: {mem.get('used_memory_human')} (Peak: {mem.get('used_memory_peak_human')})")
+    plain_console.print(f"    Total Connections Received: {stats.get('total_connections_received')}")
+    plain_console.print(f"    Total Commands Processed: {stats.get('total_commands_processed')}")
+    plain_console.print(f"    Instantaneous Ops/sec: {stats.get('instantaneous_ops_per_sec')}")
 
     # Cleanup
     pattern = "cc:*"
     keys = r.keys(pattern)
     if keys:
         r.delete(*keys)
-    console.print(f"    Cleaned up {len(keys)} demo keys matching '{pattern}'.", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(f"    Cleaned up {len(keys)} demo keys matching '{pattern}'.")
 
     console.print("\n[bold green][✓] Redis Crash Course completed successfully![/]\n")
 

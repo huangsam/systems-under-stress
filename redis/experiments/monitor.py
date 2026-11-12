@@ -17,7 +17,8 @@ from rich.console import Console
 import redis
 
 console = Console()
-err_console = Console(stderr=True)
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+plain_err_console = Console(stderr=True, markup=False, highlight=False, soft_wrap=True)
 
 
 def format_bytes(b: int) -> str:
@@ -34,14 +35,14 @@ def main() -> None:
     try:
         client.ping()
     except redis.ConnectionError:
-        err_console.print("Error: Could not connect to Redis on 127.0.0.1:6379.", markup=False, highlight=False, soft_wrap=True)
-        err_console.print("Run 'make up EXP=eviction-lru' first.", markup=False, highlight=False, soft_wrap=True)
+        plain_err_console.print("Error: Could not connect to Redis on 127.0.0.1:6379.")
+        plain_err_console.print("Run 'make up EXP=eviction-lru' first.")
         sys.exit(1)
 
     console.print("[bold cyan]=== Live Redis Stats Monitor (Ctrl+C to stop) ===[/]")
     header = f"{'Used Mem':>10} | {'Max Mem':>10} | {'Usage %':>8} | {'Evicted Keys':>14} | {'Total Keys':>12} | {'Hit Ratio':>10}"
-    console.print(header, markup=False, highlight=False, soft_wrap=True)
-    console.print("-" * len(header), markup=False, highlight=False, soft_wrap=True)
+    plain_console.print(header)
+    plain_console.print("-" * len(header))
 
     last_evicted = 0
     while True:
@@ -68,20 +69,17 @@ def main() -> None:
 
             evict_str = f"{evicted:,} (+{evict_diff})" if evict_diff > 0 else f"{evicted:,}"
 
-            console.print(
+            plain_console.print(
                 f"{format_bytes(used):>10} | {format_bytes(max_mem):>10} | {usage_pct:>7.1f}% | {evict_str:>14} | {total_keys:>12,} | {hit_ratio:>9.1f}%",
                 end="\r",
-                markup=False,
-                highlight=False,
-                soft_wrap=True,
             )
-            console.file.flush()
+            plain_console.file.flush()
             time.sleep(1.0)
         except KeyboardInterrupt:
-            console.print("\nStopped.", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print("\nStopped.")
             break
         except Exception as e:
-            console.print(f"\nError fetching stats: {e}", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"\nError fetching stats: {e}")
             time.sleep(1.0)
 
 

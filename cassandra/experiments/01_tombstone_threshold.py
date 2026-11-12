@@ -53,6 +53,7 @@ DELETE_ROWS = 12_000
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def log(msg: str, color: str = "[dim]") -> None:
@@ -121,9 +122,9 @@ def setup_schema(session) -> None:
 
 
 def run_experiment() -> None:
-    console.print("\n" + "=" * 70, markup=False, highlight=False, soft_wrap=True)
-    console.print("  EXPERIMENT 01: The Tombstone Failure Threshold (10,000 Cap)  ", markup=False, highlight=False, soft_wrap=True)
-    console.print("=" * 70 + "\n", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("\n" + "=" * 70)
+    plain_console.print("  EXPERIMENT 01: The Tombstone Failure Threshold (10,000 Cap)  ")
+    plain_console.print("=" * 70 + "\n")
 
     cluster = wait_for_cassandra()
     session = cluster.connect()
@@ -249,26 +250,26 @@ def run_experiment() -> None:
         # ---------------------------------------------------------
         # Summary & Systems Insights
         # ---------------------------------------------------------
-        console.print("\n" + "=" * 70, markup=False, highlight=False, soft_wrap=True)
-        console.print("  EXPERIMENT 01 BENCHMARK SUMMARY", markup=False, highlight=False, soft_wrap=True)
-        console.print("=" * 70, markup=False, highlight=False, soft_wrap=True)
-        console.print(f"  Rows Inserted               : {TOTAL_ROWS:,}", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"  Rows Deleted (Tombstones)   : {DELETE_ROWS:,}", markup=False, highlight=False, soft_wrap=True)
-        console.print("  Cassandra Safety Threshold  : 10,000 tombstones (tombstone_failure_threshold)", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"  Unbounded Scan Result       : {'ABORTED (ReadFailureException)' if read_failed else 'PASSED'}", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"  Clustering Key Slice Latency: {(t1 - t0) * 1000:.2f} ms (Bypassed tombstones)", markup=False, highlight=False, soft_wrap=True)
-        console.print("=" * 70 + "\n", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("\n" + "=" * 70)
+        plain_console.print("  EXPERIMENT 01 BENCHMARK SUMMARY")
+        plain_console.print("=" * 70)
+        plain_console.print(f"  Rows Inserted               : {TOTAL_ROWS:,}")
+        plain_console.print(f"  Rows Deleted (Tombstones)   : {DELETE_ROWS:,}")
+        plain_console.print("  Cassandra Safety Threshold  : 10,000 tombstones (tombstone_failure_threshold)")
+        plain_console.print(f"  Unbounded Scan Result       : {'ABORTED (ReadFailureException)' if read_failed else 'PASSED'}")
+        plain_console.print(f"  Clustering Key Slice Latency: {(t1 - t0) * 1000:.2f} ms (Bypassed tombstones)")
+        plain_console.print("=" * 70 + "\n")
 
         console.print("[bold]Core Engineering Takeaways:[/]")
-        console.print("1. Deletes in Cassandra are append-only mutations that write immutable tombstones.", markup=False, highlight=False, soft_wrap=True)
-        console.print("2. Scans must read tombstones to ensure deleted cells aren't resurrected from older SSTables.", markup=False, highlight=False, soft_wrap=True)
-        console.print("3. When a query scans > 1,000 tombstones, Cassandra issues a server WARN.", markup=False, highlight=False, soft_wrap=True)
-        console.print("4. When a query scans > 10,000 tombstones, Cassandra aborts with ReadFailureException", markup=False, highlight=False, soft_wrap=True)
-        console.print("   to protect node JVM memory from GC death spirals and OOM crashes.", markup=False, highlight=False, soft_wrap=True)
-        console.print("5. Anti-pattern: High-churn queue implementations using Cassandra (insert + delete).", markup=False, highlight=False, soft_wrap=True)
-        console.print("6. Correct architectural pattern: Use short TTLs, clustering slice filters, or dedicated", markup=False, highlight=False, soft_wrap=True)
-        console.print("   message queues (Kafka, RabbitMQ) for transient items.", markup=False, highlight=False, soft_wrap=True)
-        console.print(markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("1. Deletes in Cassandra are append-only mutations that write immutable tombstones.")
+        plain_console.print("2. Scans must read tombstones to ensure deleted cells aren't resurrected from older SSTables.")
+        plain_console.print("3. When a query scans > 1,000 tombstones, Cassandra issues a server WARN.")
+        plain_console.print("4. When a query scans > 10,000 tombstones, Cassandra aborts with ReadFailureException")
+        plain_console.print("   to protect node JVM memory from GC death spirals and OOM crashes.")
+        plain_console.print("5. Anti-pattern: High-churn queue implementations using Cassandra (insert + delete).")
+        plain_console.print("6. Correct architectural pattern: Use short TTLs, clustering slice filters, or dedicated")
+        plain_console.print("   message queues (Kafka, RabbitMQ) for transient items.")
+        plain_console.print()
 
     finally:
         session.shutdown()

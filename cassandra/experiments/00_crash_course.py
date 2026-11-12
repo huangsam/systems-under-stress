@@ -33,6 +33,7 @@ TABLE_NAME = "users_by_country"
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def main() -> None:
@@ -45,15 +46,15 @@ def main() -> None:
         session = cluster.connect()
     except Exception as e:
         console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
-        console.print("Start the lab container first: cd cassandra && make up EXP=tombstones", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("Start the lab container first: cd cassandra && make up EXP=tombstones")
         sys.exit(1)
 
     try:
         # 1. Cluster Metadata & Connectivity
         console.print("[bold blue][*] 1. Node Metadata & System Introspection[/]")
         row = session.execute("SELECT cluster_name, data_center, release_version FROM system.local").one()
-        console.print(f"    Cluster Name: {row.cluster_name}", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"    Datacenter: {row.data_center}, Cassandra Version: {row.release_version}", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Cluster Name: {row.cluster_name}")
+        plain_console.print(f"    Datacenter: {row.data_center}, Cassandra Version: {row.release_version}")
 
         # 2. Keyspace & Table Creation
         console.print("\n[bold blue][*] 2. Creating Keyspace & Table Schema[/]")
@@ -74,8 +75,8 @@ def main() -> None:
                 PRIMARY KEY ((country), user_id)
             );
         """)
-        console.print(f"    Created keyspace '{KEYSPACE}' and table '{TABLE_NAME}'.", markup=False, highlight=False, soft_wrap=True)
-        console.print("    Schema Notes: 'country' is Partition Key (token hash); 'user_id' is Clustering Column.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Created keyspace '{KEYSPACE}' and table '{TABLE_NAME}'.")
+        plain_console.print("    Schema Notes: 'country' is Partition Key (token hash); 'user_id' is Clustering Column.")
 
         # 3. Prepared Statements & Inserts
         console.print("\n[bold blue][*] 3. Prepared Statements & Partition-Targeted Writes[/]")
@@ -94,15 +95,15 @@ def main() -> None:
 
         for country, uid, uname, email, score in records:
             session.execute(insert_stmt, (country, uid, uname, email, score))
-        console.print(f"    Inserted {len(records)} users across 3 distinct country partitions (US, CA, DE).", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Inserted {len(records)} users across 3 distinct country partitions (US, CA, DE).")
 
         # 4. Partition-bounded reads
         console.print("\n[bold blue][*] 4. Querying by Partition Key (O(1) Token Routing)[/]")
         query = SimpleStatement(f"SELECT country, username, email, score FROM {TABLE_NAME} WHERE country = 'US';")
         rows = session.execute(query)
-        console.print("    Querying partition 'country = US':", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("    Querying partition 'country = US':")
         for r in rows:
-            console.print(f"      - [{r.country}] {r.username} ({r.email}) -> Score: {r.score}", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"      - [{r.country}] {r.username} ({r.email}) -> Score: {r.score}")
 
         # 5. Schema Introspection
         console.print("\n[bold blue][*] 5. Schema Introspection (system_schema.columns)[/]")
@@ -112,13 +113,13 @@ def main() -> None:
             WHERE keyspace_name = '{KEYSPACE}' AND table_name = '{TABLE_NAME}';
         """
         cols = session.execute(schema_query)
-        console.print(f"    Column definitions for {KEYSPACE}.{TABLE_NAME}:", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Column definitions for {KEYSPACE}.{TABLE_NAME}:")
         for col in cols:
-            console.print(f"      - {col.column_name}: {col.type} (kind: {col.kind})", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"      - {col.column_name}: {col.type} (kind: {col.kind})")
 
         # Cleanup
         session.execute(f"DROP KEYSPACE IF EXISTS {KEYSPACE};")
-        console.print(f"    Cleaned up demo keyspace '{KEYSPACE}'.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Cleaned up demo keyspace '{KEYSPACE}'.")
 
     finally:
         cluster.shutdown()

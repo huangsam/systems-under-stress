@@ -30,6 +30,7 @@ AUTH = ("neo4j", "password123")
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def main() -> None:
@@ -42,7 +43,7 @@ def main() -> None:
         driver.verify_connectivity()
     except Exception as e:
         console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
-        console.print("Start the lab container first: cd neo4j && make up EXP=traversal-depth", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("Start the lab container first: cd neo4j && make up EXP=traversal-depth")
         sys.exit(1)
 
     with driver:
@@ -50,7 +51,7 @@ def main() -> None:
         console.print("[bold blue][*] 1. Server Connectivity & Component Introspection[/]")
         records, _, _ = driver.execute_query("CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition;")
         for r in records:
-            console.print(f"    Product: {r['name']} v{r['version']} ({r['edition']})", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"    Product: {r['name']} v{r['version']} ({r['edition']})")
 
         # Clean any old test artifacts
         driver.execute_query("MATCH (n:CrashCourse) DETACH DELETE n;")
@@ -66,7 +67,7 @@ def main() -> None:
             RETURN count(*) AS created;
         """
         driver.execute_query(create_nodes_cypher)
-        console.print("    Created 3 Developer nodes and 2 Service nodes.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("    Created 3 Developer nodes and 2 Service nodes.")
 
         # 3. Directed Relationships with Edge Properties
         console.print("\n[bold blue][*] 3. Creating Directed Relationships with Edge Attributes[/]")
@@ -81,7 +82,7 @@ def main() -> None:
             CREATE (s1)-[:DEPENDS_ON {protocol: 'gRPC', timeout_ms: 250}]->(s2);
         """
         driver.execute_query(create_edges_cypher)
-        console.print("    Created 4 :MAINTAINS edges and 1 :DEPENDS_ON service-to-service edge.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("    Created 4 :MAINTAINS edges and 1 :DEPENDS_ON service-to-service edge.")
 
         # 4. Pattern Match Traversals
         console.print("\n[bold blue][*] 4. Cypher Pattern Matching & Multi-Hop Traversal[/]")
@@ -91,11 +92,11 @@ def main() -> None:
             ORDER BY service, dev;
         """
         res_direct, _, _ = driver.execute_query(query_direct)
-        console.print("    Direct Maintainers:", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("    Direct Maintainers:")
         for r in res_direct:
-            console.print(f"      - {r['dev']} -> {r['service']} (Role: {r['role']})", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"      - {r['dev']} -> {r['service']} (Role: {r['role']})")
 
-        console.print("\n    Traversing Coworkers (Developers sharing maintained services):", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("\n    Traversing Coworkers (Developers sharing maintained services):")
         query_coworkers = """
             MATCH (d1:CrashCourse:Developer)-[:MAINTAINS]->(s:CrashCourse:Service)<-[:MAINTAINS]-(d2:CrashCourse:Developer)
             WHERE d1.id < d2.id
@@ -103,7 +104,7 @@ def main() -> None:
         """
         res_coworkers, _, _ = driver.execute_query(query_coworkers)
         for r in res_coworkers:
-            console.print(f"      - {r['dev1']} & {r['dev2']} collaborate on '{r['shared_service']}'", markup=False, highlight=False, soft_wrap=True)
+            plain_console.print(f"      - {r['dev1']} & {r['dev2']} collaborate on '{r['shared_service']}'")
 
         # 5. Graph Diagnostics
         console.print("\n[bold blue][*] 5. Graph Diagnostics & Node Counts[/]")
@@ -114,11 +115,11 @@ def main() -> None:
         """)
         nodes_cnt = counts_res[0]["nodes"]
         rels_cnt = counts_res[0]["rels"]
-        console.print(f"    Active CrashCourse subgraph: {nodes_cnt} nodes, {rels_cnt} relationships.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print(f"    Active CrashCourse subgraph: {nodes_cnt} nodes, {rels_cnt} relationships.")
 
         # Cleanup
         driver.execute_query("MATCH (n:CrashCourse) DETACH DELETE n;")
-        console.print("    Cleaned up demo graph nodes and relationships.", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("    Cleaned up demo graph nodes and relationships.")
 
     console.print("\n[bold green][✓] Neo4j Crash Course completed successfully![/]\n")
 

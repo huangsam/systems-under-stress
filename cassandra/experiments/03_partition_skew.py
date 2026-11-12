@@ -43,6 +43,7 @@ NUM_RECORDS = 5000
 
 
 console = Console()
+plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
 def log(msg: str, color: str = "[dim]") -> None:
@@ -106,9 +107,9 @@ def setup_schema(session) -> None:
 
 
 def run_experiment() -> None:
-    console.print("\n" + "=" * 70, markup=False, highlight=False, soft_wrap=True)
-    console.print("  EXPERIMENT 03: Wide Partitions & Hot-Spotting Anti-Patterns  ", markup=False, highlight=False, soft_wrap=True)
-    console.print("=" * 70 + "\n", markup=False, highlight=False, soft_wrap=True)
+    plain_console.print("\n" + "=" * 70)
+    plain_console.print("  EXPERIMENT 03: Wide Partitions & Hot-Spotting Anti-Patterns  ")
+    plain_console.print("=" * 70 + "\n")
 
     cluster = wait_for_cassandra()
     session = cluster.connect()
@@ -148,21 +149,21 @@ def run_experiment() -> None:
         _rows_bucket = list(session.execute(f"SELECT * FROM {KEYSPACE}.bucketed_feed WHERE tenant_id = 'tenant_0' AND date_bucket = '2026-10-22' LIMIT 1000"))
         t_bucket_read = (time.perf_counter() - t0) * 1000
 
-        console.print("\n" + "=" * 70, markup=False, highlight=False, soft_wrap=True)
-        console.print("  PARTITION ARCHITECTURE COMPARISON", markup=False, highlight=False, soft_wrap=True)
-        console.print("=" * 70, markup=False, highlight=False, soft_wrap=True)
-        console.print(f"  Ingestion Strategy        : {'Monolithic (1 Partition)':<25} vs {'Bucketed (10 Partitions)':<25}", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"  Write Duration            : {t_mono_write:.3f}s                   vs {t_bucket_write:.3f}s", markup=False, highlight=False, soft_wrap=True)
-        console.print(f"  Query Read Latency        : {t_mono_read:.2f} ms                  vs {t_bucket_read:.2f} ms", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("\n" + "=" * 70)
+        plain_console.print("  PARTITION ARCHITECTURE COMPARISON")
+        plain_console.print("=" * 70)
+        plain_console.print(f"  Ingestion Strategy        : {'Monolithic (1 Partition)':<25} vs {'Bucketed (10 Partitions)':<25}")
+        plain_console.print(f"  Write Duration            : {t_mono_write:.3f}s                   vs {t_bucket_write:.3f}s")
+        plain_console.print(f"  Query Read Latency        : {t_mono_read:.2f} ms                  vs {t_bucket_read:.2f} ms")
         console.print("  Partition Size Risk       : [red]CRITICAL (>100MB bloat)[/]   vs [green]SAFE (<10MB per bucket)[/]")
-        console.print("=" * 70 + "\n", markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("=" * 70 + "\n")
 
         console.print("[bold]Cassandra Partitioning Guardrails:[/]")
-        console.print("1. Maximum recommended partition size: 100MB (Hard limit ~2GB).", markup=False, highlight=False, soft_wrap=True)
-        console.print("2. Maximum recommended cells per partition: 100,000 cells.", markup=False, highlight=False, soft_wrap=True)
-        console.print("3. Wide partitions cause JVM heap spikes during read repair, compaction, and coordinator caching.", markup=False, highlight=False, soft_wrap=True)
-        console.print("4. Remediation: Introduce synthetic bucketing (e.g., date, week, or hash suffix) into partition key.", markup=False, highlight=False, soft_wrap=True)
-        console.print(markup=False, highlight=False, soft_wrap=True)
+        plain_console.print("1. Maximum recommended partition size: 100MB (Hard limit ~2GB).")
+        plain_console.print("2. Maximum recommended cells per partition: 100,000 cells.")
+        plain_console.print("3. Wide partitions cause JVM heap spikes during read repair, compaction, and coordinator caching.")
+        plain_console.print("4. Remediation: Introduce synthetic bucketing (e.g., date, week, or hash suffix) into partition key.")
+        plain_console.print()
 
     finally:
         session.shutdown()
