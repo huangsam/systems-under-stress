@@ -9,7 +9,7 @@ A hands-on, empirical systems engineering lab suite exploring the **hard operati
 
 ---
 
-## Lab Matrix (38 Reproducible Scripts Across 9 Labs: 9 Crash Courses + 29 Stress Experiments)
+## Lab Matrix (38 Reproducible Scripts Across 9 Labs)
 
 | Engine / Lab | Experiments | Primary Failure Signatures Reproduced |
 | :--- | :--- | :--- |
