@@ -20,7 +20,9 @@ compose-lint:
 		echo "Validating $$d/docker-compose.yml..."; \
 		(cd $$d && docker compose --profile "*" config -q) || exit 1; \
 	done
-	@echo "All compose configurations valid."
+	@echo "Auditing compose safety invariants..."
+	@uv run scripts/check_invariants.py
+	@echo "All compose configurations and invariants valid."
 
 test-compose: compose-lint
 

@@ -25,15 +25,15 @@ jobs:
         run: uvx ruff format --check .
 
   compose-lint:
-    name: Compose Lint (Docker)
+    name: Compose Lint & Invariants (Docker)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate Compose configurations
-        run: |
-          for d in redis postgres clickhouse mongodb cassandra neo4j vault linux; do
-            echo "Validating $d/docker-compose.yml..."
-            (cd "$d" && docker compose --profile "*" config -q) || exit 1
-          done
-          echo "All compose configurations valid."
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Validate Compose configurations & invariants
+        run: make compose-lint
