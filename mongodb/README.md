@@ -16,7 +16,8 @@ mongodb/
 │   ├── 00_crash_course.py         # BSON documents, aggregation pipelines & serverStatus
 │   ├── 01_sort_memory_limit.py    # 100MB in-memory sort limit vs allowDiskUse & B-Tree index
 │   ├── 02_write_concern_crash.py  # Write durability & crash recovery across w:0, w:1, j:True
-│   └── 03_document_size_cap.py    # Document growth, 16MB BSON ceiling & bucket pattern
+│   ├── 03_document_size_cap.py    # Document growth, 16MB BSON ceiling & bucket pattern
+│   └── 04_replica_set_elections.py # 3-node replica set, stepdown failover & oplog exhaustion
 └── README.md
 ```
 
@@ -127,6 +128,70 @@ make down EXP=document-limits
 
 ---
 
+## Experiment 04: 3-Node Replica Set Elections, Write Concern Durability & Oplog Exhaustion
+
+### 1. Hypothesis & Objective
+In production, MongoDB is deployed as a multi-node Replica Set (Primary-Secondary-Secondary) to achieve high availability and consensus durability:
+1. **Cluster Topology & Quorum**: A 3-node replica set requires a majority quorum of $\lfloor N/2 \rfloor + 1 = 2$ voting members. Raft-style election terms increment with every election, invalidating stale primaries.
+2. **Durability Across Sudden Primary Stepdown**:
+   - Streaming writes with **Local Acknowledgment (`w: 1`)** only commit to the primary's memory/journal. An abrupt stepdown (`replSetStepDown`) leaves in-flight and uncommitted writes stranded or rejected with `NotPrimaryError` / `AutoReconnect`.
+   - Streaming writes with **Majority Consensus (`w: "majority", j: True`)** require quorum replication before client acknowledgment, guaranteeing **0% data loss** across failover.
+3. **Capped Oplog Window Exhaustion**:
+   - MongoDB maintains a rolling circular log of write operations in `local.oplog.rs` (`--oplogSize 10`).
+   - If a secondary is paused or partitioned while write volume churns past the oplog's retention capacity, the primary truncates the oldest entries past the secondary's last applied timestamp.
+   - Upon reconnecting, the stale secondary discovers an unbridgeable oplog gap, fails sync source selection (`Cannot select sync source because it is too far behind`), and transitions into **`RECOVERING`** state, requiring a costly full Initial Sync.
+
+### 2. Configuration & Constraints
+- **Docker Image**: `mongo:9.0.4`
+- **Resource Constraints**: `memory: 128M`, `cpus: '0.5'` per node
+- **Replica Set Configuration**: 3 nodes (`mongo-node1: 27017`, `mongo-node2: 27018`, `mongo-node3: 27019`)
+- **Capped Oplog Size**: `--oplogSize 10` (10MB fixed rolling window)
+- **Isolated Named Volumes**: `mongo-rs1-data`, `mongo-rs2-data`, `mongo-rs3-data`
+
+### 3. How to Run
+```bash
+cd mongodb
+
+# 1. Start the 3-node replica set cluster
+make up EXP=replica-set
+
+# 2. Run the experiment workload
+make run SCRIPT=04_replica_set_elections
+
+# 3. Soft reset or clean teardown
+make soft-reset
+make down EXP=replica-set
+```
+
+### 4. Observed Metrics & Failure Signatures
+
+#### Replica Set Topology & Quorum
+```text
+Replica Set: rs0  |  Current Election Term: 1  |  Voting Quorum: 2 of 3 nodes (majority)
+
+╭──────────────────┬─────────────────┬──────────────┬────────┬────────┬───────────────────────────╮
+│ Node Host        │ Port (Host)     │ Role / State │ Health │ Uptime │ Optime                    │
+├──────────────────┼─────────────────┼──────────────┼────────┼────────┼───────────────────────────┤
+│ mongo-node1:2017 │ 127.0.0.1:27017 │ PRIMARY      │ 1 (OK) │ 98s    │ Timestamp(1794497402, 8)  │
+│ mongo-node2:2017 │ 127.0.0.1:27018 │ SECONDARY    │ 1 (OK) │ 10s    │ Timestamp(1794497402, 1)  │
+│ mongo-node3:2017 │ 127.0.0.1:27019 │ SECONDARY    │ 1 (OK) │ 10s    │ Timestamp(1794497402, 1)  │
+╰──────────────────┴─────────────────┴──────────────┴────────┴────────┴───────────────────────────╯
+✔ Quorum Verified: Exactly 1 PRIMARY and 2 SECONDARIES active.
+```
+
+#### Durability Comparison Under Sudden Primary Stepdown
+| Write Concern | Attempted | Acknowledged | Stored on New Primary | Lost Acknowledged | Durability Guarantee |
+|---|---|---|---|---|---|
+| **`w: 1` (Local Memory)** | 28 | 27 | 27 | **0** | Vulnerable to Rollback |
+| **`w: "majority", j: True`** | 11 | 11 | 11 | **0 (0.0% loss)** | **100% Durable (Committed)** |
+
+#### Oplog Window Exhaustion Outcome
+| Node | Role / State | Node Optime | Primary Oldest Oplog | Oplog Gap Status |
+|---|---|---|---|---|
+| **mongo-node3** | `RECOVERING` | `Timestamp(1794497423, 14)` | `Timestamp(1794497435, 226)` | **Fell Off Oplog (Stale - Requires Initial Sync)** |
+
+---
+
 ## Production & Systems Takeaways
 
 1. **Unindexed Sorts are Production Timebombs**:
@@ -137,6 +202,14 @@ make down EXP=document-limits
 2. **Standalone vs Replica Set Write Concern Defaults**:
    - In a standalone MongoDB instance, the default write concern is `w: 1, j: false`. Acknowledged writes are held in RAM and are not guaranteed to survive a power outage or kernel panic.
    - For mission-critical transactional data (financial ledgers, order confirmations), applications must explicitly enforce `j: True` or utilize replica sets with `w: "majority"` and journaled durability.
+
+3. **Durability Requires Majority Consensus (`w: majority`)**:
+   - Primary stepdown or network partitions can orphan un-replicated writes committed to a single node. Standalone defaults or `w: 1` will experience write rollbacks.
+   - Always enforce `w: "majority"` and enable retryable writes (`retryWrites=true`) to guarantee zero loss across cluster elections.
+
+4. **Oplog Sizing is a High-Availability SLA**:
+   - The oplog is a fixed circular buffer. If a replica lags or remains disconnected longer than the oplog retention window, it falls into `RECOVERING` state and cannot catch up via normal replication.
+   - Recovering from an oplog gap requires a full, I/O-intensive Initial Sync which impacts production database performance. Size the oplog to cover maximum anticipated maintenance, snapshot, and backup windows.
 
 ---
 

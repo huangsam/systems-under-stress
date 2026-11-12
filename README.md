@@ -9,14 +9,14 @@ A hands-on, empirical systems engineering lab suite exploring the **hard operati
 
 ---
 
-## Lab Matrix (36 Reproducible Experiments Across 9 Labs)
+## Lab Matrix (37 Reproducible Experiments Across 9 Labs)
 
 | Engine / Lab | Experiments | Primary Failure Signatures Reproduced |
 | :--- | :--- | :--- |
 | [**Redis**](./redis/) | Eviction (`maxmemory`), Cache Stampede, Crash Durability | `OOM command not allowed`, Thundering herd (100x), `SIGKILL` data loss |
-| [**PostgreSQL**](./postgres/) | Isolation Levels, Row Lock Contention, Sort `work_mem` | Write skew under `REPEATABLE READ`, Deadlock `40P01`, Disk spill |
+| [**PostgreSQL**](./postgres/) | Isolation Levels, Row Locks, Sort `work_mem`, Streaming Replication | Write skew (`REPEATABLE READ`), Deadlock `40P01`, Disk spill, Standby query conflict `40001` |
 | [**ClickHouse**](./clickhouse/) | Parts Explosion, Analytical Memory Cap, Columnar Codecs | `Code: 252 TOO_MANY_PARTS`, `Code: 241 MEMORY_LIMIT_EXCEEDED` |
-| [**MongoDB**](./mongodb/) | In-Memory Sort Limit, Write Concern Crash, Document Size | Sort exceeded 100MB (Code 96), Unjournaled crash loss, 16MB BSON cap |
+| [**MongoDB**](./mongodb/) | In-Memory Sort Limit, Write Concern Crash, Document Size, Replica Set Elections | Sort exceeded 100MB (Code 96), Unjournaled crash loss, 16MB BSON cap, Stepdown failover loss, Oplog exhaustion (`RECOVERING`) |
 | [**Cassandra**](./cassandra/) | Tombstone Threshold, PACELC Consistency, Partition Skew | `ReadFailureException` (10k tombstones), Quorum node loss, Partition GC |
 | [**Neo4j**](./neo4j/) | Unbounded Traversal, Supernodes, Cypher vs Recursive SQL | $\mathcal{O}(b^d)$ path explosion, 50k-edge lock contention, Recursive joins |
 | [**Vault**](./vault/) | Dynamic DB Credentials, Token Leases, Transit EaaS | Synchronous `DROP ROLE` cascade, `max_ttl` expiration, Crypto HTTP batching |

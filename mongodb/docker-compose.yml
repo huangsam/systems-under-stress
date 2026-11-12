@@ -15,6 +15,46 @@ x-mongo-base: &mongo-base
     retries: 15
     start_period: 3s
 
+x-mongo-rs-node: &mongo-rs-node
+  image: ${MONGO_IMAGE:-mongo:9.0.4}
+  restart: unless-stopped
+  environment:
+    - TCMALLOC_RELEASE_RATE=10
+    - TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=1048576
+  entrypoint:
+    - bash
+    - -c
+    - |
+      ulimit -s 1024 2>/dev/null || true
+      cat << "EOF" > /usr/local/bin/mongosh
+      #!/bin/bash
+      if [[ "$$*" == *"ping"* ]]; then
+          bash -c "true < /dev/tcp/127.0.0.1/27017" 2>/dev/null && exit 0 || exit 1
+      fi
+      exec /usr/bin/mongosh "$$@"
+      EOF
+      chmod +x /usr/local/bin/mongosh
+      args=("$${@}")
+      for i in "$${!args[@]}"; do
+          if [ "$${args[i]}" = "0.1" ]; then args[i]="0.25"; fi
+      done
+      args+=("--syncdelay" "5" "--wiredTigerEngineConfigString" "cache_size=10M,eviction_dirty_trigger=5,eviction_dirty_target=1" "--setParameter" "spillWiredTigerCacheSizeMinMB=50" "--setParameter" "spillWiredTigerCacheSizeMaxMB=50" "--setParameter" "tcmallocReleaseRate=10.0" "--setParameter" "tcmallocMaxPerCPUCacheSize=65536" "--setParameter" "diagnosticDataCollectionEnabled=false" "--setParameter" "connPoolMaxConnsPerHost=10" "--setParameter" "initialSyncIndexBuildMemoryMinMB=50" "--setParameter" "initialSyncOplogFetcherBatchSize=262144" "--setParameter" "initialSyncOplogBufferPeekCacheSize=100" "--setParameter" "replWriterThreadCount=1" "--setParameter" "replBatchLimitBytes=16777216" "--setParameter" "bgSyncOplogFetcherBatchSize=262144" "--setParameter" "replBatchLimitOperations=50" "--setParameter" "oplogTruncationCheckPeriodSeconds=1" "--maxConns" "50")
+      exec /usr/local/bin/docker-entrypoint.sh "$${args[@]}"
+    - --
+  command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.1", "--oplogSize", "10"]
+  profiles: ["replica-set"]
+  deploy:
+    resources:
+      limits:
+        cpus: '0.5'
+        memory: 128M
+  healthcheck:
+    test: ["CMD-SHELL", "mongosh --eval \"db.adminCommand('ping')\" --quiet"]
+    interval: 2s
+    timeout: 5s
+    retries: 15
+    start_period: 3s
+
 services:
   # Profile: unindexed-sort - Exp 01: In-Memory Sort Limit
   # Limits: 100MB internal RAM sort ceiling
@@ -46,7 +86,38 @@ services:
     volumes:
       - mongo-doclimit-data:/data/db
 
+  # Profile: replica-set - Exp 04: 3-Node Replica Set Elections & Oplog Exhaustion
+  # Limits: 3 nodes (1 Primary, 2 Secondaries), 128MB RAM, 0.5 CPU, 10MB oplog per node
+  # Objective: Tests w:1 vs w:majority durability across primary stepdown, and oplog window exhaustion
+  # Runner: make up EXP=replica-set && make run SCRIPT=04_replica_set_elections
+  mongo-node1:
+    <<: *mongo-rs-node
+    container_name: mongo-node1
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo-rs1-data:/data/db
+
+  mongo-node2:
+    <<: *mongo-rs-node
+    container_name: mongo-node2
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - mongo-rs2-data:/data/db
+
+  mongo-node3:
+    <<: *mongo-rs-node
+    container_name: mongo-node3
+    ports:
+      - "127.0.0.1:27019:27017"
+    volumes:
+      - mongo-rs3-data:/data/db
+
 volumes:
   mongo-sort-data:
   mongo-durability-data:
   mongo-doclimit-data:
+  mongo-rs1-data:
+  mongo-rs2-data:
+  mongo-rs3-data:

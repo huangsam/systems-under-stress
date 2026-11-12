@@ -20,6 +20,7 @@ help:
 	@echo "  - unindexed-sort  (Tests the 100MB RAM sort limit vs indexed & allowDiskUse)"
 	@echo "  - durability      (Tests write durability w:0, w:1, j:True across container SIGKILL)"
 	@echo "  - document-limits (Tests unbounded array growth hitting the 16MB BSON document cap)"
+	@echo "  - replica-set     (3-node cluster: election failover, w:majority durability, oplog exhaustion)"
 
 up:
 	docker compose --profile $(EXP) up -d --wait
@@ -31,7 +32,9 @@ clean:
 	docker compose --profile "*" down -v
 
 soft-reset:
-	docker compose exec -T $(EXP) mongosh lab_db --eval 'db.dropDatabase()' || uv run -s -c 'from pymongo import MongoClient; MongoClient("mongodb://127.0.0.1:27017/").drop_database("lab_db")'
+	@uv run -q --with pymongo python -c 'import pymongo; c = pymongo.MongoClient("mongodb://127.0.0.1:27017,127.0.0.1:27018,127.0.0.1:27019/?replicaSet=rs0&serverSelectionTimeoutMS=1000"); c.drop_database("lab_db")' 2>/dev/null || \
+	docker compose exec -T $(EXP) mongosh lab_db --eval 'db.dropDatabase()' 2>/dev/null || \
+	uv run -q --with pymongo python -c 'import pymongo; pymongo.MongoClient("mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=1000").drop_database("lab_db")' 2>/dev/null || true
 	@echo "==> MongoDB 'lab_db' dropped."
 
 run:
