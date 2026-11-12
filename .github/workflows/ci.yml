@@ -15,6 +15,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
 
       - name: Run Ruff check
         run: uvx ruff check .
@@ -30,6 +32,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
 
       - name: Validate Compose configurations & invariants
         run: make compose-lint
