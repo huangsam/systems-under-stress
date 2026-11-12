@@ -1,6 +1,6 @@
 # ClickHouse Limits & Internals Lab
 
-Hands-on experiments stress-testing MergeTree write mechanics, the "Too Many Parts" backpressure failure, and analytical query memory ceilings (`max_memory_usage`) in ClickHouse (`clickhouse/clickhouse-server:26.9.23.15`).
+Hands-on experiments stress-testing MergeTree write mechanics, the "Too Many Parts" backpressure failure, analytical query memory ceilings (`max_memory_usage`), and columnar compression codecs in ClickHouse.
 
 ---
 
@@ -10,8 +10,8 @@ This lab uses a single [`docker-compose.yml`](./docker-compose.yml) with **Docke
 
 ```text
 clickhouse/
-├── docker-compose.yml       # Pinned image, cgroups limits (512M RAM, 1.0 CPU), profiles
-├── Makefile                 # One-touch runner targets (up, run, down, clean, client)
+├── docker-compose.yml       # Base anchor &clickhouse-base, cgroups limits, profiles
+├── Makefile                 # One-touch runner targets (up, run, soft-reset, client, down, clean)
 ├── users.d/
 │   └── memory-limit.xml     # User profile override for max_memory_usage=64MB
 ├── experiments/
@@ -22,13 +22,13 @@ clickhouse/
 └── README.md
 ```
 
-All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) (`clickhouse-connect>=0.7.0`) and run via `uv run` or `make run`.
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run via `uv run` or `make run`.
 
 ---
 
 ## Quickstart & Execution Standard
 
-Across all profiles in this lab:
+Across all profiles in this lab (see [`docker-compose.yml`](./docker-compose.yml) for exact image tags, memory limits, and healthchecks):
 
 ```bash
 cd clickhouse
@@ -36,13 +36,26 @@ cd clickhouse
 # 1. Start target profile with automatic healthcheck wait
 make up EXP=parts-limit
 
-# 2. Run the self-driving benchmark script
+# 2. Run the baseline crash course or a stress benchmark script
+make run SCRIPT=00_crash_course
 make run SCRIPT=01_parts_explosion
 
-# 3. Clean up container and wipe isolated named volume
+# 3. Fast in-engine table drop or full profile teardown
+make soft-reset
 make down EXP=parts-limit
-# Or wipe all profiles:
 make clean
+```
+
+---
+
+## Experiment 00: Crash Course
+
+Verifies ClickHouse HTTP connectivity, `MergeTree` table creation with sparse primary key ordering, vectorized columnar block ingestion, analytical aggregations (`uniq`, `quantiles`), and active part inspection in `system.parts`.
+
+```bash
+make up EXP=parts-limit
+make run SCRIPT=00_crash_course
+make soft-reset
 ```
 
 ---
@@ -55,17 +68,18 @@ make clean
 - **Vectorized Batched Ingestion**: Grouping 2,000+ rows into a single `INSERT` writes exactly **1 active data part** on disk in a few milliseconds, completely avoiding merge debt and disk fragmentation.
 
 ### 2. Configuration & Limits
-- **Docker Profile**: `parts-limit` (`clickhouse-parts-data:/var/lib/clickhouse`)
-- **Resource Constraints**: `memory: 512M`, `cpus: '1.0'`
+- **Compose Profile**: `parts-limit` (`clickhouse-parts-data:/var/lib/clickhouse` in [`docker-compose.yml`](./docker-compose.yml))
+- **Container Limits**: `memory: 512M`, `cpus: '1.0'`
 - **MergeTree Settings**: `parts_to_delay_insert = 80`, `parts_to_throw_insert = 120`
 
 ### 3. How to Run
 ```bash
 make up EXP=parts-limit
 make run SCRIPT=01_parts_explosion
+make down EXP=parts-limit
 ```
 
-### 4. Empirical Benchmark & Observed Metrics
+### 4. Observed Metrics & Failure Signatures
 
 | Ingestion Mode | Row Count | HTTP Requests | Active Parts Created | Outcome | Duration / Throughput |
 |---|---|---|---|---|---|
@@ -75,7 +89,7 @@ make run SCRIPT=01_parts_explosion
 #### Failure Signature (`Code: 252`):
 ```text
 DB::Exception: Too many parts in all data parts in table default.parts_test (120 parts, max: 120).
-Merges are processing significantly slower than inserts. (TOO_MANY_PARTS) (version 26.9.23.15)
+Merges are processing significantly slower than inserts. (TOO_MANY_PARTS)
 ```
 
 ### 5. Production & Systems Takeaways
@@ -84,12 +98,7 @@ Merges are processing significantly slower than inserts. (TOO_MANY_PARTS) (versi
    - Ingest through streaming buffers: **Apache Kafka**, **Vector**, **FluentBit**, or **Redis Streams**.
    - Ensure workers batch at least 1,000 to 100,000 rows or buffer for 1–5 seconds before flushing to ClickHouse.
 3. **Asynchronous Inserts (`async_insert`)**:
-   - When client batching is not feasible, enable ClickHouse native async inserts:
-     ```sql
-     SET async_insert = 1;
-     SET wait_for_async_insert = 1;
-     ```
-   - ClickHouse will internally accumulate point writes into an in-memory buffer and write them out as coalesced parts.
+   - When client batching is not feasible, enable ClickHouse native async inserts (`SET async_insert = 1; SET wait_for_async_insert = 1;`) so ClickHouse internally accumulates point writes into coalesced parts.
 
 ---
 
@@ -102,17 +111,18 @@ Merges are processing significantly slower than inserts. (TOO_MANY_PARTS) (versi
 - **Algorithmic Alternatives**: Replacing exact cardinality (`uniqExact`) with HyperLogLog (`uniq`) drastically reduces memory footprint from tens of megabytes to a constant 12KB register.
 
 ### 2. Configuration & Limits
-- **Docker Profile**: `memory-cap` (`clickhouse-mem-data:/var/lib/clickhouse`)
-- **Server Setting**: `/etc/clickhouse-server/users.d/memory-limit.xml` (`max_memory_usage: 64000000`)
+- **Compose Profile**: `memory-cap` (`clickhouse-mem-data:/var/lib/clickhouse` in [`docker-compose.yml`](./docker-compose.yml))
+- **Server Override**: [`users.d/memory-limit.xml`](./users.d/memory-limit.xml) (`max_memory_usage: 64000000`)
 - **Dataset**: 1,000,000 synthetic clickstream events generated in-engine via `numbers(1000000)`.
 
 ### 3. How to Run
 ```bash
 make up EXP=memory-cap
 make run SCRIPT=02_memory_limit
+make down EXP=memory-cap
 ```
 
-### 4. Empirical Benchmark & Observed Metrics
+### 4. Observed Metrics & Failure Signatures
 
 | Aggregation Strategy | Cardinality | Query Settings | Memory Consumed | Outcome | Duration |
 |---|---|---|---|---|---|
@@ -123,17 +133,13 @@ make run SCRIPT=02_memory_limit
 #### Failure Signature (`Code: 241`):
 ```text
 DB::Exception: Memory limit (for query) exceeded: would use 68.12 MiB (limit: 61.04 MiB).
-(MEMORY_LIMIT_EXCEEDED) (version 26.9.23.15)
+(MEMORY_LIMIT_EXCEEDED)
 ```
 
 ### 5. Production & Systems Takeaways
 1. **Safeguard Cluster Health**: Always configure global `max_memory_usage` and `max_execution_time` to prevent rogue ad-hoc analytical queries from starving production dashboards or triggering container OOM killer.
-2. **Graceful Degradation via Spilling**:
-   - For heavy ETL or scheduled aggregations, configure `max_bytes_before_external_group_by` to roughly 50% of `max_memory_usage`.
-   - The query trades a small I/O latency penalty for guaranteed completion without failing client pipelines.
-3. **Approximation Algorithms**:
-   - Never use `COUNT(DISTINCT col)` or `uniqExact()` on web scale clickstream / metric logs when a 1% error margin is acceptable.
-   - Use `uniq()` (HyperLogLog) or `uniqCombined64()` for 100x lower memory overhead and vectorized CPU evaluation.
+2. **Graceful Degradation via Spilling**: For heavy ETL or scheduled aggregations, configure `max_bytes_before_external_group_by` to roughly 50% of `max_memory_usage`. The query trades a small I/O latency penalty for guaranteed completion.
+3. **Approximation Algorithms**: Never use `COUNT(DISTINCT col)` or `uniqExact()` on web-scale clickstream logs when a 1% error margin is acceptable. Use `uniq()` (HyperLogLog) for 100x lower memory overhead.
 
 ---
 
@@ -143,39 +149,29 @@ DB::Exception: Memory limit (for query) exceeded: would use 68.12 MiB (limit: 61
 - Because ClickHouse stores each column contiguously on disk (`column.bin`), values of the same type and distribution sit adjacent to each other.
 - Applying domain-specific codecs (`CODEC(Delta, ZSTD)` on monotonic timestamps, `CODEC(Gorilla, ZSTD)` on slowly changing gauges, and `LowCardinality(String)` dictionary encoding) achieves 10x–50x physical disk savings compared to `CODEC(NONE)`.
 
-### 2. How to Run
+### 2. Configuration & Limits
+- **Compose Profile**: `compression` (`clickhouse-compression-data:/var/lib/clickhouse` in [`docker-compose.yml`](./docker-compose.yml))
+- **Container Limits**: `memory: 512M`, `cpus: '1.0'`
+- **Dataset**: 500,000 synthetic telemetry rows comparing `CODEC(NONE)`, default `LZ4`, and specialized codecs via `system.columns`.
+
+### 3. How to Run
 ```bash
 make up EXP=compression
 make run SCRIPT=03_codec_compression
 make down EXP=compression
 ```
 
-### 3. Production & Systems Takeaways
+### 4. Observed Metrics & Failure Signatures
+
+| Storage Schema / Codec Strategy | Uncompressed Size | Compressed Disk Footprint | Compression Ratio |
+|---|---|---|---|
+| **1. Raw Uncompressed (`CODEC(NONE)`)** | ~28.5 MB | ~28.5 MB | **1.0x** (Baseline bloat) |
+| **2. Default Block Compression (`LZ4`)** | ~28.5 MB | ~5.8 MB | **~4.9x** |
+| **3. Specialized (`Delta+ZSTD`, `Gorilla`, `LowCardinality`)** | ~23.5 MB | **~0.95 MB** | **>24x** (Sub-megabyte footprint) |
+
+### 5. Production & Systems Takeaways
 1. **Delta + ZSTD on Timestamps**: Storing the difference between adjacent sorted timestamps ($\Delta = +1\text{s}$) turns 32-bit integers into tiny identical values that ZSTD compresses by >40x.
 2. **`LowCardinality(String)`**: Replaces repeated string columns (e.g., `region`, `status_code`) with integer dictionary IDs, shrinking both disk storage and `GROUP BY` hash-table memory.
-
----
-
-## Real-Time Observability & System Tables
-
-ClickHouse provides comprehensive introspection via virtual system tables:
-
-```sql
--- 1. Inspect active data parts and compression ratios
-SELECT name, rows, bytes_on_disk, data_compressed_bytes, data_uncompressed_bytes
-FROM system.parts
-WHERE table = 'clickstream_events' AND active = 1;
-
--- 2. Inspect query execution telemetry, peak memory usage, and abort codes
-SELECT type, event_time, query_duration_ms, memory_usage, exception_code, exception
-FROM system.query_log
-ORDER BY event_time DESC
-LIMIT 5;
-
--- 3. Check active queries and current RAM consumption
-SELECT query_id, user, elapsed, memory_usage, query
-FROM system.processes;
-```
 
 ---
 
@@ -191,6 +187,9 @@ FROM system.processes;
 ## Clean Reset & Teardown
 
 ```bash
+# Drop experimental tables in-engine (fast reset):
+make soft-reset
+
 # Wipe all containers and named volumes for this lab:
 make clean
 ```

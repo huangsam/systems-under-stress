@@ -1,18 +1,18 @@
 # Linux Container Limits & Kernel Primitives Lab
 
-Hands-on experiments stress-testing Linux kernel subsystems, cgroups v2 resource controllers, file descriptor tables, and the Linux Out-Of-Memory (OOM) Killer inside isolated containers (`debian:trixie`).
+Hands-on experiments stress-testing Linux kernel subsystems, cgroups v2 resource controllers (`pids.max`, `memory.max`), file descriptor tables (`RLIMIT_NOFILE`), and the Linux Out-Of-Memory (OOM) Killer inside isolated containers.
 
 ---
 
 ## Lab Architecture
 
-This lab uses a single [`docker-compose.yml`](./docker-compose.yml) leveraging **Docker Compose Profiles** with explicit cgroups limits and Linux kernel controls:
+This lab uses a single [`docker-compose.yml`](./docker-compose.yml) and custom [`Dockerfile`](./Dockerfile) leveraging **Docker Compose Profiles** with explicit cgroups v2 limits and Linux kernel controls:
 
 ```text
 linux/
-├── Dockerfile               # Debian Bookworm slim base + python3, procps, lsof
-├── docker-compose.yml       # Cgroups v2 controllers, ulimits, swap constraints
-├── Makefile                 # One-touch runner targets (up, run, down, clean, sh, logs)
+├── Dockerfile                  # Debian slim base + python3, procps, lsof, rich
+├── docker-compose.yml          # Base anchor &linux-base, cgroups v2 controllers, ulimits, swap caps
+├── Makefile                    # One-touch runner targets (up, run, down, clean, sh, logs)
 ├── experiments/
 │   ├── 00_crash_course.py      # Kernel runtime, /proc/self/status, POSIX limits & cgroups v2
 │   ├── 01_fork_bomb_cgroup.py  # Spawns recursive processes under pids.max: 40
@@ -21,52 +21,61 @@ linux/
 └── README.md
 ```
 
-All test scripts declare metadata inline via [PEP 723](https://peps.python.org/pep-0723/) and run friction-free with standard `python3` or `uv run`.
+All test scripts declare metadata inline via [PEP 723](https://peps.python.org/pep-0723/) and execute inside the target Linux container via `make run`.
 
 ---
 
-## Experiment Profiles & Resource Limits
+## Quickstart & Execution Standard
 
-| Profile | Target Service | CPU Limit | Memory Limit | Kernel / Cgroup Limit | Target Failure Mode |
-|---|---|---|---|---|---|
-| `pid-limit` | `pid-limit` | `0.5` | `64M` | `pids: 40` (`pids.max`) | `BlockingIOError` (`EAGAIN` Errno 11) |
-| `fd-exhaustion` | `fd-exhaustion` | `0.5` | `64M` | `ulimits.nofile: 64` (`RLIMIT_NOFILE`) | `OSError` (`EMFILE` Errno 24) |
-| `oom-killer` | `oom-killer` | `0.5` | `32M` | `memswap_limit: 32M` (Zero swap) | Kernel `SIGKILL` (Signal 9 / Exit Code 137) |
+Across all profiles in this lab (see [`docker-compose.yml`](./docker-compose.yml) for exact cgroup ceilings, ulimits, and healthchecks; `make run` automatically selects the matching profile container from `SCRIPT`):
 
-### Reading the Limits
+```bash
+cd linux
 
-Cgroups apply resource limits to a group of processes; for example, `pids.current`
-is the group's current task count and `pids.max` is its ceiling. By contrast,
-`RLIMIT_NOFILE` caps descriptors for one process. The FD experiment also prints
-`/proc/sys/fs/file-nr` and `file-max`: these report kernel-wide file-handle usage
-and its ceiling, not the process's descriptor limit.
+# 1. Build and start the target profile container with automatic healthcheck wait
+make up EXP=pid-limit
+
+# 2. Run the baseline crash course or a stress experiment inside the container
+make run SCRIPT=00_crash_course
+make run SCRIPT=01_fork_bomb_cgroup
+
+# 3. Tear down the profile container or wipe all profiles
+make down EXP=pid-limit
+make clean
+```
+
+---
+
+## Experiment 00: Crash Course
+
+Verifies the container's Linux kernel environment (`/proc/version`, `uname`), process status and RSS memory mappings (`/proc/self/status`), POSIX resource limits (`getrlimit` for `RLIMIT_NOFILE`, `RLIMIT_NPROC`), cgroups v2 controller files (`/sys/fs/cgroup/pids.max`, `memory.max`, `cpu.max`), and `/proc/self/fd` descriptor links.
+
+```bash
+make up EXP=pid-limit
+make run SCRIPT=00_crash_course
+make down EXP=pid-limit
+```
 
 ---
 
 ## Experiment 01: The Cgroups PID Limit (Contained Fork Bomb)
 
 ### 1. Hypothesis & Objective
-When a container is constrained by cgroups v2 `pids.max: 40`, executing a recursive process spawner will deterministically halt upon reaching 40 tasks. The Linux kernel will refuse further `clone()` / `fork()` syscalls with:
+When a container is constrained by cgroups v2 `pids.max: 40`, executing a recursive process spawner will deterministically halt upon reaching 40 tasks. The Linux kernel refuses further `clone()` / `fork()` syscalls with:
 ```text
 BlockingIOError: [Errno 11] Resource temporarily unavailable (EAGAIN)
 ```
-The macOS host and all neighbouring containers experience **0% CPU or process table degradation**.
+The macOS host and all neighboring containers experience **0% CPU or process table degradation**.
 
-### 2. Configuration & Constraints
-- **Base Image**: `debian:trixie`
-- **Compose Profile**: `profiles: ["pid-limit"]`
-- **Cgroups Limits**: `pids: 40`, `memory: 64M`, `cpus: '0.5'`
-- **Target File**: `/sys/fs/cgroup/pids.max` and `/sys/fs/cgroup/pids.current`
+### 2. Configuration & Limits
+- **Compose Profile**: `pid-limit` (see [`docker-compose.yml`](./docker-compose.yml))
+- **Cgroups v2 Limits**: `pids: 40`, `memory: 64M`, `cpus: '0.5'`
+- **Kernel Telemetry**: `/sys/fs/cgroup/pids.max` and `/sys/fs/cgroup/pids.current`
 
-### 3. Reproduction Steps
+### 3. How to Run
 ```bash
-# 1. Start the pid-limit container with 40-process ceiling
 make up EXP=pid-limit
-
-# 2. Run the fork bomb experiment inside its matching container
 make run SCRIPT=01_fork_bomb_cgroup
-
-# 3. Teardown
 make down EXP=pid-limit
 ```
 
@@ -90,40 +99,31 @@ make down EXP=pid-limit
 ```
 
 ### 5. Production & Systems Takeaways
-1. **Cgroups v2 vs `ulimit -u`**: `ulimit -u` (`RLIMIT_NPROC`) restricts processes per Linux User ID (UID). If an attacker forks processes across multiple UIDs inside a container, `ulimit` fails to protect the node. The cgroups v2 `pids` controller enforces a hard boundary across the entire cgroup hierarchy regardless of UID.
-2. **Kubernetes `PodPidsLimit`**: In Kubernetes clusters, nodes configure `podPidsLimit` (via Kubelet `--pod-max-pids`) to prevent rogue containers from exhausting the kernel PID space (`/proc/sys/kernel/pid_max`).
+1. **Cgroups v2 vs `ulimit -u`**: `ulimit -u` (`RLIMIT_NPROC`) restricts processes per Linux User ID (UID). If a workload forks processes across multiple UIDs inside a container, `ulimit` fails to protect the node. The cgroups v2 `pids` controller enforces a hard boundary across the entire cgroup hierarchy regardless of UID.
+2. **Kubernetes `PodPidsLimit`**: Production Kubernetes nodes configure `podPidsLimit` (via Kubelet `--pod-max-pids`) to prevent runaway thread/process leaks from exhausting the host kernel PID space (`/proc/sys/kernel/pid_max`).
 
 ---
 
 ## Experiment 02: File Descriptor & Inode Exhaustion
 
 ### 1. Hypothesis & Objective
-When an application runs under a file descriptor ceiling (`ulimit -n 64`), repeatedly opening files, sockets, or pipes without closing them will saturate the per-process descriptor table. Attempting to open FD #64 fails with:
+When an application runs under a file descriptor ceiling (`ulimit -n 64`), repeatedly opening files, sockets, or pipes without closing them saturates the per-process descriptor table. Attempting to open FD #64 fails with:
 ```text
 OSError: [Errno 24] Too many open files (EMFILE)
 ```
 Furthermore, when the table is 100% full, even administrative inspection calls (like `opendir('/proc/self/fd/')`) fail with `EMFILE` because directory traversal itself requires allocating a file descriptor.
 
-### 2. Configuration & Constraints
-- **Compose Profile**: `profiles: ["fd-exhaustion"]`
-- **Container Limit**: `ulimits: nofile: soft: 64, hard: 64`
+### 2. Configuration & Limits
+- **Compose Profile**: `fd-exhaustion` (see [`docker-compose.yml`](./docker-compose.yml))
+- **Container Limits**: `ulimits.nofile: 64` (soft & hard), `memory: 64M`, `cpus: '0.5'`
 - **Kernel Interfaces**: `/proc/self/fd/`, `/proc/sys/fs/file-nr`, `/proc/sys/fs/file-max`
 
-### 3. Reproduction Steps
+### 3. How to Run
 ```bash
-# 1. Start fd-exhaustion container
 make up EXP=fd-exhaustion
-
-# 2. Run descriptor exhaustion experiment
 make run SCRIPT=02_fd_limits
-
-# 3. Teardown
 make down EXP=fd-exhaustion
 ```
-
-`make run SCRIPT=<name>` selects the matching container profile automatically. The
-profile can be overridden with `EXP=<profile>` when needed. The script must still
-be run after its profile has been started with `make up`.
 
 ### 4. Observed Metrics & Failure Signatures
 ```text
@@ -146,46 +146,31 @@ be run after its profile has been started with `make up`.
   Total Open Files Held  : 60
   Failed Iteration Index : #61
 ######################################################################
-
---- Phase 3: Inspecting FD Table at Capacity ---
-[*] Note: Attempting opendir('/proc/self/fd') while at 100% capacity:
-    Expected Insight: Error reading fd dir: [Errno 24] Too many open files
-    (When the FD table is completely full, even opendir() cannot allocate an FD!)
-[*] Releasing exactly 1 FD to inspect /proc/self/fd snapshot...
-[*] Active entries in fd table (64 active): fd 0 through fd 63
 ```
 
 ### 5. Production & Systems Takeaways
-1. **EMFILE vs ENFILE**:
-   - `EMFILE` (`Errno 24: Too many open files`): Local per-process limit hit (`RLIMIT_NOFILE`). Other processes and containers on the host can still allocate descriptors normally.
-   - `ENFILE` (`Errno 23: File table overflow`): The entire Linux kernel has exhausted global system file handles (`fs.file-max`). This causes host-wide failure.
-2. **Microservice Failure Cascade**:
-   - In network servers (Nginx, Go HTTP, Node.js), unclosed client connections or leaking DB connections exhaust FDs.
-   - The kernel's `accept()` syscall fails with `EMFILE`, silently dropping all new incoming TCP handshakes.
+1. **`EMFILE` vs `ENFILE`**:
+   - `EMFILE` (`Errno 24: Too many open files`): Local per-process limit hit (`RLIMIT_NOFILE`). Other processes and containers on the host continue allocating descriptors normally.
+   - `ENFILE` (`Errno 23: File table overflow`): The Linux kernel has exhausted global system file handles (`fs.file-max`), causing host-wide failure.
+2. **Microservice Failure Cascade**: In network servers, leaking HTTP client sockets or database connections exhausts FDs, causing the kernel's `accept()` syscall to fail with `EMFILE` and drop incoming TCP connections.
 
 ---
 
 ## Experiment 03: Kernel OOM Killer vs Swap Behavior (Exit Code 137)
 
 ### 1. Hypothesis & Objective
-When a container is configured with a strict 32MB RAM ceiling and zero swap (`memory: 32M`, `memswap_limit: 32M`), allocating physical dirty memory in 4MB chunks will breach the cgroup limit. Because swap is disabled, the Linux kernel cannot page out dirty anonymous pages to disk and invokes `out_of_memory()`. The kernel dispatches `SIGKILL` (signal 9) to the culprit process, resulting in the universal container termination status:
+When a container is configured with a strict 32MB RAM ceiling and zero swap (`memory: 32M`, `memswap_limit: 32M`), allocating physical dirty memory in 4MB chunks breaches the cgroup limit. Because swap is disabled, the Linux kernel cannot page out dirty anonymous pages to disk and invokes `out_of_memory()`. The kernel dispatches `SIGKILL` (signal 9) to the culprit process, resulting in the universal container termination status:
 $$\text{Exit Code} = 128 + 9 = 137$$
 
-### 2. Configuration & Constraints
-- **Compose Profile**: `profiles: ["oom-killer"]`
-- **Memory Limits**: `memory: 32M`, `memswap_limit: 32M` (Strictly zero swap)
-- **Allocation Method**: 4MB dirty chunks (writing to 4096-byte page offsets to force page faults and charge RSS against the memory cgroup)
-- **Telemetry Source**: `/sys/fs/cgroup/memory.events` (`oom_kill` counter)
+### 2. Configuration & Limits
+- **Compose Profile**: `oom-killer` (see [`docker-compose.yml`](./docker-compose.yml))
+- **Memory Limits**: `memory: 32M`, `memswap_limit: 32M` (strictly zero swap), `cpus: '0.5'`
+- **Allocation & Telemetry**: 4MB dirty chunks (4096-byte page strides forcing physical RSS faults); `/sys/fs/cgroup/memory.events` (`oom_kill` counter)
 
-### 3. Reproduction Steps
+### 3. How to Run
 ```bash
-# 1. Start the oom-killer container with 32MB limit
 make up EXP=oom-killer
-
-# 2. Run OOM killer observer experiment
 make run SCRIPT=03_oom_killer
-
-# 3. Teardown
 make down EXP=oom-killer
 ```
 
@@ -196,13 +181,8 @@ make down EXP=oom-killer
 [*] Initial memory.events  : {'low': 0, 'high': 0, 'max': 0, 'oom': 0, 'oom_kill': 0}
 
 --- Phase 1: Forking Worker Child for Controlled OOM Observation ---
-[*] Memory Allocator Worker started (PID: 18)...
   [Chunk #01] Allocated +4.0 MB (Total: 4.0 MB) | VmRSS: 5216 kB
-  [Chunk #02] Allocated +4.0 MB (Total: 8.0 MB) | VmRSS: 9312 kB
-  [Chunk #03] Allocated +4.0 MB (Total: 12.0 MB) | VmRSS: 13408 kB
-  [Chunk #04] Allocated +4.0 MB (Total: 16.0 MB) | VmRSS: 17504 kB
-  [Chunk #05] Allocated +4.0 MB (Total: 20.0 MB) | VmRSS: 21600 kB
-  [Chunk #06] Allocated +4.0 MB (Total: 24.0 MB) | VmRSS: 25696 kB
+  ...
   [Chunk #07] Allocated +4.0 MB (Total: 28.0 MB) | VmRSS: 29792 kB
 
 ######################################################################
@@ -218,47 +198,9 @@ make down EXP=oom-killer
 ```
 
 ### 5. Production & Systems Takeaways
-1. **The Math of Exit Code 137**:
-   Unix shells, Docker, and Kubernetes report process exit status via `128 + n` when killed by an unhandled signal $n$. Since `SIGKILL` is signal 9:
-   $$128 + 9 = 137$$
-2. **Why Swap Matters**:
-   When swap is enabled on a node without strict `memswap_limit`, memory exhaustion does not immediately trigger OOM. Instead, the kernel begins aggressive page thrashing (swapping anonymous memory to disk), skyrocketing CPU I/O wait times and slowing the application to a crawl before failing.
-3. **Cgroups v2 Telemetry (`memory.events`)**:
-   Modern Kubernetes nodes and container runtimes (containerd, CRI-O) poll `/sys/fs/cgroup/memory.events` for the `oom_kill` counter rather than parsing system logs or kernel `dmesg`.
-
----
-
-## Systems Architecture Deep Dive & Interview Questions
-
-### Q1: What does container Exit Code 137 mean in Docker and Kubernetes?
-**Answer**:
-When a process inside a container terminates due to an unhandled signal, the Linux kernel sets its status word to indicate the signal number. The standard convention implemented by POSIX shells, Docker, and Kubernetes is:
-$$\text{Exit Code} = 128 + \text{Signal Number}$$
-Signal 9 is `SIGKILL` ($128 + 9 = 137$).
-In containerized environments, Exit Code 137 is the signature of:
-1. The **Linux kernel OOM Killer** terminating a container that breached its cgroup memory limit (`limits.memory`).
-2. The **orchestrator** (Docker or Kubernetes Kubelet) sending `SIGKILL` after a timeout following `SIGTERM` (e.g. failed graceful shutdown during rolling deployment).
-
-### Q2: Why is running an application as PID 1 inside a container dangerous if it doesn't handle zombie reaping?
-**Answer**:
-In Linux, when a child process terminates, it enters a `defunct` zombie state until its parent calls `wait()` or `waitpid()` to read its exit status.
-If the parent process terminates before its children, the children are "orphaned" and reparented to **PID 1** (the init process).
-In a standard Linux OS, `systemd` or `init` continually runs a zombie reaping loop. However, inside a minimal Docker container, your application binary is typically PID 1. If that application does not implement a `SIGCHLD` handler and call `waitpid()`, orphaned processes remain as zombies forever, eventually exhausting the kernel PID table (`pids.max`).
-*Solution*: Use an init wrapper like `tini` (Docker `--init`) or implement proper `SIGCHLD` handling.
-
-### Q3: How do container abstractions actually work under the hood?
-**Answer**:
-Containers are not virtual machines; they are standard Linux processes partitioned by two kernel primitives:
-1. **Namespaces** (Isolation Boundaries): Control what a process can **see**.
-   - `pid`: Process tree isolation (container sees itself as PID 1).
-   - `net`: Network interface and routing table isolation.
-   - `mnt`: Filesystem mount point isolation.
-   - `ipc`, `uts`, `user`, `cgroup`: IPC, hostname, UID mappings, and cgroup visibility.
-2. **Control Groups (cgroups v2)** (Resource Boundaries): Control what a process can **consume**.
-   - `cpu`: CPU quotas, throttling, and shares.
-   - `memory`: Hard memory ceilings (`memory.max`), swap limits, and OOM kills.
-   - `pids`: Maximum concurrent task/thread count (`pids.max`).
-   - `io`: Block I/O read/write bandwidth and IOPS limits.
+1. **The Math of Exit Code 137**: Unix shells, Docker, and Kubernetes report process exit status via `128 + n` when killed by an unhandled signal $n$. Since `SIGKILL` is signal 9, $128 + 9 = 137$.
+2. **Why Swap Configuration Matters**: When swap is enabled without strict `memswap_limit`, memory exhaustion triggers aggressive page thrashing rather than immediate OOM termination, spiking I/O wait times and degrading latency across the host.
+3. **Cgroups v2 Telemetry (`memory.events`)**: Container runtimes (`containerd`, `CRI-O`) poll `/sys/fs/cgroup/memory.events` for the `oom_kill` counter to report `OOMKilled: true` in pod statuses.
 
 ---
 
@@ -275,6 +217,9 @@ Containers are not virtual machines; they are standard Linux processes partition
 ## Clean Reset & Teardown
 
 ```bash
+# Tear down a specific profile container:
+make down EXP=pid-limit
+
 # Wipe all containers and networks for this lab:
 make clean
 ```

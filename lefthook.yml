@@ -11,5 +11,5 @@ pre-commit:
       run: uvx ruff check --fix {staged_files} && uvx ruff format {staged_files}
       stage_fixed: true
     compose-lint:
-      glob: "{**/docker-compose.yml,scripts/check_invariants.py}"
+      glob: "{**/docker-compose.yml,**/Makefile,**/*.md,scripts/check_invariants.py}"
       run: make compose-lint

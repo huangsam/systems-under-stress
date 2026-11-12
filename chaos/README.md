@@ -1,23 +1,27 @@
 # Network Chaos & Fault Injection Lab (Toxiproxy)
 
-An empirical laboratory exploring **network-level gray failures**—latency jitter, connection pool starvation, thundering herd retry storms, and silent TCP socket hangs—using [Shopify Toxiproxy](https://github.com/shopify/toxiproxy) and an upstream Redis datastore.
+Hands-on experiments exploring **network-level gray failures**—latency jitter, connection pool starvation, thundering herd retry storms, and silent TCP socket hangs—using [Shopify Toxiproxy](https://github.com/shopify/toxiproxy) and an upstream Redis datastore.
 
 ---
 
-## 1. Architectural Philosophy: Why Resource Limits Are Not Enough
+## Lab Architecture
 
-In real-world cloud environments, production databases rarely fail via clean process crashes (`SIGKILL` or `docker stop`). Instead, over **70% of high-severity production incidents stem from partial network degradation**:
-- Downstream latency jitter that silently exhausts upstream connection pools.
-- Intermittent packet drops that trigger self-inflicted DDoS retry storms.
-- Cloud NAT gateways or stateful firewalls silently dropping idle connections without sending `TCP RST` or `FIN` packets.
+This lab uses a single [`docker-compose.yml`](./docker-compose.yml) with **Docker Compose Profiles** routing TCP traffic through a programmable L4/L7 fault-injection proxy (`toxiproxy`) in front of an upstream datastore (`redis-upstream`):
 
-This lab simulates these dynamic conditions deterministically using Toxiproxy as a layer-7/layer-4 proxy sitting between Python clients and the upstream datastore.
-
----
-
-## 2. Lab Topology & Port Mappings
-
+```text
+chaos/
+├── docker-compose.yml                     # Base anchor &chaos-base, Toxiproxy + Redis upstream, limits
+├── Makefile                               # One-touch runner targets (up, run, soft-reset, down, clean, logs)
+├── experiments/
+│   ├── toxi_client.py                     # Zero-dependency Toxiproxy HTTP control plane client
+│   ├── 00_crash_course.py                 # Control plane verification, latency jitter & bandwidth toxics
+│   ├── 01_pool_starvation.py              # Downstream latency spike vs upstream connection pool exhaustion
+│   ├── 02_retry_storms_vs_backoff.py      # TCP reset_peer outage: naive retry storm vs Full Jitter backoff
+│   └── 03_half_open_tcp_hangs.py          # Silent black-hole packet drop vs explicit socket read timeouts
+└── README.md
 ```
+
+```text
   +-------------------------------------------------------------------------+
   | Host (127.0.0.1)                                                        |
   |                                                                         |
@@ -40,74 +44,166 @@ This lab simulates these dynamic conditions deterministically using Toxiproxy as
                        +---------------------------------+
 ```
 
-- **Toxiproxy API**: `127.0.0.1:8474` (HTTP REST control plane to add/remove toxics dynamically)
-- **Proxy Port**: `127.0.0.1:26379` (Client traffic target, proxied to upstream)
-- **Redis Upstream**: Private Docker network only (no unconstrained host port exposure)
+All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run via `uv run` or `make run`.
 
 ---
 
-## 3. Quick Start (CLI Workflow)
+## Quickstart & Execution Standard
+
+Across all experiments in this lab (see [`docker-compose.yml`](./docker-compose.yml) for exact image tags, port mappings, and healthchecks):
 
 ```bash
 cd chaos
 
-# 1. Start the Toxiproxy and upstream Redis containers
+# 1. Start the Toxiproxy proxy and upstream Redis containers
 make up EXP=chaos
 
-# 2. Run the Crash Course or specific experiments
+# 2. Run the baseline crash course or a fault-injection experiment
 make run SCRIPT=00_crash_course
 make run SCRIPT=01_pool_starvation
-make run SCRIPT=02_retry_storms_vs_backoff
-make run SCRIPT=03_half_open_tcp_hangs
 
-# 3. Fast reset: wipe all active toxics and flush Redis keys
+# 3. Fast reset (clear all active toxics and flush upstream keys) or full teardown
 make soft-reset
-
-# 4. Clean teardown: stop containers and unmount resources
+make down EXP=chaos
 make clean
 ```
 
 ---
 
-## 4. Experiment Matrix
+## Experiment 00: Crash Course
 
-### Experiment 00: Crash Course (Toxiproxy Control Plane & Primitives)
-- **Objective**: Verify Toxiproxy proxy initialization, baseline latency (<1ms), dynamic latency/jitter toxic injection, bandwidth throttling (30 KB/s limit), and instant post-reset recovery.
-- **Run**: `make run SCRIPT=00_crash_course`
+Verifies Toxiproxy HTTP control plane connectivity (`127.0.0.1:8474`), proxy initialization (`127.0.0.1:26379` $\rightarrow$ `redis-upstream:6379`), sub-millisecond baseline RTT, dynamic latency/jitter toxic injection, bandwidth throttling (`30 KB/s`), and instant recovery upon toxic removal.
 
----
-
-### Experiment 01: Connection Pool Starvation Under Downstream Latency Spikes
-- **Objective**: Demonstrates Little's Law in connection pooling ($L = \lambda \times W$). When downstream latency jumps from 1ms to 200ms, connection holding time jumps 200x.
-- **Constraints**: 15 concurrent worker threads, pool limited to 5 connections (`max_connections=5`), pool acquisition timeout = 80ms (`timeout=0.08`).
-- **Observed Failure**: First 5 workers acquire the pool; remaining 10 workers queue up, breach the 80ms pool timeout, and abort with `ConnectionError: No connection available.` even though Redis itself never returned an error.
-- **Run**: `make run SCRIPT=01_pool_starvation`
+```bash
+make up EXP=chaos
+make run SCRIPT=00_crash_course
+make soft-reset
+```
 
 ---
 
-### Experiment 02: Transient Outage Mitigation - Naive Retry Storms vs Full Jitter
-- **Objective**: Evaluates system behavior during a 0.8-second transient link outage (TCP `reset_peer`).
-- **Observed Comparison**:
-  - **Strategy A (Naive Immediate Retry)**: 25 clients retry immediately in a tight loop; 125 requests are fired in <100ms, exhausting all retry budgets before the link heals (100% failure rate).
-  - **Strategy B (Exponential Backoff with Full Jitter)**: AWS Architecture Center formula $\text{sleep} = \text{Uniform}(0, \min(\text{cap}, \text{base} \times 2^{\text{attempt}}))$. Retries desynchronize across time, flatten the burst spike, and achieve 100% recovery once the link recovers.
-- **Run**: `make run SCRIPT=02_retry_storms_vs_backoff`
+## Experiment 01: Connection Pool Starvation Under Downstream Latency Spikes
+
+### 1. Hypothesis & Objective
+- Demonstrates Little's Law in connection pooling ($L = \lambda \times W$): the number of concurrently held connections ($L$) equals arrival rate ($\lambda$) multiplied by average response time ($W$).
+- When downstream network latency jumps from `1ms` to `200ms`, connection holding time increases 200x.
+- Even though the upstream database is healthy and returning zero errors, a bounded client connection pool rapidly saturates, causing queued caller threads to breach their pool acquisition timeout.
+
+### 2. Configuration & Limits
+- **Compose Profile**: `chaos` (`toxiproxy` and `redis-upstream`, each capped at `memory: 64M`, `cpus: '0.5'` in [`docker-compose.yml`](./docker-compose.yml))
+- **Client Pool Constraints**: `BlockingConnectionPool(max_connections=5, timeout=0.08)` (80ms acquisition timeout)
+- **Fault Injected**: `latency` toxic (`latency=200ms`, `jitter=20ms`) across 15 concurrent worker threads.
+
+### 3. How to Run
+```bash
+make up EXP=chaos
+make run SCRIPT=01_pool_starvation
+make soft-reset
+```
+
+### 4. Observed Metrics & Failure Signatures
+
+| Scenario | Downstream RTT | Pool Capacity | Concurrent Workers | Succeeded | Aborted (`ConnectionError`) |
+|---|---|---|---|---|---|
+| **1. Healthy Baseline** | ~1 ms | 5 connections | 15 threads | **15 / 15 (100%)** | 0 |
+| **2. Latency Spike (`+200ms`)** | ~200 ms | 5 connections | 15 threads | **5 / 15 (33%)** | **10 / 15 (`No connection available.`)** |
+
+#### Failure Signature:
+```text
+redis.exceptions.ConnectionError: No connection available.
+```
+
+### 5. Production & Systems Takeaways
+1. **Downstream Latency Becomes Upstream Resource Exhaustion**: Never size connection pools or worker thread pools assuming happy-path latency. A slow downstream dependency holds connections 100x longer, starving all callers sharing that pool.
+2. **Fail Fast & Bulkhead Isolation**: Pair bounded acquisition timeouts with circuit breakers and isolated connection pools per criticality tier so a slow secondary query cannot starve critical checkout or auth flows.
 
 ---
 
-### Experiment 03: Silent Half-Open TCP Socket Hangs & Missing Read Timeouts
-- **Objective**: Simulates cloud packet black holes (AWS NAT Gateway idle timeouts, firewall state table expirations) where packets are silently dropped without TCP `RST` or `FIN`.
-- **Observed Failure**:
-  - **Client A (`socket_timeout=None`)**: Thread hangs indefinitely in kernel `socket.recv()`. In production, Linux TCP retransmission defaults (`tcp_retries2=15`) freeze the thread for **15 to 20 minutes**.
-  - **Client B (`socket_timeout=1.0s`)**: Thread detects silent drop in exactly 1.0s and throws `redis.exceptions.TimeoutError`, cleanly recycling worker resources.
-- **Run**: `make run SCRIPT=03_half_open_tcp_hangs`
+## Experiment 02: Transient Outage Mitigation (Naive Retry Storms vs Full Jitter)
+
+### 1. Hypothesis & Objective
+- Evaluates client retry behavior during a transient `0.8s` network link failure (`reset_peer` toxic sending TCP `RST` packets).
+- **Strategy A (Naive Immediate Retry)**: 25 concurrent clients retry immediately in a tight loop upon `ConnectionError`, firing a synchronized burst of 125 requests in `<100ms` and exhausting all retry budgets before the link recovers.
+- **Strategy B (Exponential Backoff with Full Jitter)**: Applies the AWS Architecture sleep formula:
+  $$\text{sleep} = \text{Uniform}\left(0, \min\left(\text{cap}, \text{base} \times 2^{\text{attempt}}\right)\right)$$
+  Retries desynchronize across time, flatten the burst spike, and achieve 100% task completion once the link heals.
+
+### 2. Configuration & Limits
+- **Compose Profile**: `chaos` (see [`docker-compose.yml`](./docker-compose.yml))
+- **Fault Injected**: `reset_peer` toxic active for `800ms`, then automatically removed
+- **Workload**: 25 concurrent workers, `max_retries = 4` (up to 5 attempts per worker)
+
+### 3. How to Run
+```bash
+make up EXP=chaos
+make run SCRIPT=02_retry_storms_vs_backoff
+make soft-reset
+```
+
+### 4. Observed Metrics & Failure Signatures
+
+| Retry Strategy | Concurrent Workers | Total Network Attempts Fired | Succeeded Tasks | Failed Tasks | Recovery Rate |
+|---|---|---|---|---|---|
+| **Strategy A: Naive Immediate Retry** | 25 | **125 (5.0x burst storm in <50ms)** | 0 / 25 | **25 / 25** | **0.0%** |
+| **Strategy B: Exponential Backoff + Full Jitter** | 25 | ~65 (Desynchronized over 1.2s) | **25 / 25** | **0 / 25** | **100.0%** |
+
+### 5. Production & Systems Takeaways
+1. **Unjittered Retries are Self-Inflicted DDoS Attacks**: Even standard exponential backoff ($2^n$) without jitter keeps concurrent clients synchronized in lockstep waves that repeatedly crush a recovering database.
+2. **Always Add Full Jitter + Retry Budgets**: Combine randomized Full Jitter with a client-wide retry token bucket (e.g., max 10% retry overhead) so total outage states fail fast instead of multiplying cluster load by 5x.
 
 ---
 
-## 5. Production & Systems Takeaways
+## Experiment 03: Silent Half-Open TCP Socket Hangs & Missing Read Timeouts
 
-1. **Downstream Latency Becomes Upstream Starvation**:
-   Never size connection pools in isolation. When dependencies get slow, client thread pools and connection queues saturate exponentially.
-2. **Always Use Full Jitter on Retries**:
-   Unjittered retries cause synchronized waves (thundering herds) that repeatedly re-crash recovering databases.
-3. **Mandatory Socket Read Timeouts**:
-   Never rely on TCP connection termination for error handling. Always set explicit `socket_timeout` alongside `connect_timeout`.
+### 1. Hypothesis & Objective
+- Simulates cloud packet black holes (AWS NAT Gateway idle state eviction, stateful firewall drops, or dead peer hosts) where packets are silently dropped without transmitting a `TCP RST` or `FIN`.
+- **Client A (`socket_timeout=None`)**: Issues a command over an established socket and blocks indefinitely inside the kernel `recv()` syscall waiting for ACK/response bytes.
+- **Client B (`socket_timeout=1.0s`)**: Enforces an explicit read timeout, detects the silent black hole in `1.0s`, raises `redis.exceptions.TimeoutError`, and cleanly releases the worker thread.
+
+### 2. Configuration & Limits
+- **Compose Profile**: `chaos` (see [`docker-compose.yml`](./docker-compose.yml))
+- **Fault Injected**: `timeout` toxic with `timeout=0` (silently drops all packets on the established TCP stream without closing the socket)
+
+### 3. How to Run
+```bash
+make up EXP=chaos
+make run SCRIPT=03_half_open_tcp_hangs
+make soft-reset
+```
+
+### 4. Observed Metrics & Failure Signatures
+
+| Client Configuration | Socket Read Timeout | Behavior Under Silent Packet Drop | Thread Release Time | Outcome |
+|---|---|---|---|---|
+| **Client A (Naive Default)** | `socket_timeout=None` | Hangs indefinitely in kernel `socket.recv()` | **Hung (>15 min in Linux TCP)** | **THREAD LEAKED / FROZEN** |
+| **Client B (Resilient)** | `socket_timeout=1.0` | Raises `TimeoutError` at deadline | **1.00 s** | **CLEAN FAIL-FAST RECOVERY** |
+
+#### Failure Signature:
+```text
+redis.exceptions.TimeoutError: Timeout reading from socket
+```
+
+### 5. Production & Systems Takeaways
+1. **`connect_timeout` Does Not Protect Established Connections**: A `connect_timeout` only bounds the initial 3-way `SYN / SYN-ACK / ACK` handshake. Once connected, a missing `socket_timeout` (read/write timeout) leaves threads vulnerable to 15-minute OS TCP retransmission hangs (`net.ipv4.tcp_retries2 = 15`).
+2. **Mandatory Read Timeouts on Every Network Client**: Every HTTP, gRPC, Redis, and SQL driver in production must explicitly configure both connection establishment timeouts and per-operation read/write socket timeouts.
+
+---
+
+## Primary Sources & Deep-Dive References
+
+- [Shopify Toxiproxy Documentation & Architecture](https://github.com/shopify/toxiproxy) – TCP proxy architecture and toxic specifications (`latency`, `bandwidth`, `reset_peer`, `timeout`, `slicer`).
+- Brooker, Marc (AWS Architecture Blog, 2015): [*Exponential Backoff And Jitter*](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) – Mathematical simulation of Full Jitter, Equal Jitter, and Decorrelated Jitter under concurrent contention.
+- Huang et al. (ACM HotOS 2017): [*Gray Failure: The Achilles' Heel of Cloud-Scale Systems*](https://www.microsoft.com/en-us/research/publication/gray-failure-the-achilles-heel-of-cloud-scale-systems/) – Formal characterization of partial network degradation, differential observability, and cascading pool exhaustion.
+- [Linux Kernel Documentation: IP Sysctl (`tcp_retries2` & Keepalive)](https://docs.kernel.org/networking/ip-sysctl.html) – Why unacknowledged TCP sockets hang for 13–30 minutes before the kernel aborts a half-open connection.
+
+---
+
+## Clean Reset & Teardown
+
+```bash
+# Clear all active Toxiproxy toxics and flush upstream Redis keys:
+make soft-reset
+
+# Wipe all containers and networks for this lab:
+make clean
+```

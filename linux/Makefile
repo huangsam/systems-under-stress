@@ -27,6 +27,7 @@ help:
 	@echo "  - oom-killer      (memory: 32M, memswap: 32M - no swap)"
 	@echo ""
 	@echo "Experiments:"
+	@echo "  - 00_crash_course       (kernel runtime, /proc/self/status, POSIX limits & cgroups v2)"
 	@echo "  - 01_fork_bomb_cgroup   (cgroups v2 pids.max ceiling & fork exhaustion)"
 	@echo "  - 02_fd_limits          (ulimit -n 64 & /proc/self/fd inspection)"
 	@echo "  - 03_oom_killer         (4MB chunks under 32M ceiling, OOM SIGKILL / exit 137)"

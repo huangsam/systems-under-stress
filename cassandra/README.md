@@ -1,6 +1,6 @@
 # Cassandra Limits & Internals Lab
 
-Hands-on experiments stress-testing Apache Cassandra's LSM storage engine internals, tombstone failure aborts (`tombstone_failure_threshold`), tunable consistency under node failure (PACELC in practice), and wide partition hot-spotting on `cassandra:5.0.9`.
+Hands-on experiments stress-testing Apache Cassandra's LSM storage engine internals, tombstone failure aborts (`tombstone_failure_threshold`), tunable consistency under node failure (PACELC in practice), and wide partition hot-spotting.
 
 ---
 
@@ -22,28 +22,11 @@ cassandra/
 
 All test scripts declare client dependencies inline via [PEP 723](https://peps.python.org/pep-0723/) and run via `uv run` or `make run`.
 
-### Host Safety & Resource Guardrails
-- **Cgroups Limits**: `cpus: '1.5'`, `memory: 768M` (single-node) / `512M` (cluster nodes).
-- **Strict JVM Caps**: Single node capped at `MAX_HEAP_SIZE: 512M`, `HEAP_NEWSIZE: 128M`; 3-node cluster capped at `MAX_HEAP_SIZE: 256M`, `HEAP_NEWSIZE: 64M` per node to ensure host memory safety.
-- **Loopback Binding**: Exclusively binds to `127.0.0.1:9042:9042` on coordinator nodes.
-- **Deterministic Readiness**:
-  ```yaml
-  healthcheck:
-    test: ["CMD-SHELL", "cqlsh -e \"DESCRIBE KEYSPACES\" || nodetool status | grep -q \"UN\" || exit 1"]
-    interval: 5s
-    timeout: 5s
-    retries: 25
-    start_period: 30s
-  ```
-- **Two-Tier Resets**:
-  - *Fast Soft Reset (In-Engine)*: `make soft-reset` executes `TRUNCATE keyspace.table` to bypass Cassandra's ~35-second cold boot.
-  - *Hard Reset (Volume Wipe)*: `make down EXP=<profile>` or `make clean` tears down containers and wipes isolated named volumes.
-
 ---
 
 ## Quickstart & Execution Standard
 
-Across all profiles in this lab:
+Across all profiles in this lab (see [`docker-compose.yml`](./docker-compose.yml) for exact image tags, JVM heap caps, cgroups limits, and readiness healthchecks):
 
 ```bash
 cd cassandra
@@ -51,14 +34,26 @@ cd cassandra
 # 1. Start target profile with automatic healthcheck wait
 make up EXP=tombstones
 
-# 2. Run self-driving benchmark script
+# 2. Run the baseline crash course or a stress benchmark script
+make run SCRIPT=00_crash_course
 make run SCRIPT=01_tombstone_threshold
 
-# 3. Clean up container and wipe isolated named volume
+# 3. Fast in-engine table truncate or full profile teardown
+make soft-reset
 make down EXP=tombstones
-
-# Or wipe all profiles and named volumes:
 make clean
+```
+
+---
+
+## Experiment 00: Crash Course
+
+Verifies Cassandra cluster connectivity, keyspace and table provisioning with composite primary keys (`((partition_key), clustering_column)`), prepared statements, $\mathcal{O}(1)$ Murmur3 partition token routing, and `system_schema` introspection.
+
+```bash
+make up EXP=tombstones
+make run SCRIPT=00_crash_course
+make soft-reset
 ```
 
 ---
@@ -74,17 +69,18 @@ make clean
 - **Remediation**: Slicing past deleted rows using clustering keys (`WHERE recorded_at >= ?`) allows Cassandra's SSTable index blocks to skip tombstones entirely.
 
 ### 2. Configuration & Limits
-- **Docker Profile**: `profiles: ["tombstones"]` (`cassandra-tombstone-data:/var/lib/cassandra`)
-- **JVM Caps**: `MAX_HEAP_SIZE: 512M`, `HEAP_NEWSIZE: 128M`
-- **Threshold Limit**: Default Cassandra safety guard: 10,000 tombstones.
+- **Compose Profile**: `tombstones` (`cassandra-tombstone-data:/var/lib/cassandra` in [`docker-compose.yml`](./docker-compose.yml))
+- **Container & JVM Caps**: `memory: 1280M`, `MAX_HEAP_SIZE: 512M`
+- **Threshold Limit**: Default Cassandra safety guard (`tombstone_failure_threshold: 10000`)
 
 ### 3. How to Run
 ```bash
 make up EXP=tombstones
 make run SCRIPT=01_tombstone_threshold
+make down EXP=tombstones
 ```
 
-### 4. Empirical Benchmark & Observed Metrics
+### 4. Observed Metrics & Failure Signatures
 
 | Phase | Operation | Row / Marker Count | Duration / Throughput | Status |
 |---|---|---|---|---|
@@ -104,7 +100,7 @@ info={'failures': 1, 'received_responses': 0, 'required_responses': 1, 'consiste
 ### 5. Production & Systems Takeaways
 1. **Never use Cassandra as a Work Queue**: High-churn queues (frequent inserts followed by deletes) are the #1 cause of Cassandra production outages. The accumulation of tombstones degrades read latency and crashes consumers.
 2. **Short TTLs vs Explicit Deletes**: Expired rows (`TTL`) also become tombstones until `gc_grace_seconds` elapses and compaction runs.
-3. **`gc_grace_seconds` Trade-Off**: Tombstones cannot be purged immediately during compaction; they must be retained for `gc_grace_seconds` (default: 10 days / 864,000s) to ensure tombstones propagate to all offline replicas before being safely garbage collected. Setting `gc_grace_seconds = 0` is only safe in single-node environments.
+3. **`gc_grace_seconds` Trade-Off**: Tombstones cannot be purged immediately during compaction; they must be retained for `gc_grace_seconds` (default: 10 days / 864,000s) to ensure tombstones propagate to all offline replicas before being safely garbage collected.
 4. **Clustering Key Range Bounds**: Always query time-series data with bounded clustering key slices (`WHERE recorded_at >= ? AND recorded_at < ?`) so the SSTable index summary can jump directly to live data blocks.
 
 ---
@@ -122,18 +118,19 @@ info={'failures': 1, 'received_responses': 0, 'required_responses': 1, 'consiste
   When Read Consistency ($R$) + Write Consistency ($W$) strictly exceeds the Replication Factor ($\text{RF}$), the Pigeonhole Principle guarantees that the read set and write set overlap at least one common replica, guaranteeing strong consistency.
 
 ### 2. Configuration & Limits
-- **Docker Profile**: `profiles: ["cluster-consistency"]`
-- **Cluster Layout**: 3 nodes (`cassandra-node1`, `cassandra-node2`, `cassandra-node3`) with dedicated volumes (`cassandra-n1-data`, `cassandra-n2-data`, `cassandra-n3-data`).
-- **Resource Limits**: `memory: 512M`, `MAX_HEAP_SIZE: 256M`, `HEAP_NEWSIZE: 64M` per node.
-- **Keyspace**: `lab_consistency` with `replication_factor: 3`.
+- **Compose Profile**: `cluster-consistency` (`cassandra-n1-data`, `cassandra-n2-data`, `cassandra-n3-data` in [`docker-compose.yml`](./docker-compose.yml))
+- **Cluster Layout**: 3 nodes (`cassandra-node1`, `cassandra-node2`, `cassandra-node3`)
+- **Container & JVM Caps**: `memory: 896M`, `MAX_HEAP_SIZE: 384M` per node
+- **Keyspace**: `lab_consistency` with `replication_factor: 3`
 
 ### 3. How to Run
 ```bash
 make up EXP=cluster-consistency
 make run SCRIPT=02_consistency_levels
+make down EXP=cluster-consistency
 ```
 
-### 4. Empirical Availability Matrix Under Node Failures
+### 4. Observed Metrics & Failure Signatures
 
 ```text
 ======================================================================
@@ -166,16 +163,22 @@ info={'consistency': 'QUORUM', 'required_replicas': 2, 'alive_replicas': 1}
 
 ### 1. Hypothesis & Objective
 - **Partition Sizing Ceilings**: A partition in Cassandra is identified by its partition key and hash-routed to a token range on the ring. Cassandra documentation specifies a hard rule: **Keep partitions under 100MB and fewer than 100,000 cells**.
-- **The Monolithic Anti-Pattern**: Putting all system events into a single partition key (`partition_key = 'ALL'`) concentrates all read and write traffic onto the single node owning that token, starving other cluster nodes and causing coordinator timeouts.
+- **The Monolithic Anti-Pattern**: Putting all system events into a single partition key (`partition_id = 'GLOBAL'`) concentrates all read and write traffic onto the single node owning that token, starving other cluster nodes and causing coordinator timeouts.
 - **Synthetic Bucketing**: Bucketing by `((tenant_id, date_bucket), event_id)` caps partition size, distributes tokens across all nodes, and allows predictable read latency.
 
-### 2. How to Run
+### 2. Configuration & Limits
+- **Compose Profile**: `wide-partitions` (`cassandra-wide-data:/var/lib/cassandra` in [`docker-compose.yml`](./docker-compose.yml))
+- **Container & JVM Caps**: `memory: 1280M`, `MAX_HEAP_SIZE: 512M`
+- **Workload**: Compares 1 monolithic partition against 10 deterministically bucketed composite-key partitions.
+
+### 3. How to Run
 ```bash
 make up EXP=wide-partitions
 make run SCRIPT=03_partition_skew
+make down EXP=wide-partitions
 ```
 
-### 3. Comparison Summary
+### 4. Observed Metrics & Failure Signatures
 ```text
 ======================================================================
   PARTITION ARCHITECTURE COMPARISON
@@ -187,39 +190,9 @@ make run SCRIPT=03_partition_skew
 ======================================================================
 ```
 
----
-
-## Cassandra Systems & Interview Reference
-
-### Q1: Why do deletes in Cassandra make queries slower instead of faster?
-In B-Tree relational engines (PostgreSQL), `DELETE` marks page slots free or vacuum purges them. In Cassandra's LSM tree:
-1. Deletes are **sequential append-only writes** (tombstones) written to the CommitLog and Memtable.
-2. When flushed, tombstones are stored in immutable SSTables alongside live data.
-3. Read queries must read, parse, and evaluate both tombstones and data cells across multiple SSTables to resolve the current state.
-4. Hence, deleting 1,000,000 rows adds 1,000,000 tombstone markers that every subsequent scan query must iterate through until compaction purges them after `gc_grace_seconds`.
-
-### Q2: What are the internal stages of the Cassandra write path?
-```text
-Client Write
-    │
-    ▼
-[ Coordinator Node ]
-    │ (Dispatches to N replicas based on Murmur3 token range)
-    ▼
-[ CommitLog ] (Sequential disk append for crash recovery / durability)
-    │
-    ▼
-[ Memtable ]  (In-memory skip list / concurrent hash map)
-    │
-    ▼ (When Memtable is full or commit log limit is reached)
-[ Flush to SSTables ] (Immutable sorted string tables on disk)
-```
-Because writes only hit sequential disk log (`CommitLog`) and memory (`Memtable`), Cassandra writes are orders of magnitude faster than reads and require zero random I/O.
-
-### Q3: When is Cassandra the WRONG architectural choice?
-1. **Ad-hoc Analytical Queries**: Queries without the partition key require scanning the entire token ring across all nodes.
-2. **ACID Multi-Row Transactions**: Cassandra supports LightWeight Transactions (LWT via Paxos) for single partitions, but not distributed multi-table ACID transactions.
-3. **Queue / Churn Workloads**: As proven in Experiment 01, frequent deletes trigger `tombstone_failure_threshold` and cause GC death spirals.
+### 5. Production & Systems Takeaways
+1. **Always Bound Partition Growth by Time or Bucket ID**: Any high-velocity entity (IoT sensor, popular tenant, audit feed) must include a time bucket (e.g., `yyyy_mm_dd`) or shard modulo (`bucket_id`) inside the composite partition key `((entity_id, date_bucket), ts)`.
+2. **Prevent Coordinator Heap Pressure**: Wide partitions force coordinator nodes to deserialize large SSTable index blocks and bloom filters, leading to long JVM GC pauses.
 
 ---
 
@@ -235,6 +208,9 @@ Because writes only hit sequential disk log (`CommitLog`) and memory (`Memtable`
 ## Clean Reset & Teardown
 
 ```bash
+# Truncate lab tables without restarting the JVM (fast reset):
+make soft-reset
+
 # Wipe all containers and named volumes across all profiles:
 make clean
 ```
