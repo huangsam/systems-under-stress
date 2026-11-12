@@ -3,15 +3,15 @@
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/huangsam/systems-under-stress/ci.yml)](https://github.com/huangsam/systems-under-stress/actions)
 [![License](https://img.shields.io/github/license/huangsam/systems-under-stress)](https://github.com/huangsam/systems-under-stress/blob/main/LICENSE)
 
-A hands-on, empirical systems engineering lab suite exploring the **hard operational boundaries, failure modes, and internal mechanics** of 8 foundational infrastructure technologies using Docker containers and Python workloads.
+A hands-on, empirical systems engineering lab suite exploring the **hard operational boundaries, failure modes, and internal mechanics** of 9 foundational infrastructure technologies using Docker containers and Python workloads.
 
 > **Philosophy**: Instead of generating terabytes of data to observe how systems break, we **squeeze the container and engine resource limits** (`mem_limit`, `pids.max`, `work_mem`, `maxmemory`, `max_memory_usage`) so we can deterministically reproduce production failure signatures - OOM kills, cache stampedes, write skew, tombstone aborts, and parts explosions - in seconds on a laptop.
 
 ---
 
-## Lab Matrix (32 Reproducible Experiments Across 8 Engines)
+## Lab Matrix (36 Reproducible Experiments Across 9 Labs)
 
-| Engine | Experiments | Primary Failure Signatures Reproduced |
+| Engine / Lab | Experiments | Primary Failure Signatures Reproduced |
 | :--- | :--- | :--- |
 | [**Redis**](./redis/) | Eviction (`maxmemory`), Cache Stampede, Crash Durability | `OOM command not allowed`, Thundering herd (100x), `SIGKILL` data loss |
 | [**PostgreSQL**](./postgres/) | Isolation Levels, Row Lock Contention, Sort `work_mem` | Write skew under `REPEATABLE READ`, Deadlock `40P01`, Disk spill |
@@ -21,6 +21,7 @@ A hands-on, empirical systems engineering lab suite exploring the **hard operati
 | [**Neo4j**](./neo4j/) | Unbounded Traversal, Supernodes, Cypher vs Recursive SQL | $\mathcal{O}(b^d)$ path explosion, 50k-edge lock contention, Recursive joins |
 | [**Vault**](./vault/) | Dynamic DB Credentials, Token Leases, Transit EaaS | Synchronous `DROP ROLE` cascade, `max_ttl` expiration, Crypto HTTP batching |
 | [**Linux**](./linux/) | Fork Bomb (`pids.max`), File Descriptors, OOM Killer | `EAGAIN` (`pids.max: 40`), `EMFILE` fd exhaustion, Exit Code 137 (`SIGKILL`) |
+| [**Chaos / Toxiproxy**](./chaos/) | Latency Injection, Connection Pool Starvation, Silent Drops | Pool timeout (`No connection available`), Retry storms, Half-open TCP hangs |
 
 ---
 

@@ -16,7 +16,7 @@ format:
 	uvx ruff format .
 
 compose-lint:
-	@for d in redis postgres clickhouse mongodb cassandra neo4j vault linux; do \
+	@for d in redis postgres clickhouse mongodb cassandra neo4j vault linux chaos; do \
 		echo "Validating $$d/docker-compose.yml..."; \
 		(cd $$d && docker compose --profile "*" config -q) || exit 1; \
 	done
@@ -27,7 +27,7 @@ compose-lint:
 test-compose: compose-lint
 
 clean-all:
-	@for d in redis postgres clickhouse mongodb cassandra neo4j vault linux; do \
+	@for d in redis postgres clickhouse mongodb cassandra neo4j vault linux chaos; do \
 		echo "Cleaning $$d..."; \
 		(cd $$d && docker compose --profile "*" down -v --remove-orphans); \
 	done

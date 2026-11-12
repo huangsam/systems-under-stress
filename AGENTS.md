@@ -1,6 +1,6 @@
 # Systems Under Stress Agent Guidelines
 
-This repository (`systems-under-stress`) is an experimental lab for stress-testing and exploring the operational limits of database and systems Docker images (PostgreSQL, Redis, MongoDB, ClickHouse, Cassandra, Neo4j, Vault, Debian Linux).
+This repository (`systems-under-stress`) is an experimental lab for stress-testing and exploring the operational limits of database and systems Docker images (PostgreSQL, Redis, MongoDB, ClickHouse, Cassandra, Neo4j, Vault, Debian Linux, Toxiproxy).
 
 This file serves as the root agent instructions, invariants, and guardrails.
 

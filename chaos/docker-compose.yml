@@ -1,0 +1,45 @@
+x-chaos-base: &chaos-base
+  restart: unless-stopped
+
+services:
+  # Profile: chaos - Toxiproxy Network Chaos Engine with Redis Upstream
+  # Limits: 64MB RAM limit per container, loopback-only binding
+  # Objective: Injects latency jitter, packet loss, TCP resets, and half-open socket drops
+  # Runner: make up EXP=chaos && make run SCRIPT=00_crash_course
+  toxiproxy:
+    <<: *chaos-base
+    image: ${TOXIPROXY_IMAGE:-ghcr.io/shopify/toxiproxy:2.11.0}
+    container_name: chaos-toxiproxy
+    command: ["-host", "0.0.0.0"]
+    profiles: ["chaos", "default"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 64M
+    ports:
+      - "127.0.0.1:8474:8474"
+      - "127.0.0.1:26379:26379"
+    healthcheck:
+      test: ["CMD", "/toxiproxy-cli", "list"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+      start_period: 2s
+
+  redis-upstream:
+    <<: *chaos-base
+    image: ${REDIS_IMAGE:-redis:7.4-alpine}
+    container_name: chaos-redis-upstream
+    profiles: ["chaos", "default"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+      start_period: 2s
