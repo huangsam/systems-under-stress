@@ -91,6 +91,9 @@ def reset_and_seed_supernode(driver: Driver, supernode_edges: int = 50000, spars
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
 
+        # Index Hub(id) and drop any Follower(id) index so Cypher anchors on the Hub
+        # and traverses the relationship chain rather than seeking the leaf directly;
+        # awaitIndexes() prevents cold queries from running while the index is POPULATING.
         session.run("CREATE CONSTRAINT hub_id_uniq IF NOT EXISTS FOR (h:Hub) REQUIRE h.id IS UNIQUE")
         session.run("DROP CONSTRAINT follower_id_uniq IF EXISTS")
         session.run("CALL db.awaitIndexes()")
@@ -143,7 +146,7 @@ def test_traversal_degradation(driver: Driver) -> None:
     console.print("\n[bold blue][*] Part 1: Read Traversal Degradation (Pointer-Chasing in Relationship Chains)...[/]")
 
     with driver.session() as session:
-        # 1. Query through Sparse Node (degree = 10)
+        # 1. Query through Sparse Node (degree = 10); pin Hub index to prevent planner inversion
         query_sparse = "PROFILE MATCH (h:Hub {id: 'sparse_node'})<-[:FOLLOWS]-(f:Follower) USING INDEX h:Hub(id) WHERE f.id = 50005 RETURN f.name AS name"
         t0 = time.perf_counter()
         res_sparse = session.run(query_sparse)
