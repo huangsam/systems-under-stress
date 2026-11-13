@@ -20,18 +20,27 @@ Demonstrates:
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
 
 import psycopg
 from psycopg import errors
 from rich.console import Console
+from rich.markup import escape
 
 DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
 
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 def reset_doctors() -> None:
@@ -92,6 +101,17 @@ def test_dirty_read() -> None:
         console.print("  [bold green][✓] Dirty read prevented:[/] Session B only saw committed data.")
         plain_console.print("      PostgreSQL treats READ UNCOMMITTED as READ COMMITTED under its MVCC engine.")
 
+    verify_phase(not dirty_read_detected, "Part 1: Dirty Read Immunity", "Dirty read occurred unexpectedly in PostgreSQL")
+    with psycopg.connect(DB_CONN, autocommit=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name FROM doctors WHERE id = 1;")
+            persisted_name = cur.fetchone()[0]
+    verify_phase(
+        persisted_name == "Dr. Alice",
+        "Part 1: Rollback Integrity",
+        f"Expected doctor 1 name='Dr. Alice' after rollback, got {persisted_name!r}",
+    )
+
 
 # ----------------------------------------------------------------------
 # Part 2: Write Skew Under REPEATABLE READ vs SERIALIZABLE
@@ -149,16 +169,34 @@ def run_write_skew_simulation(isolation_level: psycopg.IsolationLevel, label: st
         console.print("  [bold green][✓] INVARIANT PRESERVED BY SERIALIZABLE SNAPSHOT ISOLATION (SSI)![/]")
         plain_console.print("      PostgreSQL detected the rw-antidependency cycle and aborted one transaction.")
 
+    if isolation_level == psycopg.IsolationLevel.REPEATABLE_READ:
+        verify_phase(
+            results.get("Dr. Alice") == "COMMITTED" and results.get("Dr. Bob") == "COMMITTED" and remaining == 0,
+            "Part 2: Write Skew (REPEATABLE READ)",
+            f"Expected both commits and remaining=0, got results={results}, remaining={remaining}",
+        )
+    elif isolation_level == psycopg.IsolationLevel.SERIALIZABLE:
+        outcomes = list(results.values())
+        verify_phase(
+            outcomes.count("COMMITTED") == 1 and outcomes.count("SERIALIZATION_FAILURE (40001)") == 1 and remaining == 1,
+            "Part 3: SSI Protection (SERIALIZABLE)",
+            f"Expected 1 COMMITTED + 1 SQLSTATE 40001 and remaining=1, got results={results}, remaining={remaining}",
+        )
+
 
 def main() -> None:
     try:
-        with psycopg.connect(DB_CONN, connect_timeout=3):
-            pass
+        with psycopg.connect(DB_CONN, connect_timeout=3) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT to_regclass('doctors');")
+                verify_phase(cur.fetchone()[0] is not None, "Phase 0: Preconditions", "Missing 'doctors' table; check initdb.d")
+    except SystemExit:
+        raise
     except Exception:
         console.print("[bold red]Error: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.[/]")
         plain_console.print("Please start the container first:")
         plain_console.print("  cd postgres && make up EXP=isolation")
-        return
+        sys.exit(1)
 
     console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 01: PostgreSQL Transaction Isolation & Write Skew[/]")

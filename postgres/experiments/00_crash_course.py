@@ -32,6 +32,13 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def main() -> None:
     console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]PostgreSQL Crash Course: Relational Fundamentals & Diagnostics[/]")
@@ -50,6 +57,7 @@ def main() -> None:
             console.print("[bold blue][*] 1. Server Version & Connectivity[/]")
             cur.execute("SELECT version();")
             version_str = cur.fetchone()[0]
+            verify_phase("PostgreSQL" in version_str, "Phase 1: Connectivity", f"Unexpected version string: {version_str}")
             plain_console.print(f"    Version: {version_str.split(',')[0]}")
 
             # 2. Schema DDL
@@ -65,6 +73,8 @@ def main() -> None:
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 );
             """)
+            cur.execute("SELECT to_regclass(%s);", (TABLE_NAME,))
+            verify_phase(cur.fetchone()[0] is not None, "Phase 2: DDL", f"Table '{TABLE_NAME}' was not created")
             plain_console.print(f"    Created table '{TABLE_NAME}'.")
 
             # 3. Parameterized Insert & Batch Insert
@@ -74,6 +84,7 @@ def main() -> None:
                 ("Mechanical Keyboard", "KEY-001", 129.99, 15),
             )
             inserted_id = cur.fetchone()[0]
+            verify_phase(inserted_id == 1, "Phase 3: Insert", f"Expected inserted_id=1, got {inserted_id}")
             plain_console.print(f"    Inserted single row with ID: {inserted_id}")
 
             batch_data = [
@@ -90,12 +101,15 @@ def main() -> None:
             # Read back
             cur.execute(f"SELECT id, name, sku, price, stock FROM {TABLE_NAME} ORDER BY id;")
             rows = cur.fetchall()
+            verify_phase(len(rows) == 4, "Phase 3: Read Back", f"Expected 4 rows, got {len(rows)}")
             plain_console.print(f"    Total rows in {TABLE_NAME}: {len(rows)}")
             for r in rows:
                 plain_console.print(f"      - ID {r[0]}: {r[1]} ({r[2]}) -> ${r[3]} [Stock: {r[4]}]")
 
             # Update
-            cur.execute(f"UPDATE {TABLE_NAME} SET stock = stock - 2 WHERE sku = %s;", ("KEY-001",))
+            cur.execute(f"UPDATE {TABLE_NAME} SET stock = stock - 2 WHERE sku = %s RETURNING stock;", ("KEY-001",))
+            updated_stock = cur.fetchone()[0]
+            verify_phase(updated_stock == 13, "Phase 3: Update", f"Expected KEY-001 stock=13, got {updated_stock}")
             plain_console.print("    Decremented stock for 'KEY-001'.")
 
     # 4. Transactions: Commit vs Rollback
@@ -117,7 +131,7 @@ def main() -> None:
         with conn.cursor() as cur:
             cur.execute(f"SELECT count(*) FROM {TABLE_NAME};")
             post_count = cur.fetchone()[0]
-            assert post_count == initial_count, "Rollback invariant violated!"
+            verify_phase(post_count == initial_count, "Phase 4: Rollback", f"Rollback invariant violated: {post_count} != {initial_count}")
             plain_console.print(f"    Verified row count unchanged ({post_count} rows). Rollback succeeded.")
 
             # 5. Diagnostics: pg_stat_activity & Table Footprint
@@ -137,10 +151,13 @@ def main() -> None:
                     pg_size_pretty(pg_indexes_size('{TABLE_NAME}')) AS index_size;
             """)
             sizes = cur.fetchone()
+            verify_phase(sizes is not None and all(sizes), "Phase 5: Diagnostics", "Missing table footprint diagnostics")
             plain_console.print(f"    Table '{TABLE_NAME}' Footprint: Total: {sizes[0]}, Heap: {sizes[1]}, Indexes: {sizes[2]}")
 
             # Cleanup
             cur.execute(f"DROP TABLE IF EXISTS {TABLE_NAME};")
+            cur.execute("SELECT to_regclass(%s);", (TABLE_NAME,))
+            verify_phase(cur.fetchone()[0] is None, "Phase 5: Cleanup", f"Demo table '{TABLE_NAME}' still exists after DROP")
             plain_console.print(f"    Cleaned up demo table '{TABLE_NAME}'.")
 
     console.print("\n[bold green][✓] PostgreSQL Crash Course completed successfully![/]\n")

@@ -22,16 +22,25 @@ Demonstrates:
 from __future__ import annotations
 
 import re
+import sys
 import time
 
 import psycopg
 from rich.console import Console
+from rich.markup import escape
 
 DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
 
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 def seed_data() -> None:
@@ -102,18 +111,28 @@ def run_explain_sort(work_mem_setting: str | None = None) -> dict:
                 "sort_method": sort_method,
                 "plan_time_ms": plan_time_ms,
                 "wall_time_ms": elapsed_ms,
+                "full_plan": full_plan,
             }
 
 
 def main() -> None:
     try:
-        with psycopg.connect(DB_CONN, connect_timeout=3):
-            pass
+        with psycopg.connect(DB_CONN, connect_timeout=3) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SHOW work_mem;")
+                wm = cur.fetchone()[0]
+                verify_phase(
+                    wm == "4MB",
+                    "Phase 0: Preconditions",
+                    f"Expected work_mem=4MB (EXP=work-mem), got {wm!r}. Run 'make up EXP=work-mem'.",
+                )
+    except SystemExit:
+        raise
     except Exception:
         console.print("[bold red]Error: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.[/]")
         plain_console.print("Please start the work-mem container first:")
         plain_console.print("  cd postgres && make up EXP=work-mem")
-        return
+        sys.exit(1)
 
     console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 03: PostgreSQL Memory Limits (work_mem) & Disk Spill[/]")
@@ -128,6 +147,11 @@ def main() -> None:
     plain_console.print(f"    Effective work_mem  : {res1['work_mem']}")
     console.print(f"    Sort Method         : [bold red]{res1['sort_method']}[/]")
     plain_console.print(f"    Engine Execution    : {res1['plan_time_ms']:.1f}ms")
+    verify_phase(
+        res1["work_mem"] == "4MB" and "external" in res1["sort_method"].lower() and "disk" in res1["sort_method"].lower(),
+        "Phase 1: Disk Spill Sort (4MB)",
+        f"Expected external merge disk sort under 4MB work_mem, got {res1['sort_method']!r}",
+    )
 
     # 2. Run with tuned session work_mem (64MB)
     console.print("\n[bold blue][*] Test 2: Sorting with tuned session work_mem (64MB)...[/]")
@@ -135,6 +159,11 @@ def main() -> None:
     plain_console.print(f"    Effective work_mem  : {res2['work_mem']}")
     console.print(f"    Sort Method         : [bold green]{res2['sort_method']}[/]")
     plain_console.print(f"    Engine Execution    : {res2['plan_time_ms']:.1f}ms")
+    verify_phase(
+        res2["work_mem"] == "64MB" and "quicksort" in res2["sort_method"].lower() and "memory" in res2["sort_method"].lower(),
+        "Phase 2: In-Memory Sort (64MB)",
+        f"Expected in-memory quicksort under 64MB work_mem, got {res2['sort_method']!r}",
+    )
 
     speedup = res1["plan_time_ms"] / res2["plan_time_ms"] if res2["plan_time_ms"] > 0 else 1.0
 

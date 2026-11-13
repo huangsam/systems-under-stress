@@ -21,18 +21,27 @@ Demonstrates:
 from __future__ import annotations
 
 import concurrent.futures
+import sys
 import threading
 import time
 
 import psycopg
 from psycopg import errors
 from rich.console import Console
+from rich.markup import escape
 
 DB_CONN = "postgresql://postgres:postgres@127.0.0.1:5432/lab_db"
 
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 def reset_accounts() -> None:
@@ -68,7 +77,8 @@ def test_hot_row_contention() -> None:
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
         futures = [executor.submit(increment_balance) for _ in range(NUM_WORKERS)]
-        concurrent.futures.wait(futures)
+        for fut in futures:
+            fut.result()
 
     duration = time.perf_counter() - start_time
     final_balance = get_balance(1)
@@ -78,9 +88,13 @@ def test_hot_row_contention() -> None:
     console.print(f"    Final Balance    : [bold green]${final_balance:,.2f}[/]")
     plain_console.print(f"    Total Time       : {duration * 1000:.1f}ms ({NUM_WORKERS} updates serialized)")
 
-    if final_balance == 1050.00:
-        plain_console.print("  [✓] PostgreSQL row-level locks successfully queued all 50 concurrent updates.")
-        plain_console.print("      Zero lost updates occurred.")
+    verify_phase(
+        final_balance == 1050.00,
+        "Part 1: Hot Row Serialization",
+        f"Expected Alice balance=$1,050.00, got ${final_balance:,.2f}",
+    )
+    plain_console.print("  [✓] PostgreSQL row-level locks successfully queued all 50 concurrent updates.")
+    plain_console.print("      Zero lost updates occurred.")
 
 
 # ----------------------------------------------------------------------
@@ -141,13 +155,17 @@ def test_deadlock() -> None:
     plain_console.print(f"    Transaction 1 Result : {results.get('Tx1 (Alice->Bob)')}")
     plain_console.print(f"    Transaction 2 Result : {results.get('Tx2 (Bob->Alice)')}")
 
-    has_deadlock = any("DEADLOCK_DETECTED" in r for r in results.values())
-    has_commit = any("COMMITTED" in r for r in results.values())
+    has_deadlock = any("DEADLOCK_DETECTED (40P01)" == r for r in results.values())
+    has_commit = any(r == "COMMITTED" for r in results.values())
 
-    if has_deadlock and has_commit:
-        console.print("  [bold green][✓] Deadlock successfully caught & resolved by PostgreSQL![/]")
-        plain_console.print("      PostgreSQL's deadlock detector identified the wait-for cycle, aborted the")
-        plain_console.print("      younger transaction (SQLSTATE 40P01), allowing the other transaction to commit.")
+    verify_phase(
+        has_deadlock and has_commit,
+        "Part 2: Deadlock Detection",
+        f"Expected 1 DEADLOCK_DETECTED (40P01) and 1 COMMITTED, got {results}",
+    )
+    console.print("  [bold green][✓] Deadlock successfully caught & resolved by PostgreSQL![/]")
+    plain_console.print("      PostgreSQL's deadlock detector identified the wait-for cycle, aborted the")
+    plain_console.print("      younger transaction (SQLSTATE 40P01), allowing the other transaction to commit.")
 
 
 # ----------------------------------------------------------------------
@@ -187,7 +205,8 @@ def test_ordered_locking() -> None:
                 futures.append(executor.submit(transfer, 1, 2, 10.0))
             else:
                 futures.append(executor.submit(transfer, 2, 1, 10.0))
-        concurrent.futures.wait(futures)
+        for fut in futures:
+            fut.result()
 
     alice_bal = get_balance(1)
     bob_bal = get_balance(2)
@@ -198,19 +217,32 @@ def test_ordered_locking() -> None:
     plain_console.print(f"    Bob Final Balance    : ${bob_bal:,.2f}")
     plain_console.print(f"    Total System Wealth  : ${alice_bal + bob_bal:,.2f} ($2,000.00 expected)")
 
-    if deadlock_count == 0 and (alice_bal + bob_bal) == 2000.00:
-        plain_console.print("  [✓] Zero deadlocks! Consistent lock ordering broke the circular wait condition.")
+    verify_phase(
+        success_count == 40 and deadlock_count == 0 and alice_bal == 1000.00 and bob_bal == 1000.00,
+        "Part 3: Ordered Locking",
+        f"Expected 40 transfers, 0 deadlocks, $1000/$1000 balances; got success={success_count}, deadlocks={deadlock_count}, alice={alice_bal}, bob={bob_bal}",
+    )
+    plain_console.print("  [✓] Zero deadlocks! Consistent lock ordering broke the circular wait condition.")
 
 
 def main() -> None:
     try:
-        with psycopg.connect(DB_CONN, connect_timeout=3):
-            pass
+        with psycopg.connect(DB_CONN, connect_timeout=3) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SHOW deadlock_timeout;")
+                dl_timeout = cur.fetchone()[0]
+                verify_phase(
+                    dl_timeout == "100ms",
+                    "Phase 0: Preconditions",
+                    f"Expected deadlock_timeout=100ms (EXP=locks), got {dl_timeout!r}. Run 'make up EXP=locks'.",
+                )
+    except SystemExit:
+        raise
     except Exception:
         console.print("[bold red]Error: Cannot connect to PostgreSQL on 127.0.0.1:5432/lab_db.[/]")
         plain_console.print("Please start the locks container first:")
         plain_console.print("  cd postgres && make up EXP=locks")
-        return
+        sys.exit(1)
 
     console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 02: PostgreSQL Lock Contention & Deadlock Detection[/]")
