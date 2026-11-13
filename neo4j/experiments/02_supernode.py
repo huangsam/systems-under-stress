@@ -74,7 +74,13 @@ def wait_for_neo4j(driver: Driver, timeout_sec: int = 45) -> None:
 def extract_total_db_hits(plan: Any) -> int:
     if plan is None:
         return 0
-    total = getattr(plan, "db_hits", 0) or 0
+    if isinstance(plan, dict):
+        args = plan.get("args") or {}
+        total = int(plan.get("dbHits") or plan.get("db_hits") or args.get("DbHits") or 0)
+        for child in plan.get("children") or []:
+            total += extract_total_db_hits(child)
+        return total
+    total = int(getattr(plan, "db_hits", 0) or 0)
     for child in getattr(plan, "children", []):
         total += extract_total_db_hits(child)
     return total
