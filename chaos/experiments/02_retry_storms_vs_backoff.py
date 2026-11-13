@@ -35,12 +35,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import toxi_client
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 import redis
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
 
 REDIS_HOST = "127.0.0.1"
 REDIS_PORT = 26379
@@ -118,51 +126,64 @@ def main() -> None:
     # -------------------------------------------------------------
     console.print("[bold yellow]Scenario A: Naive Immediate Retries (0 Backoff)[/]")
     console.print(f"  Triggering link outage (TCP reset_peer) for {OUTAGE_DURATION}s...")
-    toxi_client.add_reset_peer(name="reset_outage")
-
-    # Schedule healing after OUTAGE_DURATION
     heal_timer = threading.Timer(OUTAGE_DURATION, toxi_client.reset_all)
-    heal_timer.start()
+    try:
+        toxi_client.add_reset_peer(name="reset_outage")
+        heal_timer.start()
 
-    t0 = time.perf_counter()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=CLIENT_COUNT) as executor:
-        naive_records = list(executor.map(naive_retry_client, range(1, CLIENT_COUNT + 1)))
-    naive_wall_ms = (time.perf_counter() - t0) * 1000
-
-    heal_timer.join()
-    toxi_client.reset_all()
+        t0 = time.perf_counter()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=CLIENT_COUNT) as executor:
+            naive_records = list(executor.map(naive_retry_client, range(1, CLIENT_COUNT + 1)))
+        naive_wall_ms = (time.perf_counter() - t0) * 1000
+    finally:
+        heal_timer.cancel()
+        heal_timer.join()
+        toxi_client.reset_all()
 
     naive_success = sum(1 for r in naive_records if r.success)
     naive_total_reqs = sum(r.attempts for r in naive_records)
+    naive_pct = (naive_success / CLIENT_COUNT) * 100
 
     console.print(f"  ✖ Wall Time: [bold red]{naive_wall_ms:.1f} ms[/]")
-    console.print(f"  ✖ Success Count: [bold red]{naive_success} / {CLIENT_COUNT}[/] (0% recovery)")
+    console.print(f"  ✖ Success Count: [bold red]{naive_success} / {CLIENT_COUNT}[/] ({naive_pct:.0f}% recovery)")
     console.print(f"  ✖ Total Requests Fired: [bold red]{naive_total_reqs}[/] in {naive_wall_ms:.1f}ms (exhausted before link healed!)\n")
+    verify_phase(
+        naive_success == 0 and naive_total_reqs == CLIENT_COUNT * MAX_RETRIES,
+        "Scenario A Naive Retry Storm",
+        f"expected 0 recoveries and {CLIENT_COUNT * MAX_RETRIES} exhausted attempts, got success={naive_success}, reqs={naive_total_reqs}",
+    )
 
     # -------------------------------------------------------------
     # Scenario B: Exponential Backoff with Full Jitter
     # -------------------------------------------------------------
     console.print("[bold yellow]Scenario B: Exponential Backoff with Full Jitter (AWS Pattern)[/]")
     console.print(f"  Triggering link outage (TCP reset_peer) for {OUTAGE_DURATION}s...")
-    toxi_client.add_reset_peer(name="reset_outage")
-
     heal_timer = threading.Timer(OUTAGE_DURATION, toxi_client.reset_all)
-    heal_timer.start()
+    try:
+        toxi_client.add_reset_peer(name="reset_outage")
+        heal_timer.start()
 
-    t0 = time.perf_counter()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=CLIENT_COUNT) as executor:
-        jitter_records = list(executor.map(jitter_backoff_client, range(1, CLIENT_COUNT + 1)))
-    jitter_wall_ms = (time.perf_counter() - t0) * 1000
-
-    heal_timer.join()
-    toxi_client.reset_all()
+        t0 = time.perf_counter()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=CLIENT_COUNT) as executor:
+            jitter_records = list(executor.map(jitter_backoff_client, range(1, CLIENT_COUNT + 1)))
+        jitter_wall_ms = (time.perf_counter() - t0) * 1000
+    finally:
+        heal_timer.cancel()
+        heal_timer.join()
+        toxi_client.reset_all()
 
     jitter_success = sum(1 for r in jitter_records if r.success)
     jitter_total_reqs = sum(r.attempts for r in jitter_records)
+    jitter_pct = (jitter_success / CLIENT_COUNT) * 100
 
     console.print(f"  ✔ Wall Time: [bold green]{jitter_wall_ms:.1f} ms[/]")
-    console.print(f"  ✔ Success Count: [bold green]{jitter_success} / {CLIENT_COUNT}[/] (100% recovery)")
+    console.print(f"  ✔ Success Count: [bold green]{jitter_success} / {CLIENT_COUNT}[/] ({jitter_pct:.0f}% recovery)")
     console.print(f"  ✔ Total Requests Fired: [bold green]{jitter_total_reqs}[/] (desynchronized retries)\n")
+    verify_phase(
+        jitter_success > naive_success and jitter_success >= CLIENT_COUNT // 2,
+        "Scenario B Full Jitter Recovery",
+        f"expected >= {CLIENT_COUNT // 2}/{CLIENT_COUNT} recoveries with jitter, got {jitter_success}/{CLIENT_COUNT}",
+    )
 
     # -------------------------------------------------------------
     # Comparative Matrix
@@ -179,14 +200,14 @@ def main() -> None:
 
     comp_table.add_row(
         "Naive Immediate",
-        f"[red]{naive_success}/{CLIENT_COUNT} (0%)[/]",
+        f"[red]{naive_success}/{CLIENT_COUNT} ({naive_pct:.0f}%)[/]",
         f"[red]{naive_total_reqs}[/]",
         f"Synchronized cluster ({naive_total_reqs} reqs in {naive_wall_ms:.0f}ms)",
         "[bold red]FAILED[/]",
     )
     comp_table.add_row(
         "Full Jitter Backoff",
-        f"[green]{jitter_success}/{CLIENT_COUNT} (100%)[/]",
+        f"[green]{jitter_success}/{CLIENT_COUNT} ({jitter_pct:.0f}%)[/]",
         f"[green]{jitter_total_reqs}[/]",
         f"Desynchronized ({jitter_total_reqs} reqs spread over {jitter_wall_ms / 1000:.1f}s)",
         "[bold green]RECOVERED[/]",

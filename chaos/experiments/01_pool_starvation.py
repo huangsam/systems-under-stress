@@ -31,12 +31,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import toxi_client
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 import redis
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
 
 REDIS_HOST = "127.0.0.1"
 REDIS_PORT = 26379
@@ -106,6 +114,7 @@ def main() -> None:
     # Pre-populate a test key
     admin = redis.Redis(host=REDIS_HOST, port=REDIS_PORT)
     admin.set("test_key", "healthy_payload")
+    verify_phase(admin.get("test_key") == b"healthy_payload", "Phase 0 Seed", "expected test_key=='healthy_payload' via proxy")
 
     # -------------------------------------------------------------
     # Phase 1: Healthy Baseline
@@ -126,6 +135,7 @@ def main() -> None:
     baseline_wall_ms = (t1 - t0) * 1000
 
     b_success = sum(1 for r in baseline_results if r.status == "SUCCESS")
+    verify_phase(b_success == WORKER_COUNT, "Phase 1 Baseline", f"expected {WORKER_COUNT}/{WORKER_COUNT} healthy completions, got {b_success}")
     console.print(f"  ✔ All {b_success}/{WORKER_COUNT} tasks completed in [bold green]{baseline_wall_ms:.2f} ms[/].")
     console.print("  ✔ Sub-millisecond datastore response allows instant connection recycling.\n")
 
@@ -133,55 +143,63 @@ def main() -> None:
     # Phase 2: Chaos Injection - 200ms Downstream Latency
     # -------------------------------------------------------------
     console.print("[bold yellow]Phase 2: Injecting 200ms Downstream Latency Toxic via Toxiproxy[/]")
-    toxi_client.add_latency(name="pool_starve_toxic", latency_ms=200, jitter_ms=10)
-    console.print(f"  ✔ 200ms latency active. Connection acquisition timeout is set to {POOL_TIMEOUT * 1000:.0f}ms.")
-    console.print(f"  Dispatching {WORKER_COUNT} concurrent threads...")
+    try:
+        toxi_client.add_latency(name="pool_starve_toxic", latency_ms=200, jitter_ms=10)
+        console.print(f"  ✔ 200ms latency active. Connection acquisition timeout is set to {POOL_TIMEOUT * 1000:.0f}ms.")
+        console.print(f"  Dispatching {WORKER_COUNT} concurrent threads...")
 
-    chaos_pool = redis.BlockingConnectionPool(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        max_connections=POOL_SIZE,
-        timeout=POOL_TIMEOUT,
-    )
-
-    t0 = time.perf_counter()
-    chaos_results = run_concurrency_batch(chaos_pool)
-    t1 = time.perf_counter()
-    chaos_wall_ms = (t1 - t0) * 1000
-
-    # Display comparison table
-    table = Table(title="Thread Execution Waterfall (Phase 2: Degraded Latency)", border_style="dim")
-    table.add_column("Worker ID", justify="center")
-    table.add_column("Pool Acquired", justify="center")
-    table.add_column("Wait / RTT", justify="right")
-    table.add_column("Status", justify="center")
-    table.add_column("Error Signature", justify="left")
-
-    for r in chaos_results:
-        c_status = "[bold green]SUCCESS[/]" if r.status == "SUCCESS" else "[bold red]FAILED[/]"
-        c_acq = "[green]YES (Slot 1-5)[/]" if r.acquired else "[red]NO (Timed Out)[/]"
-        err_msg = r.error if r.error else "[dim]-[/]"
-        table.add_row(
-            f"Worker-{r.worker_id:02d}",
-            c_acq,
-            f"{r.duration_ms:.1f} ms",
-            c_status,
-            err_msg,
+        chaos_pool = redis.BlockingConnectionPool(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            max_connections=POOL_SIZE,
+            timeout=POOL_TIMEOUT,
         )
 
-    console.print(table)
-    console.print()
+        t0 = time.perf_counter()
+        chaos_results = run_concurrency_batch(chaos_pool)
+        t1 = time.perf_counter()
+        chaos_wall_ms = (t1 - t0) * 1000
 
-    # Metrics summary
-    c_success = sum(1 for r in chaos_results if r.status == "SUCCESS")
-    c_timeout = sum(1 for r in chaos_results if r.status == "TIMEOUT")
+        # Display comparison table
+        table = Table(title="Thread Execution Waterfall (Phase 2: Degraded Latency)", border_style="dim")
+        table.add_column("Worker ID", justify="center")
+        table.add_column("Pool Acquired", justify="center")
+        table.add_column("Wait / RTT", justify="right")
+        table.add_column("Status", justify="center")
+        table.add_column("Error Signature", justify="left")
 
-    console.print(f"[bold]Batch Wall Time:[/] {chaos_wall_ms:.1f} ms")
-    console.print(f"  [green]✔ Succeeded (Held Connection):[/] {c_success} / {WORKER_COUNT}")
-    console.print(f"  [red]✖ Failed (Pool Timeout Breach):[/] {c_timeout} / {WORKER_COUNT}\n")
+        for r in chaos_results:
+            c_status = "[bold green]SUCCESS[/]" if r.status == "SUCCESS" else "[bold red]FAILED[/]"
+            c_acq = "[green]YES (Slot 1-5)[/]" if r.acquired else "[red]NO (Timed Out)[/]"
+            err_msg = r.error if r.error else "[dim]-[/]"
+            table.add_row(
+                f"Worker-{r.worker_id:02d}",
+                c_acq,
+                f"{r.duration_ms:.1f} ms",
+                c_status,
+                err_msg,
+            )
 
-    # Clean up
-    toxi_client.reset_all()
+        console.print(table)
+        console.print()
+
+        # Metrics summary
+        c_success = sum(1 for r in chaos_results if r.status == "SUCCESS")
+        c_timeout = sum(1 for r in chaos_results if r.status == "TIMEOUT")
+
+        console.print(f"[bold]Batch Wall Time:[/] {chaos_wall_ms:.1f} ms")
+        console.print(f"  [green]✔ Succeeded (Held Connection):[/] {c_success} / {WORKER_COUNT}")
+        console.print(f"  [red]✖ Failed (Pool Timeout Breach):[/] {c_timeout} / {WORKER_COUNT}\n")
+        verify_phase(
+            1 <= c_success <= POOL_SIZE and c_timeout >= WORKER_COUNT - POOL_SIZE and c_success + c_timeout == WORKER_COUNT,
+            "Phase 2 Pool Starvation",
+            f"expected <= {POOL_SIZE} successes and >= {WORKER_COUNT - POOL_SIZE} pool timeouts, got success={c_success}, timeout={c_timeout}",
+        )
+    finally:
+        # Clean up
+        toxi_client.reset_all()
+
+    verify_phase(admin.ping() is True, "Phase 2 Recovery", "expected Redis ping recovery after toxic reset")
 
     # System Takeaways
     console.print("=" * 70, style="bold cyan")

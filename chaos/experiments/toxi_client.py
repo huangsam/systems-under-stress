@@ -13,7 +13,7 @@ LISTEN_ADDR = "0.0.0.0:26379"
 UPSTREAM_ADDR = "redis-upstream:6379"
 
 
-def _request(endpoint: str, method: str = "GET", data: dict[str, Any] | None = None) -> dict[str, Any]:
+def _request(endpoint: str, method: str = "GET", data: dict[str, Any] | None = None) -> Any:
     url = f"{TOXIPROXY_URL}{endpoint}"
     payload = json.dumps(data).encode("utf-8") if data is not None else None
     headers = {"Content-Type": "application/json"} if payload is not None else {}
@@ -52,6 +52,12 @@ def ensure_proxy() -> dict[str, Any]:
 def reset_all() -> None:
     """Wipes all active toxics and re-enables all proxies."""
     _request("/reset", method="POST", data={})
+
+
+def list_toxics() -> list[dict[str, Any]]:
+    """Lists currently active toxics on the redis proxy."""
+    resp = _request(f"/proxies/{PROXY_NAME}/toxics", method="GET")
+    return resp if isinstance(resp, list) else []
 
 
 def add_latency(

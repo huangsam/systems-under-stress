@@ -36,12 +36,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import toxi_client
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 import redis
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
 
 REDIS_HOST = "127.0.0.1"
 REDIS_PORT = 26379
@@ -138,32 +146,46 @@ def main() -> None:
 
     # Pre-warm connection before adding toxic so socket is established
     warmup = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, socket_timeout=2.0)
-    warmup.ping()
+    verify_phase(warmup.ping() is True, "Phase 0 Warmup", "expected healthy baseline ping before injecting black-hole toxic")
 
     # Inject silent timeout toxic: drops all packets without sending FIN/RST
     console.print("[bold yellow]Phase 1: Injecting Silent Network Black Hole Toxic (timeout=0)[/]")
-    toxi_client.add_timeout(name="black_hole_toxic", timeout_ms=0)
-    console.print("  ✔ Downstream packets are silently discarded without closing TCP socket.")
-    console.print("  ✔ Simulates stateful firewall expiration or silent cloud NAT gateway drops.\n")
+    try:
+        toxi_client.add_timeout(name="black_hole_toxic", timeout_ms=0)
+        console.print("  ✔ Downstream packets are silently discarded without closing TCP socket.")
+        console.print("  ✔ Simulates stateful firewall expiration or silent cloud NAT gateway drops.\n")
 
-    # -------------------------------------------------------------
-    # Test Client A: Naive (No Timeout)
-    # -------------------------------------------------------------
-    console.print(f"[bold yellow]Phase 2: Probing Client A (socket_timeout=None) for {HANG_OBSERVE_WINDOW}s...[/]")
-    naive_res = test_naive_client()
-    console.print(f"  ✖ Worker thread remained: [bold red]{naive_res.thread_state}[/] after {naive_res.elapsed_ms:.1f}ms.")
-    console.print("  ✖ Socket blocked in kernel recv(). Zero signals received.\n")
+        # -------------------------------------------------------------
+        # Test Client A: Naive (No Timeout)
+        # -------------------------------------------------------------
+        console.print(f"[bold yellow]Phase 2: Probing Client A (socket_timeout=None) for {HANG_OBSERVE_WINDOW}s...[/]")
+        naive_res = test_naive_client()
+        console.print(f"  ✖ Worker thread remained: [bold red]{naive_res.thread_state}[/] after {naive_res.elapsed_ms:.1f}ms.")
+        console.print("  ✖ Socket blocked in kernel recv(). Zero signals received.\n")
+        verify_phase(
+            naive_res.status == "HUNG_INDEFINITELY",
+            "Phase 2 Naive Hang",
+            f"expected naive client to hang indefinitely, got status={naive_res.status}, exc={naive_res.exception_caught}",
+        )
 
-    # -------------------------------------------------------------
-    # Test Client B: Resilient (Explicit Timeout)
-    # -------------------------------------------------------------
-    console.print("[bold yellow]Phase 3: Probing Client B (socket_timeout=1.0s)...[/]")
-    resilient_res = test_resilient_client()
-    console.print(f"  ✔ Worker thread state: [bold green]{resilient_res.thread_state}[/] in {resilient_res.elapsed_ms:.1f}ms.")
-    console.print(f"  ✔ Caught expected error: [bold green]{resilient_res.exception_caught}[/]\n")
+        # -------------------------------------------------------------
+        # Test Client B: Resilient (Explicit Timeout)
+        # -------------------------------------------------------------
+        console.print("[bold yellow]Phase 3: Probing Client B (socket_timeout=1.0s)...[/]")
+        resilient_res = test_resilient_client()
+        console.print(f"  ✔ Worker thread state: [bold green]{resilient_res.thread_state}[/] in {resilient_res.elapsed_ms:.1f}ms.")
+        console.print(f"  ✔ Caught expected error: [bold green]{resilient_res.exception_caught}[/]\n")
+        verify_phase(
+            resilient_res.status == "TIMED_OUT_CLEANLY" and "TimeoutError" in resilient_res.exception_caught and 900.0 <= resilient_res.elapsed_ms <= 2000.0,
+            "Phase 3 Resilient Timeout",
+            f"expected TimeoutError within 900..2000ms, got status={resilient_res.status}, elapsed={resilient_res.elapsed_ms:.1f}ms, exc={resilient_res.exception_caught}",
+        )
+    finally:
+        # Clean up
+        toxi_client.reset_all()
 
-    # Clean up
-    toxi_client.reset_all()
+    recovery_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, socket_timeout=2.0)
+    verify_phase(recovery_client.ping() is True, "Phase 3 Recovery", "expected Redis ping recovery after clearing black-hole toxic")
 
     # -------------------------------------------------------------
     # Comparison Matrix
