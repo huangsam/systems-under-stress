@@ -23,7 +23,7 @@ Instead of generating terabytes of data, each lab squeezes container and engine 
 | [**Neo4j**](./neo4j/) | Crash Course, Unbounded Traversal, Supernodes, Cypher vs Recursive SQL | $\mathcal{O}(b^d)$ path explosion, 50k-edge lock contention, Recursive joins |
 | [**Vault**](./vault/) | Crash Course, Dynamic DB Credentials, Token Leases, Transit EaaS | Synchronous `DROP ROLE` cascade, `max_ttl` expiration, Crypto HTTP batching |
 | [**Linux**](./linux/) | Crash Course, Fork Bomb (`pids.max`), File Descriptors, OOM Killer | `EAGAIN` (`pids.max: 40`), `EMFILE` fd exhaustion, Exit Code 137 (`SIGKILL`) |
-| [**Chaos / Toxiproxy**](./chaos/) | Crash Course, Latency Injection, Connection Pool Starvation, Silent Drops | Pool timeout (`No connection available`), Retry storms, Half-open TCP hangs |
+| [**Toxiproxy**](./chaos/) | Crash Course, Latency Injection, Connection Pool Starvation, Silent Drops | Pool timeout (`No connection available`), Retry storms, Half-open TCP hangs |
 
 ---
 
