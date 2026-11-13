@@ -46,6 +46,12 @@ plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 err_console = Console(stderr=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def get_driver() -> Driver:
     return GraphDatabase.driver(URI, auth=AUTH)
 
@@ -118,6 +124,11 @@ def reset_and_seed_supernode(driver: Driver, supernode_edges: int = 50000, spars
 
         super_deg = session.run("MATCH (:Hub {id: 'supernode'})<-[r:FOLLOWS]-() RETURN count(r) AS cnt").single()["cnt"]
         sparse_deg = session.run("MATCH (:Hub {id: 'sparse_node'})<-[r:FOLLOWS]-() RETURN count(r) AS cnt").single()["cnt"]
+        verify_phase(
+            super_deg == 50000 and sparse_deg == 10,
+            "Phase 0 Seed",
+            f"expected supernode=50000 and sparse=10, got super={super_deg}, sparse={sparse_deg}",
+        )
         console.print(f"[[bold green]+[/]] Supernode degree: {super_deg:,} edges | Sparse node degree: {sparse_deg} edges.")
 
 
@@ -151,6 +162,17 @@ def test_traversal_degradation(driver: Driver) -> None:
 
         plain_console.print(f"{'Sparse Node':<22}{'10':<14}{hits_sparse:<14,}{server_sparse_ms:<18.2f}{wall_sparse_ms:<14.2f}")
         plain_console.print(f"{'Dense Supernode':<22}{'50,000':<14}{hits_super:<14,}{server_super_ms:<18.2f}{wall_super_ms:<14.2f}")
+
+        verify_phase(
+            _rec_sparse is not None and _rec_super is not None,
+            "Phase 1 Read Traversal",
+            f"expected both sparse and supernode leaf queries to return a record, got sparse={_rec_sparse}, super={_rec_super}",
+        )
+        verify_phase(
+            hits_super > hits_sparse * 100,
+            "Phase 1 Read Traversal",
+            f"expected supernode DB hits ({hits_super}) > 100x sparse ({hits_sparse})",
+        )
 
         if hits_sparse > 0:
             hits_ratio = hits_super / hits_sparse
@@ -245,6 +267,20 @@ def test_lock_contention(driver: Driver, num_workers: int = 10, writes_per_worke
     plain_console.print(f"{'P95 Latency':<30}{f'{p95_c:.2f} ms':<26}{f'{p95_u:.2f} ms':<26}")
     plain_console.print(f"{'Max Latency':<30}{f'{max_c:.2f} ms':<26}{f'{max_u:.2f} ms':<26}")
     plain_console.print("=" * 82)
+
+    verify_phase(
+        len(all_contended_latencies) == total_writes and len(all_uncontended_latencies) == total_writes,
+        "Phase 2 Concurrent Writes",
+        f"expected {total_writes} contended and uncontended writes, got {len(all_contended_latencies)} and {len(all_uncontended_latencies)}",
+    )
+    with driver.session() as s:
+        super_deg_after = s.run("MATCH (:Hub {id: 'supernode'})<-[r:FOLLOWS]-() RETURN count(r) AS cnt").single()["cnt"]
+        part_deg = s.run("MATCH (h:Hub)<-[r:FOLLOWS]-(:WriterNode) WHERE h.id STARTS WITH 'partition_' RETURN count(r) AS cnt").single()["cnt"]
+    verify_phase(
+        super_deg_after == 50000 + total_writes and part_deg == total_writes,
+        "Phase 2 Write Persistence",
+        f"expected supernode={50000 + total_writes} and partitioned={total_writes}, got super={super_deg_after}, part={part_deg}",
+    )
 
     latency_ratio = p95_c / p95_u if p95_u > 0 else 1.0
     console.print(f"\n[[bold yellow]![/]] Supernode exclusive lock serialization increased P95 write latency by [bold red]{latency_ratio:.1f}x[/].")

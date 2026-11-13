@@ -33,6 +33,12 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def main() -> None:
     console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]Neo4j Crash Course: Property Graphs, Cypher & Traversals[/]")
@@ -50,6 +56,7 @@ def main() -> None:
         # 1. Connectivity & Version
         console.print("[bold blue][*] 1. Server Connectivity & Component Introspection[/]")
         records, _, _ = driver.execute_query("CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition;")
+        verify_phase(len(records) >= 1 and bool(records[0]["version"]), "Phase 1", f"expected dbms.components() metadata, got {records!r}")
         for r in records:
             plain_console.print(f"    Product: {r['name']} v{r['version']} ({r['edition']})")
 
@@ -66,7 +73,8 @@ def main() -> None:
             CREATE (p2:CrashCourse:Service {name: 'PaymentProcessor', tier: 1})
             RETURN count(*) AS created;
         """
-        driver.execute_query(create_nodes_cypher)
+        created_res, _, _ = driver.execute_query(create_nodes_cypher)
+        verify_phase(len(created_res) == 1 and created_res[0]["created"] >= 1, "Phase 2", f"node creation failed: {created_res!r}")
         plain_console.print("    Created 3 Developer nodes and 2 Service nodes.")
 
         # 3. Directed Relationships with Edge Properties
@@ -92,6 +100,7 @@ def main() -> None:
             ORDER BY service, dev;
         """
         res_direct, _, _ = driver.execute_query(query_direct)
+        verify_phase(len(res_direct) == 4, "Phase 4", f"expected 4 direct maintainer rows, got {len(res_direct)}")
         plain_console.print("    Direct Maintainers:")
         for r in res_direct:
             plain_console.print(f"      - {r['dev']} -> {r['service']} (Role: {r['role']})")
@@ -103,6 +112,7 @@ def main() -> None:
             RETURN d1.name AS dev1, d2.name AS dev2, s.name AS shared_service;
         """
         res_coworkers, _, _ = driver.execute_query(query_coworkers)
+        verify_phase(len(res_coworkers) == 2, "Phase 4", f"expected 2 coworker collaborations, got {len(res_coworkers)}")
         for r in res_coworkers:
             plain_console.print(f"      - {r['dev1']} & {r['dev2']} collaborate on '{r['shared_service']}'")
 
@@ -115,10 +125,13 @@ def main() -> None:
         """)
         nodes_cnt = counts_res[0]["nodes"]
         rels_cnt = counts_res[0]["rels"]
+        verify_phase(nodes_cnt == 5 and rels_cnt == 5, "Phase 5", f"expected 5 nodes and 5 rels, got {nodes_cnt} nodes, {rels_cnt} rels")
         plain_console.print(f"    Active CrashCourse subgraph: {nodes_cnt} nodes, {rels_cnt} relationships.")
 
         # Cleanup
         driver.execute_query("MATCH (n:CrashCourse) DETACH DELETE n;")
+        cleanup_res, _, _ = driver.execute_query("MATCH (n:CrashCourse) RETURN count(n) AS cnt;")
+        verify_phase(cleanup_res[0]["cnt"] == 0, "Phase 5 Cleanup", f"expected 0 leftover CrashCourse nodes, got {cleanup_res[0]['cnt']}")
         plain_console.print("    Cleaned up demo graph nodes and relationships.")
 
     console.print("\n[bold green][✓] Neo4j Crash Course completed successfully![/]\n")

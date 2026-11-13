@@ -42,6 +42,12 @@ plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 err_console = Console(stderr=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def get_driver() -> Driver:
     return GraphDatabase.driver(URI, auth=AUTH)
 
@@ -107,6 +113,11 @@ def reset_and_seed_graph(driver: Driver, num_nodes: int = 2000, branching: int =
         # Verify counts
         node_count = session.run("MATCH (n:Node) RETURN count(n) AS cnt").single()["cnt"]
         rel_count = session.run("MATCH ()-[r:CONNECTED_TO]->() RETURN count(r) AS cnt").single()["cnt"]
+        verify_phase(
+            node_count == 1500 and rel_count > 5000,
+            "Phase 0 Seed",
+            f"expected 1500 nodes and >5000 edges, got {node_count} nodes, {rel_count} edges",
+        )
         console.print(f"[[bold green]+[/]] Seeded {node_count:,} nodes and {rel_count:,} relationships.")
 
 
@@ -117,6 +128,7 @@ def test_depth_explosion(driver: Driver, max_depth: int = 6) -> None:
     plain_console.print("-" * 82)
 
     prev_paths = None
+    depth1_paths = 0
 
     with driver.session() as session:
         for depth in range(1, max_depth + 1):
@@ -132,10 +144,20 @@ def test_depth_explosion(driver: Driver, max_depth: int = 6) -> None:
             db_hits = extract_total_db_hits(summary.profile)
             server_time_ms = summary.result_available_after + summary.result_consumed_after
 
+            if depth == 1:
+                depth1_paths = path_count
+                verify_phase(depth1_paths > 0, "Phase 1 Depth 1", f"expected >0 paths at depth 1, got {depth1_paths}")
+
             growth = f"{path_count / prev_paths:.1f}x" if prev_paths and prev_paths > 0 else "-"
             prev_paths = path_count
 
             plain_console.print(f"{depth:<8}{path_count:<16,}{db_hits:<14,}{server_time_ms:<18.2f}{wall_elapsed_ms:<16.2f}{growth:<10}")
+
+    verify_phase(
+        prev_paths is not None and prev_paths > depth1_paths * 100,
+        "Phase 1 Depth Explosion",
+        f"expected combinatorial growth >100x from depth 1 ({depth1_paths}) to depth {max_depth} ({prev_paths})",
+    )
 
 
 def test_shortest_path_comparison(driver: Driver, target_id: int = 500) -> None:
@@ -167,6 +189,17 @@ def test_shortest_path_comparison(driver: Driver, target_id: int = 500) -> None:
         plain_console.print("-" * 74)
         plain_console.print(f"{'Exhaustive MATCH [*1..6]':<28}{f'{ex_paths} paths':<18}{ex_db_hits:<14,}{wall_ex_ms:<14.2f}")
         plain_console.print(f"{'shortestPath((a)-[*]-(b))':<28}{f'{sp_len} hops':<18}{sp_db_hits:<14,}{wall_sp_ms:<14.2f}")
+
+        verify_phase(
+            ex_paths > 0 and sp_len >= 1,
+            "Phase 2 ShortestPath",
+            f"expected valid path to node {target_id}, got ex_paths={ex_paths}, sp_len={sp_len}",
+        )
+        verify_phase(
+            ex_db_hits > sp_db_hits * 5,
+            "Phase 2 ShortestPath",
+            f"expected shortestPath DB hits ({sp_db_hits}) << exhaustive ({ex_db_hits})",
+        )
 
         if ex_db_hits > 0 and sp_db_hits > 0:
             reduction = ex_db_hits / sp_db_hits

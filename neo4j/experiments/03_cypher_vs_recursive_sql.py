@@ -41,6 +41,12 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def build_edges() -> list[tuple[int, int]]:
     edges: list[tuple[int, int]] = []
     for src in range(NUM_NODES):
@@ -68,6 +74,9 @@ def seed_postgres(edges: list[tuple[int, int]]) -> None:
                 for s, d in edges:
                     copy.write_row((s, d))
             cur.execute("ANALYZE service_deps;")
+            cur.execute("SELECT COUNT(*) FROM service_deps;")
+            pg_edge_cnt = cur.fetchone()[0]
+            verify_phase(pg_edge_cnt == len(edges), "Phase 0 PG Seed", f"expected {len(edges)} edges in PostgreSQL, got {pg_edge_cnt}")
 
 
 def seed_neo4j(driver, edges: list[tuple[int, int]]) -> None:
@@ -88,6 +97,13 @@ def seed_neo4j(driver, edges: list[tuple[int, int]]) -> None:
             CREATE (a)-[:DEPENDS_ON]->(b)
             """,
             edges=edge_dicts,
+        )
+        neo_nodes = session.run("MATCH (n:Service) RETURN count(n) AS cnt").single()["cnt"]
+        neo_edges = session.run("MATCH ()-[r:DEPENDS_ON]->() RETURN count(r) AS cnt").single()["cnt"]
+        verify_phase(
+            neo_nodes == NUM_NODES and neo_edges == len(edges),
+            "Phase 0 Neo4j Seed",
+            f"expected {NUM_NODES} nodes and {len(edges)} edges in Neo4j, got {neo_nodes} nodes, {neo_edges} edges",
         )
 
 
@@ -153,11 +169,22 @@ def main() -> None:
         plain_console.print(header)
         plain_console.print("-" * len(header))
 
+        min_reach = 0
+        max_reach = 0
         for depth in range(1, 8):
             pg_cnt, pg_ms = query_postgres_depth(pg_conn, depth)
             neo_cnt, neo_ms = query_neo4j_depth(session, depth)
-            assert pg_cnt == neo_cnt, f"Mismatch at depth {depth}: PG={pg_cnt} vs Neo4j={neo_cnt}"
+            verify_phase(
+                pg_cnt == neo_cnt and neo_cnt > 0,
+                f"Depth {depth} Parity",
+                f"expected matching >0 reachable nodes, got PG={pg_cnt}, Neo4j={neo_cnt}",
+            )
+            if depth == 1:
+                min_reach = neo_cnt
+            max_reach = neo_cnt
             plain_console.print(f"{depth:>9} | {neo_cnt:>18,} | {pg_ms:>16.2f}ms | {neo_ms:>16.2f}ms")
+
+        verify_phase(max_reach > min_reach, "Multi-Hop Scaling", f"expected depth 7 reach ({max_reach}) > depth 1 reach ({min_reach})")
 
     console.print("\n" + "=" * 70, style="bold green")
     plain_console.print("SYSTEMS TAKEAWAYS")
