@@ -546,7 +546,7 @@ def phase3_oplog_exhaustion(cluster: MongoClient) -> None:
                 or "too stale" in msg.lower()
                 or "cannot select sync source" in msg.lower()
                 or "behind" in msg.lower()
-                or (attempt >= 4 and not sync_source and cur_node3_ts <= node3_ts < oldest_ts)
+                or (attempt >= 4 and not sync_source and cur_node3_ts < oldest_ts)
             ):
                 stale_detected = True
                 break
