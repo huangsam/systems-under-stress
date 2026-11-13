@@ -179,15 +179,15 @@ def test_write_concern_durability(
     verify_phase(reported_total > 0, f"{mode_name}: Pre-Crash Writes", "Expected > 0 writes sent/acknowledged before SIGKILL")
     if j_val is True:
         verify_phase(
-            lost_writes == 0 and recovered_count == reported_total and max_seq == reported_total,
+            lost_writes == 0 and reported_total <= recovered_count <= reported_total + 1 and max_seq == recovered_count,
             f"{mode_name}: Journal Durability",
             f"Expected 0 lost writes under w={w_val}, j=True; ack={reported_total}, recovered={recovered_count}, max_seq={max_seq}",
         )
     else:
         verify_phase(
-            0 <= recovered_count <= reported_total,
+            0 <= recovered_count <= reported_total + 1,
             f"{mode_name}: Crash Recovery Bounds",
-            f"Recovered ({recovered_count}) exceeded reported ({reported_total})",
+            f"Recovered ({recovered_count}) exceeded reported ({reported_total}) beyond in-flight write",
         )
 
     return {
