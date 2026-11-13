@@ -10,12 +10,14 @@ x-cassandra-base: &cassandra-base
         memory: 1280M
   environment:
     - MAX_HEAP_SIZE=512M
+    - CASSANDRA_NUM_TOKENS=8
+    - JVM_OPTS=-Dcassandra.ring_delay_ms=5000 -Dcassandra.skip_wait_for_gossip_to_settle=0
   healthcheck:
     test: ["CMD-SHELL", "cqlsh -e \"DESCRIBE KEYSPACES\" || exit 1"]
     interval: 5s
     timeout: 5s
     retries: 25
-    start_period: 30s
+    start_period: 15s
 
 services:
   # Profile: tombstones - Exp 01: Tombstone Failure Threshold
@@ -38,6 +40,8 @@ services:
     environment:
       - CASSANDRA_CLUSTER_NAME=TombstoneCluster
       - MAX_HEAP_SIZE=512M
+      - CASSANDRA_NUM_TOKENS=8
+      - JVM_OPTS=-Dcassandra.ring_delay_ms=5000 -Dcassandra.skip_wait_for_gossip_to_settle=0
     volumes:
       - cassandra-tombstone-data:/var/lib/cassandra
 
@@ -60,6 +64,8 @@ services:
       - CASSANDRA_DC=datacenter1
       - CASSANDRA_RACK=rack1
       - MAX_HEAP_SIZE=384M
+      - CASSANDRA_NUM_TOKENS=8
+      - JVM_OPTS=-Dcassandra.ring_delay_ms=5000 -Dcassandra.skip_wait_for_gossip_to_settle=0
     ports:
       - "127.0.0.1:9042:9042"
     volumes:
@@ -80,6 +86,8 @@ services:
       - CASSANDRA_DC=datacenter1
       - CASSANDRA_RACK=rack1
       - MAX_HEAP_SIZE=384M
+      - CASSANDRA_NUM_TOKENS=8
+      - JVM_OPTS=-Dcassandra.ring_delay_ms=5000 -Dcassandra.skip_wait_for_gossip_to_settle=0
     ports: []
     volumes:
       - cassandra-n2-data:/var/lib/cassandra
@@ -102,6 +110,8 @@ services:
       - CASSANDRA_DC=datacenter1
       - CASSANDRA_RACK=rack1
       - MAX_HEAP_SIZE=384M
+      - CASSANDRA_NUM_TOKENS=8
+      - JVM_OPTS=-Dcassandra.ring_delay_ms=5000 -Dcassandra.skip_wait_for_gossip_to_settle=0
     ports: []
     volumes:
       - cassandra-n3-data:/var/lib/cassandra
@@ -120,6 +130,8 @@ services:
     environment:
       - CASSANDRA_CLUSTER_NAME=WidePartitionCluster
       - MAX_HEAP_SIZE=512M
+      - CASSANDRA_NUM_TOKENS=8
+      - JVM_OPTS=-Dcassandra.ring_delay_ms=5000 -Dcassandra.skip_wait_for_gossip_to_settle=0
     volumes:
       - cassandra-wide-data:/var/lib/cassandra
 
