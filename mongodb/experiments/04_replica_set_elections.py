@@ -540,7 +540,14 @@ def phase3_oplog_exhaustion(cluster: MongoClient) -> None:
             plain_console.print(f"    Poll {attempt:2d}: mongo-node3 state = {state_str:<10} | syncSource = {sync_source:<18} | heartbeatMsg = {msg}")
             sys.stdout.flush()
 
-            if state_str == "RECOVERING" or "too stale" in msg.lower() or "cannot select sync source" in msg.lower() or "behind" in msg.lower():
+            cur_node3_ts = node3_info.get("optime", {}).get("ts", node3_ts)
+            if (
+                state_str == "RECOVERING"
+                or "too stale" in msg.lower()
+                or "cannot select sync source" in msg.lower()
+                or "behind" in msg.lower()
+                or (attempt >= 4 and not sync_source and cur_node3_ts <= node3_ts < oldest_ts)
+            ):
                 stale_detected = True
                 break
         except Exception:
