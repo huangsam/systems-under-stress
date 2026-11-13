@@ -22,7 +22,9 @@ Demonstrates:
 
 from __future__ import annotations
 
+import concurrent.futures
 import sys
+import threading
 import time
 
 from rich.console import Console
@@ -111,34 +113,73 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
     inserted_count = 0
     start_time = time.perf_counter()
     too_many_parts_hit = False
+    stop_event = threading.Event()
+    state_lock = threading.Lock()
+    first_error_msg = ""
+    unexpected_err: str | None = None
 
-    for i in range(1, 501):
+    def worker(worker_ids: list[int]) -> None:
+        nonlocal inserted_count, too_many_parts_hit, first_error_msg, unexpected_err
+        w_client = clickhouse_connect.get_client(
+            host=HOST,
+            port=PORT,
+            username=USERNAME,
+            password=PASSWORD,
+            connect_timeout=3,
+            send_receive_timeout=10,
+        )
         try:
-            # Single-row insert creates 1 new physical part on disk
-            client.insert(TABLE_NAME, [[i, f"payload-data-node-{i:05d}"]], column_names=["id", "payload"])
-            inserted_count += 1
+            for row_id in worker_ids:
+                if stop_event.is_set():
+                    break
+                try:
+                    w_client.command(f"INSERT INTO {TABLE_NAME} (id, payload) VALUES ({row_id}, 'payload-data-node-{row_id:05d}')")
+                    with state_lock:
+                        inserted_count += 1
+                        cur_count = inserted_count
+                    if cur_count % 30 == 0 or cur_count in (1, 80, 100):
+                        active_now = get_active_parts(w_client, TABLE_NAME)
+                        elapsed = time.perf_counter() - start_time
+                        console.print(f"    Insert #{cur_count:3d} | Active Parts on Disk: [bold yellow]{len(active_now):3d}[/] | Elapsed: {elapsed:.2f}s")
+                except DatabaseError as err:
+                    err_msg = str(err)
+                    if "Too many parts" in err_msg or "252" in err_msg:
+                        with state_lock:
+                            if not too_many_parts_hit:
+                                too_many_parts_hit = True
+                                first_error_msg = err_msg.strip()
+                        stop_event.set()
+                        break
+                    else:
+                        with state_lock:
+                            if unexpected_err is None:
+                                unexpected_err = err_msg
+                        stop_event.set()
+                        break
+                except Exception as err:
+                    with state_lock:
+                        if unexpected_err is None:
+                            unexpected_err = str(err)
+                    stop_event.set()
+                    break
+        finally:
+            w_client.close()
 
-            if inserted_count % 15 == 0 or inserted_count in (1, 50, 80, 100):
-                active_parts = get_active_parts(client, TABLE_NAME)
-                elapsed = time.perf_counter() - start_time
-                console.print(f"    Insert #{inserted_count:3d} | Active Parts on Disk: [bold yellow]{len(active_parts):3d}[/] | Elapsed: {elapsed:.2f}s")
+    num_workers = 12
+    shards = [list(range(idx + 1, 501, num_workers)) for idx in range(num_workers)]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = [executor.submit(worker, shard) for shard in shards]
+        for fut in futures:
+            fut.result()
 
-        except DatabaseError as err:
-            err_msg = str(err)
-            if "Too many parts" in err_msg or "252" in err_msg:
-                too_many_parts_hit = True
-                active_parts = get_active_parts(client, TABLE_NAME)
-                console.print(f"\n  [bold red][!] WRITE REJECTED AT INSERT #{inserted_count + 1}![/]")
-                console.print(f"      Active parts in system.parts : [bold red]{len(active_parts)}[/]")
-                plain_console.print("      ClickHouse Error Code         : 252 (TOO_MANY_PARTS)")
-                plain_console.print(f"      Engine Message                : {err_msg.strip()}")
-                break
-            else:
-                console.print(f"\n  [bold red][!] Unexpected error: {escape(str(err))}[/]")
-                break
-        except Exception as err:
-            console.print(f"\n  [bold red][!] Client error: {escape(str(err))}[/]")
-            break
+    if too_many_parts_hit:
+        active_parts = get_active_parts(client, TABLE_NAME)
+        console.print(f"\n  [bold red][!] WRITE REJECTED AFTER {inserted_count} INSERTS![/]")
+        console.print(f"      Active parts in system.parts : [bold red]{len(active_parts)}[/]")
+        plain_console.print("      ClickHouse Error Code         : 252 (TOO_MANY_PARTS)")
+        plain_console.print(f"      Engine Message                : {first_error_msg}")
+    elif unexpected_err:
+        console.print(f"\n  [bold red][!] Unexpected error: {escape(unexpected_err)}[/]")
 
     active_parts = get_active_parts(client, TABLE_NAME)
     verify_phase(
