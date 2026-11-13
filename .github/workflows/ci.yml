@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   python-lint:
@@ -37,3 +38,117 @@ jobs:
 
       - name: Validate Compose configurations & invariants
         run: make compose-lint
+
+  lab-e2e:
+    name: Lab E2E (${{ matrix.lab }})
+    needs: [python-lint, compose-lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        lab:
+          - redis
+          - postgres
+          - clickhouse
+          - mongodb
+          - cassandra
+          - neo4j
+          - vault
+          - linux
+          - chaos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
+
+      - name: Run ${{ matrix.lab }} E2E experiments
+        env:
+          LAB: ${{ matrix.lab }}
+        run: |
+          set -euo pipefail
+          cd "$LAB"
+
+          cleanup() {
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+              echo "::group::Failure Container Logs ($LAB)"
+              docker compose --profile "*" ps -a || true
+              docker compose --profile "*" logs --tail=50 || true
+              echo "::endgroup::"
+            fi
+            make clean || true
+          }
+          trap cleanup EXIT
+
+          run_profile() {
+            local profile="$1"
+            shift
+            echo "::group::[$LAB] Profile: $profile"
+            make up EXP="$profile"
+            for script in "$@"; do
+              echo "--> Running $script (profile=$profile)"
+              make run EXP="$profile" SCRIPT="$script"
+            done
+            make down EXP="$profile"
+            echo "::endgroup::"
+          }
+
+          case "$LAB" in
+            redis)
+              run_profile eviction-lru 00_crash_course 01_eviction
+              run_profile eviction-noeviction 01_eviction
+              run_profile eviction-lfu 01_eviction
+              run_profile stampede 02_stampede
+              run_profile persistence-rdb 03_persistence
+              run_profile persistence-aof 03_persistence
+              run_profile persistence-always 03_persistence
+              ;;
+            postgres)
+              run_profile isolation 00_crash_course 01_isolation
+              run_profile locks 02_locks
+              run_profile work-mem 03_work_mem
+              run_profile replication 04_replication_conflicts
+              ;;
+            clickhouse)
+              run_profile parts-limit 00_crash_course 01_parts_explosion
+              run_profile memory-cap 02_memory_limit
+              run_profile compression 03_codec_compression
+              ;;
+            mongodb)
+              run_profile unindexed-sort 00_crash_course 01_sort_memory_limit
+              run_profile durability 02_write_concern_crash
+              run_profile document-limits 03_document_size_cap
+              run_profile replica-set 04_replica_set_elections
+              ;;
+            cassandra)
+              run_profile tombstones 00_crash_course 01_tombstone_threshold
+              run_profile cluster-consistency 02_consistency_levels
+              run_profile wide-partitions 03_partition_skew
+              ;;
+            neo4j)
+              run_profile traversal-depth 00_crash_course 01_unbounded_path
+              run_profile supernode 02_supernode
+              run_profile compare-sql 03_cypher_vs_recursive_sql
+              ;;
+            vault)
+              run_profile dynamic-creds 00_crash_course 01_dynamic_db_creds
+              run_profile token-lifecycle 02_token_renewal
+              run_profile transit-crypto 03_transit_throughput
+              ;;
+            linux)
+              run_profile pid-limit 00_crash_course 01_fork_bomb_cgroup
+              run_profile fd-exhaustion 02_fd_limits
+              run_profile oom-killer 03_oom_killer
+              ;;
+            chaos)
+              run_profile chaos 00_crash_course 01_pool_starvation 02_retry_storms_vs_backoff 03_half_open_tcp_hangs
+              ;;
+            *)
+              echo "Unknown lab: $LAB" >&2
+              exit 1
+              ;;
+          esac
