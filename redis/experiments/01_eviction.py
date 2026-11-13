@@ -22,11 +22,19 @@ import time
 
 from redis.exceptions import OutOfMemoryError, ResponseError
 from rich.console import Console
+from rich.markup import escape
 
 import redis
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 def format_bytes(b: int) -> str:
@@ -49,7 +57,7 @@ def main() -> None:
         plain_console.print("  make up EXP=eviction-noeviction # for OOM failure testing")
         sys.exit(1)
 
-    # 1. Inspect current server settings
+    # 1. Inspect current server settings (Phase 0 Preconditions)
     info_mem = client.info("memory")
     max_memory = int(info_mem.get("maxmemory", 0))
     policy = info_mem.get("maxmemory_policy", "unknown")
@@ -60,9 +68,22 @@ def main() -> None:
     console.print(f"  Eviction Policy  : [bold yellow]{policy}[/]")
     console.print("=" * 65 + "\n", style="bold blue")
 
+    expected_max_memory = 16 * 1024 * 1024
+    verify_phase(
+        max_memory == expected_max_memory,
+        "Phase 0: Preconditions",
+        f"Expected maxmemory={expected_max_memory} (16MB), got {max_memory}. Start with EXP=eviction-lru, eviction-lfu, or eviction-noeviction.",
+    )
+    verify_phase(
+        policy in ("allkeys-lru", "allkeys-lfu", "noeviction"),
+        "Phase 0: Preconditions",
+        f"Unsupported maxmemory-policy '{policy}'; expected allkeys-lru, allkeys-lfu, or noeviction.",
+    )
+
     # 2. Reset database for clean run
     plain_console.print("Flushing keyspace for a clean test run...")
     client.flushall()
+    verify_phase(client.dbsize() == 0, "Phase 0: Reset", f"Expected dbsize=0 after FLUSHALL, got {client.dbsize()}")
 
     # 3. Phase 1: Flood Redis with 10KB payloads until exceeding 16MB
     PAYLOAD_SIZE = 10 * 1024  # 10 KB
@@ -148,11 +169,36 @@ def main() -> None:
     plain_console.print("=" * 65)
 
     if policy == "noeviction":
+        verify_phase(oom_errors > 0, "Phase 1: Saturation (noeviction)", f"Expected OOM errors > 0, got {oom_errors}")
+        verify_phase(written > 0, "Phase 1: Saturation (noeviction)", "Expected some keys written before OOM")
+        verify_phase(
+            final_stats.get("evicted_keys", 0) == 0,
+            "Phase 1: Saturation (noeviction)",
+            f"Expected 0 evictions under noeviction, got {final_stats.get('evicted_keys', 0)}",
+        )
+        verify_phase(hot_ratio == 100.0, "Phase 2: Skewed Reads (noeviction)", f"Expected 100% hot key survival, got {hot_ratio:.1f}%")
         console.print("\n[bold yellow][Takeaway - noeviction][/]")
         plain_console.print("Redis refused all writes once maxmemory was reached with OOM errors.")
         plain_console.print("Read requests continue to succeed, but write-heavy services fail hard without application fallback.")
-    elif "lru" in policy:
-        console.print("\n[bold yellow][Takeaway - allkeys-lru][/]")
+    elif "lru" in policy or "lfu" in policy:
+        verify_phase(oom_errors == 0, f"Phase 1: Saturation ({policy})", f"Expected 0 OOM errors, got {oom_errors}")
+        verify_phase(written == TOTAL_ITEMS, f"Phase 1: Saturation ({policy})", f"Expected {TOTAL_ITEMS} writes, got {written}")
+        verify_phase(
+            final_stats.get("evicted_keys", 0) > 0,
+            f"Phase 1: Saturation ({policy})",
+            f"Expected evicted_keys > 0, got {final_stats.get('evicted_keys', 0)}",
+        )
+        verify_phase(
+            final_mem.get("used_memory", 0) <= max_memory,
+            f"Phase 1: Memory Cap ({policy})",
+            f"used_memory ({final_mem.get('used_memory', 0)}) exceeded maxmemory ({max_memory})",
+        )
+        verify_phase(
+            hot_ratio > cold_ratio and hot_ratio >= 80.0,
+            f"Phase 2: Skewed Reads ({policy})",
+            f"Expected hot_ratio > cold_ratio and >= 80%, got hot={hot_ratio:.1f}%, cold={cold_ratio:.1f}%",
+        )
+        console.print(f"\n[bold yellow][Takeaway - {policy}][/]")
         plain_console.print("Redis safely capped memory by evicting older/idle keys to make room for new writes.")
         plain_console.print(f"Hot keys maintained a {hot_ratio:.1f}% hit rate while cold keys were recycled automatically.")
 

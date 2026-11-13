@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 
 from rich.console import Console
+from rich.markup import escape
 
 import redis
 
@@ -34,6 +35,13 @@ COMPOSE_DIR = Path(__file__).resolve().parent.parent
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 def run_cmd(cmd: list[str]) -> subprocess.CompletedProcess:
@@ -72,6 +80,11 @@ def main() -> None:
         sys.exit(1)
 
     label, profile_name = get_active_profile(client)
+    verify_phase(
+        profile_name in ("persistence-rdb", "persistence-aof", "persistence-always"),
+        "Phase 0: Preconditions",
+        f"Unexpected persistence profile '{profile_name}'",
+    )
 
     console.print("=" * 65, style="bold blue")
     console.print("[bold green]Experiment 03: Redis Persistence & Crash Recovery[/]")
@@ -82,6 +95,7 @@ def main() -> None:
     # Clean existing data in-memory
     plain_console.print("Flushing database for a clean test run...")
     client.flushall()
+    verify_phase(client.dbsize() == 0, "Phase 0: Reset", f"Expected dbsize=0 after FLUSHALL, got {client.dbsize()}")
 
     # Phase 1: High-speed writes with pipeline
     TOTAL_WRITES = 5000
@@ -107,6 +121,11 @@ def main() -> None:
     write_elapsed = time.perf_counter() - t0
     rate = acknowledged / write_elapsed if write_elapsed > 0 else 0
     plain_console.print(f"    Acknowledged {acknowledged:,} writes ({rate:,.0f} writes/sec).")
+    verify_phase(
+        acknowledged == target_kill_at and client.dbsize() == acknowledged,
+        "Phase 1: Pre-Crash Writes",
+        f"Expected {target_kill_at} acknowledged keys in DB, got acknowledged={acknowledged}, dbsize={client.dbsize()}",
+    )
 
     # Phase 2: Ungraceful crash (SIGKILL / kill -9)
     console.print("\n[bold red][*] Phase 2: Killing container with SIGKILL (simulating ungraceful power loss)...[/]")
@@ -122,12 +141,15 @@ def main() -> None:
 
     # Reconnect
     client = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
+    reconnected = False
     for _ in range(10):
         try:
             if client.ping():
+                reconnected = True
                 break
         except redis.ConnectionError:
             time.sleep(0.5)
+    verify_phase(reconnected, "Phase 3: Restart & Reconnect", "Failed to reconnect to Redis after SIGKILL restart")
 
     # Phase 4: Audit recovered data
     plain_console.print("\n[*] Phase 4: Auditing recovered keys from disk...")
@@ -153,6 +175,25 @@ def main() -> None:
     plain_console.print(f"Highest Key Recovered        : seq:{highest_survived:06d}")
     console.print(f"Total Lost Writes            : [bold red]{lost_writes:,}[/] ({loss_pct:.1f}%)")
     plain_console.print("=" * 65)
+
+    if profile_name == "persistence-always":
+        verify_phase(
+            lost_writes == 0 and survived == acknowledged,
+            "Phase 4: Durability (appendfsync always)",
+            f"Expected 0 lost writes under appendfsync=always, lost {lost_writes}/{acknowledged}",
+        )
+    elif profile_name == "persistence-rdb":
+        verify_phase(
+            lost_writes > 0,
+            "Phase 4: Durability (RDB only)",
+            f"Expected un-snapshotted RDB data loss after SIGKILL, but 0/{acknowledged} writes were lost",
+        )
+    elif profile_name == "persistence-aof":
+        verify_phase(
+            0 < survived <= acknowledged,
+            "Phase 4: Durability (AOF everysec)",
+            f"Expected partial/full AOF survival (survived > 0), got survived={survived}/{acknowledged}",
+        )
 
     if lost_writes > 0:
         console.print(f"\n[bold red][!] DATA LOSS OBSERVED:[/] {lost_writes:,} confirmed writes disappeared on crash.")

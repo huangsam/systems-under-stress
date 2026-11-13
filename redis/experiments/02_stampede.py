@@ -19,11 +19,13 @@ from __future__ import annotations
 import asyncio
 import math
 import random
+import sys
 import time
 import uuid
 
 import redis.asyncio as aioredis
 from rich.console import Console
+from rich.markup import escape
 
 HOT_KEY = "product:trending:42"
 DB_COMPUTE_DELAY = 0.05  # 50ms simulated database query latency
@@ -32,6 +34,13 @@ CONCURRENT_REQUESTS = 100
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 class MockDatabase:
@@ -141,9 +150,10 @@ async def worker_xfetch(client: aioredis.Redis, db: MockDatabase, beta: float = 
     return {"source": "cache"}
 
 
-async def run_scenario(name: str, worker_fn, client: aioredis.Redis, pre_seed: bool = False) -> None:
+async def run_scenario(name: str, worker_fn, client: aioredis.Redis, pre_seed: bool = False) -> tuple[int, int]:
     db = MockDatabase()
     await client.flushall()
+    verify_phase(await client.dbsize() == 0, f"{name}: Reset", "Expected empty Redis after FLUSHALL")
 
     if pre_seed:
         # Seed key with 60ms remaining TTL (in the early-refresh danger zone)
@@ -164,6 +174,8 @@ async def run_scenario(name: str, worker_fn, client: aioredis.Redis, pre_seed: b
     plain_console.print(f"    Elapsed Time          : {duration * 1000:.1f}ms")
     console.print(f"    Database Query Count  : [bold {'red' if db_hits > 10 else 'green'}]{db_hits}[/]")
     plain_console.print(f"    Served from Cache     : {cache_hits}")
+    verify_phase(len(results) == CONCURRENT_REQUESTS, name, f"Expected {CONCURRENT_REQUESTS} results, got {len(results)}")
+    return db_hits, cache_hits
 
 
 async def main() -> None:
@@ -173,7 +185,15 @@ async def main() -> None:
     except Exception:
         console.print("[bold red]Error: Cannot connect to Redis on 127.0.0.1:6379.[/]")
         plain_console.print("Run 'make up EXP=stampede' first.")
-        return
+        sys.exit(1)
+
+    mem_info = await client.info("memory")
+    max_mem = int(mem_info.get("maxmemory", 0))
+    verify_phase(
+        max_mem == 0 or max_mem >= 32 * 1024 * 1024,
+        "Phase 0: Preconditions",
+        f"Expected maxmemory >= 32MB (or 0) for stampede profile, got {max_mem}. Run 'make up EXP=stampede'.",
+    )
 
     console.print("=" * 65, style="bold cyan")
     console.print("[bold cyan]Experiment 02: Cache Stampede (Thundering Herd) Simulation[/]")
@@ -181,13 +201,38 @@ async def main() -> None:
     console.print("=" * 65, style="bold cyan")
 
     # Scenario 1: Naive Cache-Aside
-    await run_scenario("1. Naive Cache-Aside (Unprotected)", worker_naive, client)
+    naive_db, naive_cache = await run_scenario("1. Naive Cache-Aside (Unprotected)", worker_naive, client)
+    verify_phase(
+        naive_db == CONCURRENT_REQUESTS and naive_cache == 0,
+        "Scenario 1: Naive Stampede",
+        f"Expected db_hits={CONCURRENT_REQUESTS} and cache_hits=0, got db_hits={naive_db}, cache_hits={naive_cache}",
+    )
 
     # Scenario 2: Distributed Lock Mutex
-    await run_scenario("2. Distributed Lock Mutex (SET NX PX)", worker_with_lock, client)
+    lock_db, lock_cache = await run_scenario("2. Distributed Lock Mutex (SET NX PX)", worker_with_lock, client)
+    verify_phase(
+        lock_db == 1 and lock_cache == CONCURRENT_REQUESTS - 1,
+        "Scenario 2: Distributed Lock",
+        f"Expected db_hits=1 and cache_hits={CONCURRENT_REQUESTS - 1}, got db_hits={lock_db}, cache_hits={lock_cache}",
+    )
+    verify_phase(
+        await client.exists(f"lock:{HOT_KEY}") == 0,
+        "Scenario 2: Lock Cleanup",
+        "Distributed lock key was not released after refresh",
+    )
 
     # Scenario 3: Probabilistic Early Refresh (XFetch on key near expiry)
-    await run_scenario("3. Probabilistic Early Refresh (XFetch)", worker_xfetch, client, pre_seed=True)
+    xfetch_db, xfetch_cache = await run_scenario("3. Probabilistic Early Refresh (XFetch)", worker_xfetch, client, pre_seed=True)
+    verify_phase(
+        0 < xfetch_db < naive_db and xfetch_cache > 0,
+        "Scenario 3: XFetch Early Refresh",
+        f"Expected 0 < db_hits < {naive_db} and cache_hits > 0, got db_hits={xfetch_db}, cache_hits={xfetch_cache}",
+    )
+    verify_phase(
+        await client.get(HOT_KEY) is not None,
+        "Scenario 3: Cache Repopulated",
+        "Hot key was not repopulated after XFetch",
+    )
 
     console.print("\n" + "=" * 65, style="bold green")
     plain_console.print("SYSTEMS TAKEAWAYS")
