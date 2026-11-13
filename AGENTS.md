@@ -81,7 +81,7 @@ This file serves as the root agent instructions, invariants, and guardrails.
 
 8. **Observability & Real-Time Feedback** *(manual invariant)*:
    - Never rely solely on an unhandled crash or raw traceback.
-   - Experiment scripts must print structured live progress, before/after state metrics, and the exact captured failure signature using `rich`.
+   - Experiment scripts must print structured live progress, before/after state metrics, and the exact captured failure signature using `rich`, and assert phase preconditions, failure signatures, and recovery invariants via `verify_phase(...)`.
 
 9. **Ergonomic CLI Standards (`Makefile`)** *(enforced by CI)*:
    - Every lab directory must provide a `Makefile` supporting the required targets: `help`, `up`, `run`, `down`, `clean`, `logs`, and `soft-reset` (unless exempted in [§3](#3-per-lab-exceptions)).
