@@ -92,7 +92,8 @@ def reset_and_seed_supernode(driver: Driver, supernode_edges: int = 50000, spars
         session.run("MATCH (n) DETACH DELETE n")
 
         session.run("CREATE CONSTRAINT hub_id_uniq IF NOT EXISTS FOR (h:Hub) REQUIRE h.id IS UNIQUE")
-        session.run("CREATE CONSTRAINT follower_id_uniq IF NOT EXISTS FOR (f:Follower) REQUIRE f.id IS UNIQUE")
+        session.run("DROP CONSTRAINT follower_id_uniq IF EXISTS")
+        session.run("CALL db.awaitIndexes()")
 
         # Create Hub nodes
         session.run(
@@ -143,7 +144,7 @@ def test_traversal_degradation(driver: Driver) -> None:
 
     with driver.session() as session:
         # 1. Query through Sparse Node (degree = 10)
-        query_sparse = "PROFILE MATCH (h:Hub {id: 'sparse_node'})<-[:FOLLOWS]-(f:Follower) WHERE f.id = 50005 RETURN f.name AS name"
+        query_sparse = "PROFILE MATCH (h:Hub {id: 'sparse_node'})<-[:FOLLOWS]-(f:Follower) USING INDEX h:Hub(id) WHERE f.id = 50005 RETURN f.name AS name"
         t0 = time.perf_counter()
         res_sparse = session.run(query_sparse)
         _rec_sparse = res_sparse.single()
@@ -153,7 +154,7 @@ def test_traversal_degradation(driver: Driver) -> None:
 
         # 2. Query through Supernode (degree = 50,000)
         # Filters for a leaf near the tail of the relationship linked list
-        query_super = "PROFILE MATCH (h:Hub {id: 'supernode'})<-[:FOLLOWS]-(f:Follower) WHERE f.id = 49995 RETURN f.name AS name"
+        query_super = "PROFILE MATCH (h:Hub {id: 'supernode'})<-[:FOLLOWS]-(f:Follower) USING INDEX h:Hub(id) WHERE f.id = 49995 RETURN f.name AS name"
         t1 = time.perf_counter()
         res_super = session.run(query_super)
         _rec_super = res_super.single()

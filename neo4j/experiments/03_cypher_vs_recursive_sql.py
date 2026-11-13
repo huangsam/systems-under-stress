@@ -84,6 +84,7 @@ def seed_neo4j(driver, edges: list[tuple[int, int]]) -> None:
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
         session.run("CREATE CONSTRAINT service_id_unique IF NOT EXISTS FOR (s:Service) REQUIRE s.id IS UNIQUE")
+        session.run("CALL db.awaitIndexes()")
         session.run(
             "UNWIND range(0, $max_id) AS id CREATE (:Service {id: id})",
             max_id=NUM_NODES - 1,

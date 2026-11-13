@@ -93,6 +93,7 @@ def reset_and_seed_graph(driver: Driver, num_nodes: int = 2000, branching: int =
 
         # Create unique constraint on Node(id)
         session.run("CREATE CONSTRAINT node_id_uniq IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE")
+        session.run("CALL db.awaitIndexes()")
 
         # Batch create nodes
         session.run(
