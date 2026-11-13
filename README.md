@@ -3,9 +3,9 @@
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/huangsam/systems-under-stress/ci.yml)](https://github.com/huangsam/systems-under-stress/actions)
 [![License](https://img.shields.io/github/license/huangsam/systems-under-stress)](https://github.com/huangsam/systems-under-stress/blob/main/LICENSE)
 
-A hands-on, empirical systems engineering lab suite exploring the **hard operational boundaries, failure modes, and internal mechanics** of 9 foundational infrastructure technologies using Docker containers and Python workloads.
+Docker and Python labs for breaking 9 databases and infrastructure tools on purpose.
 
-> **Philosophy**: Squeeze container and engine resource limits instead of generating terabytes of data to deterministically reproduce production failure modes in seconds on a laptop.
+Instead of generating terabytes of data, each lab squeezes container and engine resource limits to trigger real production failure modes in seconds on a laptop.
 
 <img src="./assets/systems-under-stress-meme.jpg" alt="Systems Under Stress" width="400">
 
