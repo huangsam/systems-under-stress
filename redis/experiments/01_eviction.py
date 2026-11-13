@@ -111,6 +111,16 @@ def main() -> None:
             else:
                 raise err
 
+        # Keep hot working set (item:00000..00099) warm during ingestion so LRU/LFU
+        # retain hot keys while evicting unreferenced cold keys instead.
+        if i == 99 or (i > 99 and i % 150 == 0):
+            pipe = client.pipeline(transaction=False)
+            repeats = 3 if i == 99 else 1
+            for _ in range(repeats):
+                for h in range(100):
+                    pipe.get(f"item:{h:05d}")
+            pipe.execute()
+
         if (i + 1) % 250 == 0 or i == TOTAL_ITEMS - 1:
             curr_mem = client.info("memory").get("used_memory", 0)
             stats = client.info("stats")
