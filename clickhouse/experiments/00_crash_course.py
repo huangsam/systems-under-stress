@@ -34,6 +34,13 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def main() -> None:
     console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]ClickHouse Crash Course: Columnar Engine & Vectorized Analytics[/]")
@@ -49,6 +56,7 @@ def main() -> None:
     # 1. Connectivity & Version
     console.print("[bold blue][*] 1. Server Version & Connectivity[/]")
     version = client.command("SELECT version()")
+    verify_phase(bool(version), "Phase 1: Connectivity", "Empty ClickHouse version string")
     plain_console.print(f"    ClickHouse Version: {version}")
 
     # 2. Table Creation
@@ -63,6 +71,8 @@ def main() -> None:
         ) ENGINE = MergeTree()
         ORDER BY (metric_type, device_id, timestamp);
     """)
+    exists = client.command(f"EXISTS TABLE {TABLE_NAME}")
+    verify_phase(exists == 1, "Phase 2: Table DDL", f"Expected EXISTS TABLE=1, got {exists}")
     plain_console.print(f"    Created table '{TABLE_NAME}' with specialized codecs (DoubleDelta, Gorilla, LowCardinality).")
 
     # 3. Columnar Batch Insert
@@ -83,6 +93,8 @@ def main() -> None:
         column_data,
         column_names=["timestamp", "device_id", "metric_type", "value"],
     )
+    row_count = client.command(f"SELECT count() FROM {TABLE_NAME}")
+    verify_phase(row_count == 10_000, "Phase 3: Batch Insert", f"Expected 10,000 rows, got {row_count}")
     plain_console.print(f"    Appended {len(column_data):,} rows in a single compressed columnar block.")
 
     # 4. Vectorized Analytical Aggregation
@@ -100,6 +112,11 @@ def main() -> None:
         ORDER BY metric_type;
     """
     results = client.query(query)
+    verify_phase(
+        len(results.result_rows) == 3 and sum(r[1] for r in results.result_rows) == 10_000,
+        "Phase 4: Aggregation",
+        f"Expected 3 metric groups totaling 10,000 rows, got {results.result_rows}",
+    )
     plain_console.print("    Aggregated metrics across 10,000 measurements:")
     for row in results.result_rows:
         plain_console.print(f"      - {row[0]}: count={row[1]}, min={row[2]}, avg={row[3]}, max={row[4]}, p95={row[5]}")
@@ -117,11 +134,17 @@ def main() -> None:
         WHERE table = '{TABLE_NAME}' AND active = 1;
     """
     parts = client.query(parts_query)
+    verify_phase(
+        len(parts.result_rows) >= 1 and sum(p[2] for p in parts.result_rows) == 10_000,
+        "Phase 5: Storage Parts",
+        f"Expected active parts covering 10,000 rows, got {parts.result_rows}",
+    )
     for p in parts.result_rows:
         plain_console.print(f"    Active Part '{p[0]}': type={p[1]}, rows={p[2]}, compressed={p[3]}, uncompressed={p[4]}")
 
     # Cleanup
     client.command(f"DROP TABLE IF EXISTS {TABLE_NAME}")
+    verify_phase(client.command(f"EXISTS TABLE {TABLE_NAME}") == 0, "Phase 5: Cleanup", f"Table '{TABLE_NAME}' still exists after DROP")
     plain_console.print(f"    Cleaned up demo table '{TABLE_NAME}'.")
 
     console.print("\n[bold green][✓] ClickHouse Crash Course completed successfully![/]\n")

@@ -31,6 +31,14 @@ from rich.markup import escape
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 try:
     import clickhouse_connect
     from clickhouse_connect.driver.exceptions import DatabaseError
@@ -132,12 +140,14 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
             console.print(f"\n  [bold red][!] Client error: {escape(str(err))}[/]")
             break
 
-    if not too_many_parts_hit:
-        active_parts = get_active_parts(client, TABLE_NAME)
-        plain_console.print(f"\n  [*] Loop finished without error. Active parts: {len(active_parts)}")
-    else:
-        console.print("\n  [bold green][✓] Failure Reproduced:[/] ClickHouse backpressure mechanism successfully throttled")
-        plain_console.print("      writes because background compaction could not keep pace with point inserts.")
+    active_parts = get_active_parts(client, TABLE_NAME)
+    verify_phase(
+        too_many_parts_hit and len(active_parts) >= 80,
+        "Part 1: Parts Explosion",
+        f"Expected TOO_MANY_PARTS (Code 252) with >= 80 active parts, got hit={too_many_parts_hit}, active_parts={len(active_parts)}",
+    )
+    console.print("\n  [bold green][✓] Failure Reproduced:[/] ClickHouse backpressure mechanism successfully throttled")
+    plain_console.print("      writes because background compaction could not keep pace with point inserts.")
 
 
 def run_batched_insert(client: clickhouse_connect.driver.Client) -> None:
@@ -164,6 +174,12 @@ def run_batched_insert(client: clickhouse_connect.driver.Client) -> None:
     if active_parts:
         part_name, part_rows, part_bytes = active_parts[0]
         plain_console.print(f"    Part Disk Descriptor  : name={part_name}, rows={part_rows}, compressed_bytes={part_bytes}")
+
+    verify_phase(
+        total_rows == batch_size and len(active_parts) == 1,
+        "Part 2: Batched Insert",
+        f"Expected {batch_size} rows in 1 active part, got rows={total_rows}, active_parts={len(active_parts)}",
+    )
 
 
 def main() -> None:

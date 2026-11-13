@@ -34,6 +34,13 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def format_bytes(b: int) -> str:
     for unit in ["B", "KB", "MB", "GB"]:
         if b < 1024:
@@ -112,6 +119,8 @@ def main() -> None:
         t0 = time.perf_counter()
         client.command(f"INSERT INTO {tbl} {seed_sql}")
         client.command(f"OPTIMIZE TABLE {tbl} FINAL")
+        row_cnt = client.command(f"SELECT count() FROM {tbl}")
+        verify_phase(row_cnt == NUM_ROWS, f"Phase 1: Seed '{tbl}'", f"Expected {NUM_ROWS:,} rows, got {row_cnt:,}")
         plain_console.print(f"    Completed in {(time.perf_counter() - t0) * 1000:.0f}ms")
 
     # 3. Query system.columns for exact physical vs uncompressed disk sizes
@@ -132,8 +141,22 @@ def main() -> None:
     header = f"{'Table Variant':<24} | {'Raw Uncompressed':>16} | {'On-Disk Compressed':>18} | {'Compression Ratio':>18}"
     plain_console.print(header)
     plain_console.print("-" * len(header))
+    by_table = {}
     for tbl, raw_b, disk_b, ratio in rows:
+        by_table[tbl] = (raw_b, disk_b, ratio)
         plain_console.print(f"{tbl:<24} | {format_bytes(raw_b):>16} | {format_bytes(disk_b):>18} | {ratio:>17.2f}x")
+
+    verify_phase(len(by_table) == 3, "Phase 2: Compression Audit", f"Expected 3 tables in system.columns, got {list(by_table)}")
+    verify_phase(
+        by_table["telemetry_optimized"][1] < by_table["telemetry_lz4"][1] < by_table["telemetry_none"][1],
+        "Phase 2: Compression Ordering",
+        f"Expected optimized < lz4 < none disk bytes, got { {k: v[1] for k, v in by_table.items()} }",
+    )
+    verify_phase(
+        by_table["telemetry_optimized"][2] > 5.0,
+        "Phase 2: Compression Ratio",
+        f"Expected >5x ratio on telemetry_optimized, got {by_table['telemetry_optimized'][2]}x",
+    )
 
     # 4. Per-column breakdown on telemetry_optimized vs telemetry_none
     console.print("\n[bold blue][*] Per-Column Compression Breakdown (Optimized vs Uncompressed):[/]\n")
@@ -157,6 +180,11 @@ def main() -> None:
     plain_console.print("-" * len(col_header))
     for name, ctype, codec, n_b, o_b, factor in col_rows:
         plain_console.print(f"{name:<15} | {ctype:<24} | {codec:<24} | {format_bytes(n_b):>11} | {format_bytes(o_b):>11} | {factor:>8.1f}x")
+    verify_phase(
+        len(col_rows) == 5 and all(factor > 1.0 for _, _, _, _, _, factor in col_rows),
+        "Phase 3: Per-Column Savings",
+        f"Expected all 5 optimized columns to achieve >1.0x savings, got {col_rows}",
+    )
 
     console.print("\n" + "=" * 70, style="bold green")
     plain_console.print("SYSTEMS TAKEAWAYS")

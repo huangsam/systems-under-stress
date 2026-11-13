@@ -26,9 +26,18 @@ import sys
 import time
 
 from rich.console import Console
+from rich.markup import escape
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
 
 try:
     import clickhouse_connect
@@ -108,6 +117,7 @@ def seed_clickstream_dataset(client: clickhouse_connect.driver.Client, num_rows:
 
     console.print(f"    Dataset Ready: [bold green]{stats[0]:,} rows[/] inserted in {elapsed:.2f}s")
     plain_console.print(f"    Disk Footprint: Compressed={stats[1]} (Uncompressed={stats[2]})")
+    verify_phase(stats[0] == num_rows, "Phase 0: Dataset Seed", f"Expected {num_rows:,} rows, got {stats[0]:,}")
 
 
 def run_in_memory_aggregation(client: clickhouse_connect.driver.Client) -> None:
@@ -130,6 +140,7 @@ def run_in_memory_aggregation(client: clickhouse_connect.driver.Client) -> None:
     """
 
     start_time = time.perf_counter()
+    mem_limit_hit = False
     try:
         client.command(query)
         elapsed = time.perf_counter() - start_time
@@ -137,11 +148,14 @@ def run_in_memory_aggregation(client: clickhouse_connect.driver.Client) -> None:
     except DatabaseError as err:
         elapsed = time.perf_counter() - start_time
         err_msg = str(err)
+        mem_limit_hit = "241" in err_msg or "memory limit" in err_msg.lower()
         console.print(f"\n  [bold red][!] QUERY TERMINATED BY ENGINE (Elapsed: {elapsed:.2f}s)[/]")
         plain_console.print("      ClickHouse Error Code : 241 (MEMORY_LIMIT_EXCEEDED)")
         plain_console.print(f"      Engine Diagnostics    : {err_msg.strip()}")
         console.print("\n  [bold green][✓] Failure Verified:[/] ClickHouse protected host OS by aborting before")
         plain_console.print("      the 1,000,000-key aggregation hash table could trigger container OOM (Exit 137).")
+
+    verify_phase(mem_limit_hit, "Part 1: Memory Limit Breach", "Expected ClickHouse Code 241 MEMORY_LIMIT_EXCEEDED, but query succeeded")
 
 
 def run_spill_to_disk_aggregation(client: clickhouse_connect.driver.Client) -> None:
@@ -176,6 +190,11 @@ def run_spill_to_disk_aggregation(client: clickhouse_connect.driver.Client) -> N
     console.print(f"    Aggregated Groups     : [bold green]{result[0]:,}[/] user UUIDs processed")
     plain_console.print(f"    Grand Total Events    : {result[1]:,} clicks verified")
     plain_console.print(f"    Total Execution Time  : {elapsed:.2f} seconds")
+    verify_phase(
+        result[1] == 500_000 and result[0] > 490_000,
+        "Part 2: External Aggregation",
+        f"Expected 500,000 total clicks across ~500,000 UUIDs, got groups={result[0]}, clicks={result[1]}",
+    )
 
 
 def run_hyperloglog_comparison(client: clickhouse_connect.driver.Client) -> None:
@@ -184,11 +203,14 @@ def run_hyperloglog_comparison(client: clickhouse_connect.driver.Client) -> None
 
     # Step 3a: uniqExact fails under memory limit
     plain_console.print("    Testing uniqExact(user_id) under memory cap...")
+    uniq_exact_failed = False
     try:
         client.query(f"SELECT uniqExact(user_id) FROM {TABLE_NAME} SETTINGS max_memory_usage = {QUERY_MEM_CAP}")
         plain_console.print("    uniqExact succeeded.")
     except DatabaseError:
+        uniq_exact_failed = True
         console.print(f"    [bold red][!] uniqExact failed as expected:[/] Exact hash set exceeded {QUERY_MEM_CAP / 1024 / 1024:.1f}MB.")
+    verify_phase(uniq_exact_failed, "Part 3: uniqExact Memory Cap", f"Expected uniqExact to exceed {QUERY_MEM_CAP} byte cap")
 
     # Step 3b: uniq (HyperLogLog) succeeds effortlessly
     plain_console.print("    Testing uniq(user_id) HyperLogLog under identical memory cap...")
@@ -204,6 +226,11 @@ def run_hyperloglog_comparison(client: clickhouse_connect.driver.Client) -> None
     plain_console.print(f"    HLL Count (uniq)        : {hll_count:,}")
     console.print(f"    Approximation Error     : [bold green]{error_pct}%[/] (< 1% variance)")
     plain_console.print(f"    HLL Query Duration      : {elapsed * 1000:.2f} ms (succeeded within memory cap)")
+    verify_phase(
+        exact_count > 490_000 and error_pct < 2.0,
+        "Part 3: HyperLogLog Accuracy",
+        f"Expected exact_count > 490,000 and HLL error < 2%, got exact={exact_count}, error={error_pct}%",
+    )
 
 
 def main() -> None:
@@ -217,6 +244,11 @@ def main() -> None:
     # Verify server baseline setting
     configured_limit = client.query("SELECT value FROM system.settings WHERE name = 'max_memory_usage'").result_rows[0][0]
     plain_console.print(f"[*] Engine Baseline Setting: max_memory_usage = {int(configured_limit) / 1024 / 1024:.2f} MiB ({configured_limit} bytes)")
+    verify_phase(
+        int(configured_limit) == 64_000_000,
+        "Phase 0: Preconditions",
+        f"Expected max_memory_usage=64000000 (EXP=memory-cap), got {configured_limit}. Run 'make up EXP=memory-cap'.",
+    )
 
     # Prepare dataset
     seed_clickstream_dataset(client, num_rows=500_000)
