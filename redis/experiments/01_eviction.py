@@ -111,9 +111,11 @@ def main() -> None:
             else:
                 raise err
 
-        # Keep hot working set (item:00000..00099) warm during ingestion so LRU/LFU
-        # retain hot keys while evicting unreferenced cold keys instead.
-        if i == 99 or (i > 99 and i % 150 == 0):
+        # Redis LRU clock has 1s granularity; sleep past a 1s boundary at mid-ingestion
+        # checkpoints and refresh the hot set (item:00000..00099) so cold keys age out.
+        if i in (999, 1749):
+            time.sleep(1.1)
+        if i in (99, 999, 1749, TOTAL_ITEMS - 1):
             pipe = client.pipeline(transaction=False)
             repeats = 3 if i == 99 else 1
             for _ in range(repeats):
