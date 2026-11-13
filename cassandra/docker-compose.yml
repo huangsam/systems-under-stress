@@ -10,6 +10,7 @@ x-cassandra-base: &cassandra-base
         memory: 1280M
   environment:
     - MAX_HEAP_SIZE=512M
+    # Trim vnodes and ring settle delay for fast single-host Docker bootstrap
     - CASSANDRA_NUM_TOKENS=8
     - JVM_OPTS=-Dcassandra.ring_delay_ms=5000 -Dcassandra.skip_wait_for_gossip_to_settle=0
   healthcheck:
@@ -32,6 +33,7 @@ services:
       - bash
       - -c
       - |
+        # Cassandra 5.0 raised tombstone_failure_threshold to 100000; lower to 10000 for Exp 01
         sed -i 's/^#* *tombstone_failure_threshold:.*/tombstone_failure_threshold: 10000/' /etc/cassandra/cassandra.yaml
         grep -q '^tombstone_failure_threshold:' /etc/cassandra/cassandra.yaml || echo 'tombstone_failure_threshold: 10000' >> /etc/cassandra/cassandra.yaml
         exec /usr/local/bin/docker-entrypoint.sh "$$@"
@@ -115,6 +117,7 @@ services:
     ports: []
     volumes:
       - cassandra-n3-data:/var/lib/cassandra
+    # Chain bootstrap sequentially after node2 to prevent concurrent token-range collisions
     depends_on:
       cassandra-node2:
         condition: service_healthy
