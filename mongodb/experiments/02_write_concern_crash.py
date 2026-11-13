@@ -46,6 +46,13 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def run_compose_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
     cmd = ["docker", "compose", "--profile", "durability"] + args
     return subprocess.run(cmd, cwd=COMPOSE_DIR, capture_output=True, text=True, check=True)
@@ -90,6 +97,7 @@ def test_write_concern_durability(
 
     # Clean collection
     coll.drop()
+    verify_phase(coll.count_documents({}) == 0, f"{mode_name}: Reset", "Collection not empty after drop()")
     plain_console.print("  [*] Dropped test collection for clean baseline.")
 
     ack_count = 0
@@ -167,6 +175,20 @@ def test_write_concern_durability(
     plain_console.print(f"    Client Acknowledged / Sent : {reported_total:,}")
     plain_console.print(f"    Recovered Documents in DB  : {recovered_count:,} (highest seq={max_seq:,})")
     console.print(f"    Lost Writes                : [bold {'red' if lost_writes > 0 else 'green'}]{lost_writes:,} ({loss_pct:.1f}%)[/]")
+
+    verify_phase(reported_total > 0, f"{mode_name}: Pre-Crash Writes", "Expected > 0 writes sent/acknowledged before SIGKILL")
+    if j_val is True:
+        verify_phase(
+            lost_writes == 0 and recovered_count == reported_total and max_seq == reported_total,
+            f"{mode_name}: Journal Durability",
+            f"Expected 0 lost writes under w={w_val}, j=True; ack={reported_total}, recovered={recovered_count}, max_seq={max_seq}",
+        )
+    else:
+        verify_phase(
+            0 <= recovered_count <= reported_total,
+            f"{mode_name}: Crash Recovery Bounds",
+            f"Recovered ({recovered_count}) exceeded reported ({reported_total})",
+        )
 
     return {
         "mode": mode_name,

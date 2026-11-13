@@ -28,6 +28,7 @@ import time
 from pymongo import MongoClient
 from pymongo.errors import DocumentTooLarge, OperationFailure, WriteError
 from rich.console import Console
+from rich.markup import escape
 
 MONGO_URI = "mongodb://127.0.0.1:27017/"
 BSON_MAX_BYTES = 16 * 1024 * 1024  # 16,777,216 bytes
@@ -35,6 +36,13 @@ BSON_MAX_BYTES = 16 * 1024 * 1024  # 16,777,216 bytes
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 def format_bytes(b: int) -> str:
@@ -75,8 +83,10 @@ def main() -> None:
     batch_num = 0
     initial_latency_ms = 0.0
     peak_latency_ms = 0.0
+    ceiling_breached = False
+    last_doc_size = 0
 
-    while True:
+    while batch_num < 128:
         batch_num += 1
         t0 = time.perf_counter()
         try:
@@ -103,6 +113,7 @@ def main() -> None:
                     f"    Batch {batch_num:>2}: Events={stats['count']:>5,} | BSON Size={format_bytes(stats['size']):>9} | Write Latency={elapsed_ms:>6.2f}ms"
                 )
         except (DocumentTooLarge, WriteError, OperationFailure) as err:
+            ceiling_breached = True
             stats = list(
                 col_unbounded.aggregate(
                     [
@@ -111,12 +122,19 @@ def main() -> None:
                     ]
                 )
             )[0]
+            last_doc_size = stats["size"]
             console.print(f"\n  [bold red][!] HARD 16MB CEILING BREACHED at Batch {batch_num}![/]")
-            plain_console.print(f"      Document Size Before Rejection : {format_bytes(stats['size'])} ({stats['size']:,} bytes)")
+            plain_console.print(f"      Document Size Before Rejection : {format_bytes(last_doc_size)} ({last_doc_size:,} bytes)")
             plain_console.print(f"      Error Code / Message           : {err}")
             break
 
-    # 2. Part 2: The Bucket Pattern (Capping array at 500 events per document)
+    verify_phase(
+        ceiling_breached and 15 * 1024 * 1024 < last_doc_size < BSON_MAX_BYTES,
+        "Part 1: 16MB BSON Ceiling",
+        f"Expected DocumentTooLarge/WriteError near 16MB, got breached={ceiling_breached}, size={last_doc_size}",
+    )
+
+    # 2. Part 2: The Bucket Pattern (Capping array at 64 events per document)
     console.print("\n[bold blue][*] Part 2: Remediation via the Bucket Pattern (max 64 events/bucket)...[/]")
     col_bucketed = db["bucketed_sensors"]
     col_bucketed.create_index([("sensor_id", 1), ("bucket_count", 1)])
@@ -135,10 +153,16 @@ def main() -> None:
         )
     bucket_elapsed_ms = (time.perf_counter() - t_start) * 1000
     num_buckets = col_bucketed.count_documents({"sensor_id": "sensor-01"})
+    total_bucketed_events = sum(d["bucket_count"] for d in col_bucketed.find({"sensor_id": "sensor-01"}, {"bucket_count": 1}))
 
     plain_console.print(f"    Successfully wrote 70 batches ({70 * 64:,} events, ~18MB total) with ZERO errors!")
     plain_console.print(f"    Total Bucket Documents Created : {num_buckets}")
     plain_console.print(f"    Average Write Latency / Batch  : {bucket_elapsed_ms / 70:.2f}ms (vs {peak_latency_ms:.2f}ms peak on bloated doc)")
+    verify_phase(
+        num_buckets == 70 and total_bucketed_events == 70 * 64,
+        "Part 2: Bucket Pattern",
+        f"Expected 70 buckets and {70 * 64} events, got buckets={num_buckets}, events={total_bucketed_events}",
+    )
 
     console.print("\n" + "=" * 70, style="bold green")
     plain_console.print("SYSTEMS TAKEAWAYS")

@@ -34,6 +34,13 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def main() -> None:
     console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]MongoDB Crash Course: Documents, Pipelines & Diagnostics[/]")
@@ -50,6 +57,7 @@ def main() -> None:
         sys.exit(1)
 
     build_info = client.admin.command("buildInfo")
+    verify_phase(ping_res.get("ok") == 1.0 and bool(build_info.get("version")), "Phase 1: Connectivity", "Ping or buildInfo invalid")
     plain_console.print(f"    MongoDB Version: {build_info.get('version')}, Git: {build_info.get('gitVersion')[:8]}")
 
     db = client[DB_NAME]
@@ -98,14 +106,16 @@ def main() -> None:
     ]
 
     res = coll.insert_many(sample_docs)
+    doc_count = coll.count_documents({})
+    verify_phase(len(res.inserted_ids) == 4 and doc_count == 4, "Phase 2: Document Insert", f"Expected 4 documents, got {doc_count}")
     plain_console.print(f"    Inserted {len(res.inserted_ids)} documents into '{COLL_NAME}'.")
 
     # 3. Filter queries and atomic updates
     console.print("\n[bold blue][*] 3. Nested Query & Atomic Field Modification[/]")
     # Query using nested dot-notation
     found = coll.find_one({"pricing.base": {"$gte": 1000.0}})
-    if found:
-        plain_console.print(f"    High-value item found: '{found['name']}' at ${found['pricing']['base']}")
+    verify_phase(found is not None and found["sku"] == "LAP-01", "Phase 3: Nested Query", f"Expected LAP-01, got {found}")
+    plain_console.print(f"    High-value item found: '{found['name']}' at ${found['pricing']['base']}")
 
     # Atomic update ($inc and $push)
     coll.update_one(
@@ -113,8 +123,12 @@ def main() -> None:
         {"$inc": {"stock": -1}, "$push": {"tags": "backorder-risk"}},
     )
     updated = coll.find_one({"sku": "LAP-01"})
-    if updated:
-        plain_console.print(f"    Updated 'LAP-01' stock: {updated['stock']}, tags: {updated['tags']}")
+    verify_phase(
+        updated is not None and updated["stock"] == 14 and "backorder-risk" in updated["tags"],
+        "Phase 3: Atomic Update",
+        f"Unexpected updated doc: {updated}",
+    )
+    plain_console.print(f"    Updated 'LAP-01' stock: {updated['stock']}, tags: {updated['tags']}")
 
     # 4. Aggregation pipeline
     console.print("\n[bold blue][*] 4. Aggregation Pipeline ($match -> $group -> $sort)[/]")
@@ -130,9 +144,14 @@ def main() -> None:
         },
         {"$sort": {"total_stock": -1}},
     ]
-    cursor = coll.aggregate(pipeline)
+    agg_results = list(coll.aggregate(pipeline))
+    verify_phase(
+        len(agg_results) == 2 and sum(d["item_count"] for d in agg_results) == 4,
+        "Phase 4: Aggregation Pipeline",
+        f"Expected 2 category groups totaling 4 items, got {agg_results}",
+    )
     plain_console.print("    Aggregated results by category:")
-    for doc in cursor:
+    for doc in agg_results:
         plain_console.print(f"      - Category: {doc['_id']}: {doc['item_count']} items, avg ${doc['avg_price']:.2f}, total stock {doc['total_stock']}")
 
     # 5. Diagnostics
@@ -140,11 +159,13 @@ def main() -> None:
     server_status = db.command("serverStatus")
     mem_info = server_status.get("mem", {})
     connections = server_status.get("connections", {})
+    verify_phase(mem_info.get("resident", 0) > 0, "Phase 5: Diagnostics", "Expected resident memory > 0 in serverStatus")
     plain_console.print(f"    Resident Memory: {mem_info.get('resident')} MB, Virtual: {mem_info.get('virtual')} MB")
     plain_console.print(f"    Current Connections: {connections.get('current')} (Available: {connections.get('available')})")
 
     # Cleanup
     coll.drop()
+    verify_phase(COLL_NAME not in db.list_collection_names(), "Phase 5: Cleanup", f"Collection '{COLL_NAME}' still exists after drop()")
     plain_console.print(f"    Dropped demo collection '{COLL_NAME}'.")
 
     console.print("\n[bold green][✓] MongoDB Crash Course completed successfully![/]\n")

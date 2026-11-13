@@ -46,6 +46,13 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def get_client() -> MongoClient:
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2500)
     try:
@@ -147,6 +154,8 @@ def run_experiment() -> None:
             coll.drop_index(idx_name)
 
     seed_orders(coll)
+    seeded_count = coll.count_documents({})
+    verify_phase(seeded_count >= TARGET_DOCS, "Phase 0: Seed", f"Expected >= {TARGET_DOCS:,} docs, got {seeded_count:,}")
 
     results_table: list[dict[str, str]] = []
 
@@ -156,6 +165,7 @@ def run_experiment() -> None:
     console.print("\n[bold yellow][Scenario 1] Unindexed Sort with allow_disk_use(False) (In-Memory Only)[/]")
     plain_console.print("  Query: db.orders.find().sort('timestamp', -1).allow_disk_use(False)")
     t0 = time.perf_counter()
+    sort_limit_hit = False
     try:
         cursor = coll.find({}).sort("timestamp", -1).allow_disk_use(False)
         _ = list(cursor)
@@ -172,9 +182,11 @@ def run_experiment() -> None:
         )
     except OperationFailure as err:
         elapsed_ms = (time.perf_counter() - t0) * 1000
+        errmsg = err.details.get("errmsg", str(err)) if err.details else str(err)
+        sort_limit_hit = err.code == 292 or "sort exceeded memory limit" in errmsg.lower()
         console.print(f"  [bold red][EXPECTED FAILURE CAUGHT][/] in {elapsed_ms:.1f}ms:")
         plain_console.print(f"    Error Code    : {err.code}")
-        plain_console.print(f"    Error Details : {err.details.get('errmsg', str(err))}")
+        plain_console.print(f"    Error Details : {errmsg}")
         results_table.append(
             {
                 "mode": "Unindexed (allow_disk_use=False)",
@@ -184,6 +196,7 @@ def run_experiment() -> None:
                 "time_ms": f"{elapsed_ms:.1f}ms",
             }
         )
+    verify_phase(sort_limit_hit, "Scenario 1: 100MB Sort Limit", "Expected OperationFailure (Code 292 / Sort exceeded memory limit)")
 
     # -------------------------------------------------------------
     # Scenario 2: Unindexed Sort with allowDiskUse=True (Spills to Disk)
@@ -191,29 +204,31 @@ def run_experiment() -> None:
     console.print("\n[bold yellow][Scenario 2] Unindexed Sort WITH allowDiskUse=True (Spill to Disk)[/]")
     plain_console.print("  Query: db.orders.find().sort('timestamp', -1).allow_disk_use(True)")
     t0 = time.perf_counter()
-    try:
-        explain_plan = coll.find({}).sort("timestamp", -1).allow_disk_use(True).explain()
-        details = extract_sort_details(explain_plan)
+    explain_plan = coll.find({}).sort("timestamp", -1).allow_disk_use(True).explain()
+    details = extract_sort_details(explain_plan)
 
-        cursor = coll.find({}).sort("timestamp", -1).allow_disk_use(True).limit(5)
-        top5 = list(cursor)
-        elapsed_ms = (time.perf_counter() - t0) * 1000
+    cursor = coll.find({}).sort("timestamp", -1).allow_disk_use(True).limit(5)
+    top5 = list(cursor)
+    elapsed_ms = (time.perf_counter() - t0) * 1000
 
-        console.print(f"  [bold green][SUCCESS][/] Completed in {elapsed_ms:.1f}ms (Explain: {details['executionTimeMillis']}ms)")
-        plain_console.print(f"    Docs Examined : {details['totalDocsExamined']:,}")
-        plain_console.print(f"    Used Disk     : {details['usedDisk']} (Spilled temporary sort run to disk)")
-        plain_console.print(f"    Top Doc ID    : {top5[0]['order_id']} (ts={top5[0]['timestamp']})")
-        results_table.append(
-            {
-                "mode": "Unindexed (allowDiskUse)",
-                "status": "SUCCEEDED",
-                "sort_stage": "SORT (External)",
-                "disk_spill": str(details["usedDisk"]),
-                "time_ms": f"{elapsed_ms:.1f}ms",
-            }
-        )
-    except Exception as err:
-        console.print(f"  [bold red]Error during allowDiskUse: {escape(str(err))}[/]")
+    console.print(f"  [bold green][SUCCESS][/] Completed in {elapsed_ms:.1f}ms (Explain: {details['executionTimeMillis']}ms)")
+    plain_console.print(f"    Docs Examined : {details['totalDocsExamined']:,}")
+    plain_console.print(f"    Used Disk     : {details['usedDisk']} (Spilled temporary sort run to disk)")
+    plain_console.print(f"    Top Doc ID    : {top5[0]['order_id']} (ts={top5[0]['timestamp']})")
+    verify_phase(
+        details["has_sort_stage"] and details["usedDisk"] is True and len(top5) == 5 and top5[0]["timestamp"] > top5[-1]["timestamp"],
+        "Scenario 2: External Disk Sort",
+        f"Expected SORT stage with usedDisk=True and 5 descending docs, got details={details}",
+    )
+    results_table.append(
+        {
+            "mode": "Unindexed (allowDiskUse)",
+            "status": "SUCCEEDED",
+            "sort_stage": "SORT (External)",
+            "disk_spill": str(details["usedDisk"]),
+            "time_ms": f"{elapsed_ms:.1f}ms",
+        }
+    )
 
     # -------------------------------------------------------------
     # Scenario 3: Indexed Sort (B-Tree Index Scan - 0 Sort Memory)
@@ -238,6 +253,11 @@ def run_experiment() -> None:
     plain_console.print(f"    Index Used    : {details['has_ixscan_stage']} (B-Tree backward traversal)")
     plain_console.print("    Sort Memory   : 0 bytes (Streaming pipeline)")
     plain_console.print(f"    Top Doc ID    : {top5[0]['order_id']} (ts={top5[0]['timestamp']})")
+    verify_phase(
+        not details["has_sort_stage"] and details["has_ixscan_stage"] and not details["usedDisk"] and len(top5) == 5,
+        "Scenario 3: Indexed Sort",
+        f"Expected IXSCAN with no SORT stage and usedDisk=False, got details={details}",
+    )
     results_table.append(
         {
             "mode": "Indexed Sort (B-Tree)",

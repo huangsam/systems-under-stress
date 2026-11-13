@@ -39,6 +39,7 @@ from pymongo import MongoClient, WriteConcern
 from pymongo.errors import AutoReconnect, NotPrimaryError, PyMongoError
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 # Patch socket resolver so PyMongo can resolve Docker container hostnames from host
@@ -71,6 +72,13 @@ CLUSTER_URI = "mongodb://mongo-node1:27017,mongo-node2:27017,mongo-node3:27017/?
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 def get_direct_client(port: int, timeout_ms: int = 15000) -> MongoClient:
@@ -215,10 +223,12 @@ def phase1_topology(status: dict[str, Any]) -> None:
     console.print(table)
     console.print()
 
-    if primary_count == 1 and secondary_count == 2:
-        console.print("[bold green]✔ Quorum Verified: Exactly 1 PRIMARY and 2 SECONDARIES active.[/]")
-    else:
-        console.print(f"[bold yellow][!] Unexpected topology: {primary_count} Primary, {secondary_count} Secondaries.[/]")
+    verify_phase(
+        primary_count == 1 and secondary_count == 2,
+        "Phase 1: Topology & Quorum",
+        f"Expected 1 PRIMARY and 2 SECONDARIES, got primary={primary_count}, secondary={secondary_count}",
+    )
+    console.print("[bold green]✔ Quorum Verified: Exactly 1 PRIMARY and 2 SECONDARIES active.[/]")
 
 
 def phase2_durability_comparison(cluster: MongoClient) -> None:
@@ -389,6 +399,16 @@ def phase2_durability_comparison(cluster: MongoClient) -> None:
 
     console.print(comp_table)
     console.print()
+    verify_phase(
+        w1_ack_count > 0 and new_primary_name != primary_name,
+        "Phase 2A: w=1 Stepdown Failover",
+        f"Expected w1_ack > 0 and primary change ({primary_name} -> {new_primary_name})",
+    )
+    verify_phase(
+        maj_ack_count > 0 and final_primary_name != new_primary_name and maj_lost_acked == 0,
+        "Phase 2B: Majority Write Durability",
+        f"Expected maj_ack > 0, primary change, and 0 lost majority writes; got ack={maj_ack_count}, lost={maj_lost_acked}",
+    )
     console.print("[bold green]✔ Finding: 'w: majority' guarantees that all acknowledged writes survive elections without data loss.[/]")
 
 
@@ -425,61 +445,67 @@ def phase3_oplog_exhaustion(cluster: MongoClient) -> None:
     # Pause secondary node 3
     console.print("[bold yellow][*] Pausing container 'mongo-node3' (docker pause)...[/]")
     subprocess.run(["docker", "pause", "mongo-node3"], check=True)
+    paused = True
 
-    db = cluster.get_database("lab_db", write_concern=WriteConcern(w="majority"))
-    db.oplog_churn.drop()
+    try:
+        db = cluster.get_database("lab_db", write_concern=WriteConcern(w="majority"))
+        db.oplog_churn.drop()
 
-    payload_prefix = os.urandom(2000).hex()
-    total = 0
+        payload_prefix = os.urandom(2000).hex()
+        total = 0
 
-    console.print("[bold white][*] Writing burst of updates to primary to churn oplog beyond 10MB capacity...[/]")
+        console.print("[bold white][*] Writing burst of updates to primary to churn oplog beyond 10MB capacity...[/]")
 
-    for batch in range(1, 450):
-        for doc_id in range(10):
-            for _ in range(5):
-                try:
-                    db.oplog_churn.update_one(
-                        {"_id": doc_id},
-                        {"$set": {"data": f"{payload_prefix}_{batch}_{doc_id}_{os.urandom(100).hex()}"}},
-                        upsert=True,
-                    )
-                    total += 1
-                    break
-                except (AutoReconnect, NotPrimaryError, PyMongoError):
-                    time.sleep(0.5)
-
-        time.sleep(0.01)
-
-        if batch % 5 == 0:
-            try:
-                cur_primary, cur_port = find_primary(cluster)
-                with get_direct_client(cur_port, timeout_ms=5000) as cur_p_client:
-                    cur_oplog = cur_p_client.local["oplog.rs"]
-                    first_oplog = next(cur_oplog.find().sort("$natural", 1).limit(1))
-                    stats = cur_p_client.local.command("collStats", "oplog.rs")
-                    size_mb = stats.get("size", 0) / (1024 * 1024)
-                    oldest_ts = first_oplog["ts"]
-
-                    plain_console.print(f"    [Batch {batch:3d}] Churned {total:4d} ops | Oplog Size: {size_mb:.2f}MB | Oldest Oplog TS: {oldest_ts}")
-                    sys.stdout.flush()
-
-                    if oldest_ts > node3_ts:
-                        console.print(
-                            f"\n[bold green][✔] Oplog Window Exceeded: Oldest oplog entry ({oldest_ts}) "
-                            f"has advanced beyond node3's paused timestamp ({node3_ts})![/]"
+        for batch in range(1, 450):
+            for doc_id in range(10):
+                for _ in range(5):
+                    try:
+                        db.oplog_churn.update_one(
+                            {"_id": doc_id},
+                            {"$set": {"data": f"{payload_prefix}_{batch}_{doc_id}_{os.urandom(100).hex()}"}},
+                            upsert=True,
                         )
+                        total += 1
                         break
-            except Exception:
-                pass
+                    except (AutoReconnect, NotPrimaryError, PyMongoError):
+                        time.sleep(0.5)
 
-    cur_primary, cur_port = find_primary(cluster)
-    with get_direct_client(cur_port, timeout_ms=5000) as cur_p_client:
-        first_oplog = next(cur_p_client.local["oplog.rs"].find().sort("$natural", 1).limit(1))
-        oldest_ts = first_oplog["ts"]
+            time.sleep(0.01)
 
-    # Unpause secondary node 3
-    console.print("\n[bold yellow][*] Unpausing container 'mongo-node3' (docker unpause)...[/]")
-    subprocess.run(["docker", "unpause", "mongo-node3"], check=True)
+            if batch % 5 == 0:
+                try:
+                    cur_primary, cur_port = find_primary(cluster)
+                    with get_direct_client(cur_port, timeout_ms=5000) as cur_p_client:
+                        cur_oplog = cur_p_client.local["oplog.rs"]
+                        first_oplog = next(cur_oplog.find().sort("$natural", 1).limit(1))
+                        stats = cur_p_client.local.command("collStats", "oplog.rs")
+                        size_mb = stats.get("size", 0) / (1024 * 1024)
+                        oldest_ts = first_oplog["ts"]
+
+                        plain_console.print(f"    [Batch {batch:3d}] Churned {total:4d} ops | Oplog Size: {size_mb:.2f}MB | Oldest Oplog TS: {oldest_ts}")
+                        sys.stdout.flush()
+
+                        if oldest_ts > node3_ts:
+                            console.print(
+                                f"\n[bold green][✔] Oplog Window Exceeded: Oldest oplog entry ({oldest_ts}) "
+                                f"has advanced beyond node3's paused timestamp ({node3_ts})![/]"
+                            )
+                            break
+                except Exception:
+                    pass
+
+        cur_primary, cur_port = find_primary(cluster)
+        with get_direct_client(cur_port, timeout_ms=5000) as cur_p_client:
+            first_oplog = next(cur_p_client.local["oplog.rs"].find().sort("$natural", 1).limit(1))
+            oldest_ts = first_oplog["ts"]
+
+        # Unpause secondary node 3
+        console.print("\n[bold yellow][*] Unpausing container 'mongo-node3' (docker unpause)...[/]")
+        subprocess.run(["docker", "unpause", "mongo-node3"], check=True)
+        paused = False
+    finally:
+        if paused:
+            subprocess.run(["docker", "unpause", "mongo-node3"], check=False)
 
     console.print("[bold white][*] Polling replica set status as mongo-node3 discovers oplog gap...[/]\n")
 
@@ -534,10 +560,14 @@ def phase3_oplog_exhaustion(cluster: MongoClient) -> None:
     )
     console.print(res_table)
     console.print()
-    if oldest_ts > node3_ts:
-        console.print(
-            "[bold green]✔ Finding: When oplog retention is exceeded, disconnected secondaries cannot resume replication and enter RECOVERING, requiring full initial sync.[/]"
-        )
+    verify_phase(
+        oldest_ts > node3_ts and stale_detected,
+        "Phase 3: Oplog Exhaustion",
+        f"Expected oldest_ts ({oldest_ts}) > node3_ts ({node3_ts}) and stale/RECOVERING state, got stale_detected={stale_detected}",
+    )
+    console.print(
+        "[bold green]✔ Finding: When oplog retention is exceeded, disconnected secondaries cannot resume replication and enter RECOVERING, requiring full initial sync.[/]"
+    )
 
 
 def print_takeaways() -> None:
