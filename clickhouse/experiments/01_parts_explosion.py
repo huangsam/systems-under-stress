@@ -133,7 +133,12 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
                 if stop_event.is_set():
                     break
                 try:
-                    w_client.command(f"INSERT INTO {TABLE_NAME} (id, payload) VALUES ({row_id}, 'payload-data-node-{row_id:05d}')")
+                    # Disable server-side async_insert (enabled by default in ClickHouse 26.3+)
+                    # so each single-row INSERT creates a synchronous physical part on disk.
+                    w_client.command(
+                        f"INSERT INTO {TABLE_NAME} (id, payload) VALUES ({row_id}, 'payload-data-node-{row_id:05d}')",
+                        settings={"async_insert": 0},
+                    )
                     with state_lock:
                         inserted_count += 1
                         cur_count = inserted_count
@@ -144,10 +149,12 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
                 except DatabaseError as err:
                     err_msg = str(err)
                     if "Too many parts" in err_msg or "252" in err_msg:
+                        active_at_fail = get_active_parts(w_client, TABLE_NAME)
                         with state_lock:
                             if not too_many_parts_hit:
                                 too_many_parts_hit = True
                                 first_error_msg = err_msg.strip()
+                                active_parts[:] = active_at_fail
                         stop_event.set()
                         break
                     else:
@@ -165,6 +172,7 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
         finally:
             w_client.close()
 
+    active_parts: list[tuple] = []
     num_workers = 12
     shards = [list(range(idx + 1, 501, num_workers)) for idx in range(num_workers)]
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -172,8 +180,10 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
         for fut in futures:
             fut.result()
 
-    if too_many_parts_hit:
+    if not active_parts:
         active_parts = get_active_parts(client, TABLE_NAME)
+
+    if too_many_parts_hit:
         console.print(f"\n  [bold red][!] WRITE REJECTED AFTER {inserted_count} INSERTS![/]")
         console.print(f"      Active parts in system.parts : [bold red]{len(active_parts)}[/]")
         plain_console.print("      ClickHouse Error Code         : 252 (TOO_MANY_PARTS)")
@@ -181,7 +191,6 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
     elif unexpected_err:
         console.print(f"\n  [bold red][!] Unexpected error: {escape(unexpected_err)}[/]")
 
-    active_parts = get_active_parts(client, TABLE_NAME)
     verify_phase(
         too_many_parts_hit and len(active_parts) >= 80,
         "Part 1: Parts Explosion",
