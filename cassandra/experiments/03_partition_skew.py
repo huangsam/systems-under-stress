@@ -46,6 +46,13 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def log(msg: str, color: str = "[dim]") -> None:
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
     console.print(f"[dim][{timestamp}][/] {color}{escape(msg)}[/]")
@@ -124,8 +131,10 @@ def run_experiment() -> None:
         mono_params = [("ALL", uuid.uuid1(), f"payload_data_{i}") for i in range(NUM_RECORDS)]
 
         t0 = time.perf_counter()
-        execute_concurrent_with_args(session, mono_stmt, mono_params, concurrency=50)
+        mono_results = execute_concurrent_with_args(session, mono_stmt, mono_params, concurrency=50)
         t_mono_write = time.perf_counter() - t0
+        mono_failed = sum(1 for ok, _ in mono_results if not ok)
+        verify_phase(mono_failed == 0, "Phase 1: Monolithic Ingestion", f"{mono_failed}/{NUM_RECORDS} monolithic inserts failed")
 
         # Ingest into Bucketed table (10 distinct date/tenant buckets)
         log(f"Ingesting {NUM_RECORDS:,} events evenly distributed across 10 buckets (Best Practice)...", "[bold green]")
@@ -133,21 +142,36 @@ def run_experiment() -> None:
         bucket_params = [(f"tenant_{i % 10}", "2026-10-22", uuid.uuid1(), f"payload_data_{i}") for i in range(NUM_RECORDS)]
 
         t0 = time.perf_counter()
-        execute_concurrent_with_args(session, bucket_stmt, bucket_params, concurrency=50)
+        bucket_results = execute_concurrent_with_args(session, bucket_stmt, bucket_params, concurrency=50)
         t_bucket_write = time.perf_counter() - t0
+        bucket_failed = sum(1 for ok, _ in bucket_results if not ok)
+        verify_phase(bucket_failed == 0, "Phase 2: Bucketed Ingestion", f"{bucket_failed}/{NUM_RECORDS} bucketed inserts failed")
 
         # Query benchmarking
         log("Benchmarking point partition scan latency...", "[bold cyan]")
 
         # Monolithic read
         t0 = time.perf_counter()
-        _rows_mono = list(session.execute(f"SELECT * FROM {KEYSPACE}.monolithic_feed WHERE partition_key = 'ALL' LIMIT 1000"))
+        rows_mono = list(session.execute(f"SELECT * FROM {KEYSPACE}.monolithic_feed WHERE partition_key = 'ALL' LIMIT 1000"))
         t_mono_read = (time.perf_counter() - t0) * 1000
 
         # Bucketed read
         t0 = time.perf_counter()
-        _rows_bucket = list(session.execute(f"SELECT * FROM {KEYSPACE}.bucketed_feed WHERE tenant_id = 'tenant_0' AND date_bucket = '2026-10-22' LIMIT 1000"))
+        rows_bucket = list(session.execute(f"SELECT * FROM {KEYSPACE}.bucketed_feed WHERE tenant_id = 'tenant_0' AND date_bucket = '2026-10-22' LIMIT 1000"))
         t_bucket_read = (time.perf_counter() - t0) * 1000
+
+        mono_count = session.execute(f"SELECT count(*) FROM {KEYSPACE}.monolithic_feed WHERE partition_key = 'ALL'").one()[0]
+        tenant0_count = session.execute(f"SELECT count(*) FROM {KEYSPACE}.bucketed_feed WHERE tenant_id = 'tenant_0' AND date_bucket = '2026-10-22'").one()[0]
+        verify_phase(
+            len(rows_mono) == 1000 and mono_count == NUM_RECORDS,
+            "Phase 3: Monolithic Read Audit",
+            f"Expected 1000 limited / {NUM_RECORDS} total rows in monolithic partition, got limit={len(rows_mono)}, total={mono_count}",
+        )
+        verify_phase(
+            len(rows_bucket) == NUM_RECORDS // 10 and tenant0_count == NUM_RECORDS // 10,
+            "Phase 3: Bucketed Read Audit",
+            f"Expected {NUM_RECORDS // 10} rows in tenant_0 bucket, got read={len(rows_bucket)}, total={tenant0_count}",
+        )
 
         plain_console.print("\n" + "=" * 70)
         plain_console.print("  PARTITION ARCHITECTURE COMPARISON")

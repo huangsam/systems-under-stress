@@ -60,6 +60,13 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def log(msg: str, color: str = "[dim]") -> None:
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
     console.print(f"[dim][{timestamp}][/] {color}{escape(msg)}[/]")
@@ -178,6 +185,7 @@ def run_experiment() -> None:
     session = cluster.connect()
 
     matrix = []
+    stopped_nodes: list[str] = []
 
     try:
         setup_cluster_schema(session)
@@ -187,6 +195,11 @@ def run_experiment() -> None:
         # ---------------------------------------------------------
         log("Phase 1: Testing baseline consistency with 3/3 nodes healthy...", "[bold cyan]")
         res1 = evaluate_levels(session, "3 Nodes Alive (node1, node2, node3)", 100)
+        verify_phase(
+            res1 == {"ONE": "PASS", "QUORUM": "PASS", "ALL": "PASS"},
+            "Phase 1: Healthy Baseline (3/3 Nodes)",
+            f"Expected ONE/QUORUM/ALL to PASS, got {res1}",
+        )
         matrix.append(("3 Nodes Alive (Healthy)", res1["ONE"], res1["QUORUM"], res1["ALL"]))
 
         # ---------------------------------------------------------
@@ -194,9 +207,15 @@ def run_experiment() -> None:
         # ---------------------------------------------------------
         log("\nPhase 2: Stopping cassandra-node3 (2 of 3 nodes remain)...", "[bold yellow]")
         docker_cmd(["stop", "cassandra-node3"])
+        stopped_nodes.append("cassandra-node3")
         time.sleep(4)  # Allow gossip failure detector to mark node3 DOWN
 
         res2 = evaluate_levels(session, "2 Nodes Alive (node3 DOWN)", 200)
+        verify_phase(
+            res2 == {"ONE": "PASS", "QUORUM": "PASS", "ALL": "FAIL"},
+            "Phase 2: 1 Node Down (2/3 Nodes)",
+            f"Expected ONE=PASS, QUORUM=PASS, ALL=FAIL, got {res2}",
+        )
         matrix.append(("2 Nodes Alive (node3 DOWN)", res2["ONE"], res2["QUORUM"], res2["ALL"]))
 
         # ---------------------------------------------------------
@@ -204,9 +223,15 @@ def run_experiment() -> None:
         # ---------------------------------------------------------
         log("\nPhase 3: Stopping cassandra-node2 (Only 1 of 3 nodes remains)...", "[bold red]")
         docker_cmd(["stop", "cassandra-node2"])
+        stopped_nodes.append("cassandra-node2")
         time.sleep(4)  # Allow gossip failure detector to mark node2 DOWN
 
         res3 = evaluate_levels(session, "1 Node Alive (node2 & node3 DOWN)", 300)
+        verify_phase(
+            res3 == {"ONE": "PASS", "QUORUM": "FAIL", "ALL": "FAIL"},
+            "Phase 3: 2 Nodes Down (1/3 Nodes)",
+            f"Expected ONE=PASS, QUORUM=FAIL, ALL=FAIL, got {res3}",
+        )
         matrix.append(("1 Node Alive (node2/3 DOWN)", res3["ONE"], res3["QUORUM"], res3["ALL"]))
 
         # ---------------------------------------------------------
@@ -215,17 +240,26 @@ def run_experiment() -> None:
         log("\nPhase 4: Restarting cassandra-node2 and cassandra-node3...", "[bold blue]")
         docker_cmd(["start", "cassandra-node2"])
         docker_cmd(["start", "cassandra-node3"])
+        stopped_nodes.clear()
 
         log("Waiting for nodes to rejoin gossip ring...", "[dim]")
+        healed = False
         for _ in range(15):
             time.sleep(3)
             # Test if ALL can pass again
             success, _, _ = test_write_read(session, ConsistencyLevel.ALL, 999, "ALL")
             if success:
+                healed = True
                 log("Cluster fully recovered! All 3 replicas responding.", "[bold green]")
                 break
+        verify_phase(healed, "Phase 4: Cluster Healing", "Cluster did not heal all 3 replicas within timeout")
 
         res4 = evaluate_levels(session, "3 Nodes Alive (After Healing)", 400)
+        verify_phase(
+            res4 == {"ONE": "PASS", "QUORUM": "PASS", "ALL": "PASS"},
+            "Phase 4: Post-Healing Consistency",
+            f"Expected ONE/QUORUM/ALL to PASS after healing, got {res4}",
+        )
         matrix.append(("Cluster Healed (3 Nodes)", res4["ONE"], res4["QUORUM"], res4["ALL"]))
 
         # ---------------------------------------------------------
@@ -257,6 +291,8 @@ def run_experiment() -> None:
         plain_console.print()
 
     finally:
+        for node in reversed(stopped_nodes):
+            docker_cmd(["start", node])
         session.shutdown()
         cluster.shutdown()
 

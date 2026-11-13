@@ -36,6 +36,13 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def main() -> None:
     console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]Apache Cassandra Crash Course: Partition Keys & CQL Mechanics[/]")
@@ -61,6 +68,7 @@ def main() -> None:
         # 1. Cluster Metadata & Connectivity
         console.print("[bold blue][*] 1. Node Metadata & System Introspection[/]")
         row = session.execute("SELECT cluster_name, data_center, release_version FROM system.local").one()
+        verify_phase(row is not None and bool(row.release_version), "Phase 1: Connectivity", "Empty system.local metadata")
         plain_console.print(f"    Cluster Name: {row.cluster_name}")
         plain_console.print(f"    Datacenter: {row.data_center}, Cassandra Version: {row.release_version}")
 
@@ -83,6 +91,8 @@ def main() -> None:
                 PRIMARY KEY ((country), user_id)
             );
         """)
+        tbl_check = session.execute(f"SELECT table_name FROM system_schema.tables WHERE keyspace_name = '{KEYSPACE}' AND table_name = '{TABLE_NAME}';").one()
+        verify_phase(tbl_check is not None, "Phase 2: Schema DDL", f"Table '{KEYSPACE}.{TABLE_NAME}' not found in system_schema.tables")
         plain_console.print(f"    Created keyspace '{KEYSPACE}' and table '{TABLE_NAME}'.")
         plain_console.print("    Schema Notes: 'country' is Partition Key (token hash); 'user_id' is Clustering Column.")
 
@@ -103,12 +113,15 @@ def main() -> None:
 
         for country, uid, uname, email, score in records:
             session.execute(insert_stmt, (country, uid, uname, email, score))
+        total_cnt = session.execute(f"SELECT count(*) FROM {TABLE_NAME};").one()[0]
+        verify_phase(total_cnt == len(records), "Phase 3: Writes", f"Expected {len(records)} rows, got {total_cnt}")
         plain_console.print(f"    Inserted {len(records)} users across 3 distinct country partitions (US, CA, DE).")
 
         # 4. Partition-bounded reads
         console.print("\n[bold blue][*] 4. Querying by Partition Key (O(1) Token Routing)[/]")
         query = SimpleStatement(f"SELECT country, username, email, score FROM {TABLE_NAME} WHERE country = 'US';")
-        rows = session.execute(query)
+        rows = list(session.execute(query))
+        verify_phase(len(rows) == 3, "Phase 4: Partition Read", f"Expected 3 US users, got {len(rows)}")
         plain_console.print("    Querying partition 'country = US':")
         for r in rows:
             plain_console.print(f"      - [{r.country}] {r.username} ({r.email}) -> Score: {r.score}")
@@ -120,13 +133,16 @@ def main() -> None:
             FROM system_schema.columns
             WHERE keyspace_name = '{KEYSPACE}' AND table_name = '{TABLE_NAME}';
         """
-        cols = session.execute(schema_query)
+        cols = list(session.execute(schema_query))
+        verify_phase(len(cols) == 5, "Phase 5: Schema Introspection", f"Expected 5 columns, got {len(cols)}")
         plain_console.print(f"    Column definitions for {KEYSPACE}.{TABLE_NAME}:")
         for col in cols:
             plain_console.print(f"      - {col.column_name}: {col.type} (kind: {col.kind})")
 
         # Cleanup
         session.execute(f"DROP KEYSPACE IF EXISTS {KEYSPACE};")
+        ks_check = session.execute(f"SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = '{KEYSPACE}';").one()
+        verify_phase(ks_check is None, "Phase 5: Cleanup", f"Keyspace '{KEYSPACE}' still exists after DROP")
         plain_console.print(f"    Cleaned up demo keyspace '{KEYSPACE}'.")
 
     finally:

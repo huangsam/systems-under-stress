@@ -56,6 +56,13 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    """Validate a phase invariant, exiting non-zero if it fails."""
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def log(msg: str, color: str = "[dim]") -> None:
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
     console.print(f"[dim][{timestamp}][/] {color}{escape(msg)}[/]")
@@ -68,10 +75,12 @@ def run_cmd(cmd: list[str]) -> subprocess.CompletedProcess[str]:
 def trigger_nodetool_flush() -> None:
     log("Flushing memtables to SSTables on disk via nodetool...", "[bold blue]")
     res = run_cmd(["docker", "compose", "exec", "-T", "cassandra-tombstones", "nodetool", "flush", KEYSPACE, TABLE])
-    if res.returncode == 0:
-        log("Memtable flushed to SSTable successfully.", "[green]")
-    else:
-        log(f"Notice: nodetool flush skipped or failed: {res.stderr.strip()}", "[yellow]")
+    verify_phase(
+        res.returncode == 0,
+        "Phase 2: Nodetool Flush",
+        f"nodetool flush failed (rc={res.returncode}): {res.stderr.strip()}",
+    )
+    log("Memtable flushed to SSTable successfully.", "[green]")
 
 
 def wait_for_cassandra() -> Cluster:
@@ -153,10 +162,8 @@ def run_experiment() -> None:
         t1 = time.perf_counter()
 
         failed_inserts = sum(1 for success, _ in results if not success)
-        if failed_inserts > 0:
-            log(f"Warning: {failed_inserts} inserts failed", "[red]")
-        else:
-            log(f"Successfully inserted {TOTAL_ROWS:,} rows in {t1 - t0:.2f}s ({(TOTAL_ROWS / (t1 - t0)):.0f} rows/s).", "[green]")
+        verify_phase(failed_inserts == 0, "Phase 1: Insert Rows", f"{failed_inserts}/{TOTAL_ROWS} inserts failed")
+        log(f"Successfully inserted {TOTAL_ROWS:,} rows in {t1 - t0:.2f}s ({(TOTAL_ROWS / (t1 - t0)):.0f} rows/s).", "[green]")
 
         # ---------------------------------------------------------
         # Phase 2: Delete 12,000 rows (Generating 12,000 tombstones)
@@ -176,10 +183,8 @@ def run_experiment() -> None:
         t1 = time.perf_counter()
 
         failed_deletes = sum(1 for success, _ in del_results if not success)
-        if failed_deletes > 0:
-            log(f"Warning: {failed_deletes} deletes failed", "[red]")
-        else:
-            log(f"Generated {DELETE_ROWS:,} tombstones in {t1 - t0:.2f}s ({(DELETE_ROWS / (t1 - t0)):.0f} ops/s).", "[green]")
+        verify_phase(failed_deletes == 0, "Phase 2: Delete Rows", f"{failed_deletes}/{DELETE_ROWS} deletes failed")
+        log(f"Generated {DELETE_ROWS:,} tombstones in {t1 - t0:.2f}s ({(DELETE_ROWS / (t1 - t0)):.0f} ops/s).", "[green]")
 
         # Flush memtables to disk SSTables
         trigger_nodetool_flush()
@@ -215,14 +220,23 @@ def run_experiment() -> None:
             error_details = f"{type(exc).__name__}: {exc}"
             log(f"Query raised: {error_details}", "[bold red]")
 
+        verify_phase(
+            read_failed and ("tombstone" in error_details.lower() or "readfailure" in error_details.lower() or "10000" in error_details),
+            "Phase 3: Tombstone ReadFailure",
+            f"Expected ReadFailure on 12,000 tombstones, got read_failed={read_failed}, details={error_details!r}",
+        )
+
         # Also test querying without partition key (full scan across table)
         log("Testing unconstrained full table scan across tombstones...", "[bold cyan]")
+        full_scan_failed = False
         try:
             full_scan_stmt = SimpleStatement(f"SELECT * FROM {KEYSPACE}.{TABLE} LIMIT 5000;", consistency_level=ConsistencyLevel.ONE)
             session.execute(full_scan_stmt)
             log("Full scan completed without abort.", "[yellow]")
         except (ReadFailure, ReadTimeout) as exc:
+            full_scan_failed = True
             log(f"Full scan was aborted as expected: {exc}", "[bold red]")
+        verify_phase(full_scan_failed, "Phase 3: Full Scan Tombstone Abort", "Expected unconstrained scan to abort on tombstones")
 
         # ---------------------------------------------------------
         # Phase 4: Remediation - Querying with Clustering Key Bounds
@@ -244,6 +258,11 @@ def run_experiment() -> None:
         healthy_rows = list(session.execute(remediation_stmt, (SENSOR_ID, boundary_time)))
         t1 = time.perf_counter()
 
+        verify_phase(
+            len(healthy_rows) == 1000,
+            "Phase 4: Clustering Slice Remediation",
+            f"Expected 1,000 live rows past boundary, got {len(healthy_rows)}",
+        )
         log(f"Remediated query returned {len(healthy_rows)} live rows in {(t1 - t0) * 1000:.2f} ms!", "[bold green]")
         log("Tombstones scanned: 0 (bypassed via SSTable clustering key index block).", "[green]")
 
