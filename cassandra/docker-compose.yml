@@ -106,7 +106,7 @@ services:
     volumes:
       - cassandra-n3-data:/var/lib/cassandra
     depends_on:
-      cassandra-node1:
+      cassandra-node2:
         condition: service_healthy
 
   # Profile: wide-partitions - Exp 03: Wide Partitions & Hot-Spotting
