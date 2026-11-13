@@ -114,9 +114,9 @@ def reset_and_seed_graph(driver: Driver, num_nodes: int = 2000, branching: int =
         node_count = session.run("MATCH (n:Node) RETURN count(n) AS cnt").single()["cnt"]
         rel_count = session.run("MATCH ()-[r:CONNECTED_TO]->() RETURN count(r) AS cnt").single()["cnt"]
         verify_phase(
-            node_count == 1500 and rel_count > 5000,
+            node_count == num_nodes and rel_count > 5000,
             "Phase 0 Seed",
-            f"expected 1500 nodes and >5000 edges, got {node_count} nodes, {rel_count} edges",
+            f"expected {num_nodes} nodes and >5000 edges, got {node_count} nodes, {rel_count} edges",
         )
         console.print(f"[[bold green]+[/]] Seeded {node_count:,} nodes and {rel_count:,} relationships.")
 
