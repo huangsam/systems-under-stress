@@ -126,6 +126,8 @@ def ensure_replica_set_ready() -> tuple[MongoClient, dict[str, Any]]:
                         {"_id": 1, "host": "mongo-node2:27017", "priority": 1},
                         {"_id": 2, "host": "mongo-node3:27017", "priority": 1},
                     ],
+                    # Disable secondary chaining so node3 cannot fall back to syncing
+                    # from node2 in Phase 3 if node1 truncates its oplog first.
                     "settings": {"chainingAllowed": False},
                 },
             )
@@ -490,6 +492,7 @@ def phase3_oplog_exhaustion(cluster: MongoClient) -> None:
                         plain_console.print(f"    [Batch {batch:3d}] Churned {total:4d} ops | Oplog Size: {size_mb:.2f}MB | Oldest Oplog TS: {oldest_ts}")
                         sys.stdout.flush()
 
+                        # Ensure both healthy nodes have rolled past node3_ts before unpausing
                         if oldest_ts > node3_ts and sec_oldest_ts > node3_ts:
                             console.print(
                                 f"\n[bold green][✔] Oplog Window Exceeded: Oldest oplog entry ({oldest_ts}) "
@@ -540,6 +543,8 @@ def phase3_oplog_exhaustion(cluster: MongoClient) -> None:
             plain_console.print(f"    Poll {attempt:2d}: mongo-node3 state = {state_str:<10} | syncSource = {sync_source:<18} | heartbeatMsg = {msg}")
             sys.stdout.flush()
 
+            # MongoDB 8 clears syncSourceHost immediately on oplog rejection before flipping
+            # myState to RECOVERING; treat a dropped sync source behind oldest_ts as stale.
             cur_node3_ts = node3_info.get("optime", {}).get("ts", node3_ts)
             if (
                 state_str == "RECOVERING"
