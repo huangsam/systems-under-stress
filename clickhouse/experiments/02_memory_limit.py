@@ -108,7 +108,7 @@ def seed_clickstream_dataset(client: clickhouse_connect.driver.Client, num_rows:
     # Inspect disk usage and table parts
     stats = client.query(f"""
     SELECT
-        count() as rows,
+        sum(rows) as rows,
         formatReadableSize(sum(data_compressed_bytes)) as compressed_size,
         formatReadableSize(sum(data_uncompressed_bytes)) as uncompressed_size
     FROM system.parts

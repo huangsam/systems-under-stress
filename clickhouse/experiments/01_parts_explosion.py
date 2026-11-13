@@ -109,6 +109,10 @@ def run_unbatched_inserts(client: clickhouse_connect.driver.Client) -> None:
     plain_console.print("    Firing up to 500 single-row inserts without batching...\n")
 
     reset_table(client, TABLE_NAME)
+    # Pause background compaction on parts_test during Part 1 so un-batched single-row
+    # inserts deterministically accumulate to parts_to_throw_insert=120 without racing
+    # fast host CPUs.
+    client.command(f"SYSTEM STOP MERGES {TABLE_NAME}")
 
     inserted_count = 0
     start_time = time.perf_counter()
