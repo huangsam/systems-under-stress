@@ -26,6 +26,15 @@ services:
     <<: *cassandra-base
     container_name: cassandra-tombstones
     profiles: ["tombstones", "default"]
+    entrypoint:
+      - bash
+      - -c
+      - |
+        sed -i 's/^#* *tombstone_failure_threshold:.*/tombstone_failure_threshold: 10000/' /etc/cassandra/cassandra.yaml
+        grep -q '^tombstone_failure_threshold:' /etc/cassandra/cassandra.yaml || echo 'tombstone_failure_threshold: 10000' >> /etc/cassandra/cassandra.yaml
+        exec /usr/local/bin/docker-entrypoint.sh "$$@"
+      - --
+    command: ["cassandra", "-f"]
     environment:
       - CASSANDRA_CLUSTER_NAME=TombstoneCluster
       - MAX_HEAP_SIZE=512M
