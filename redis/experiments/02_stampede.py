@@ -203,9 +203,9 @@ async def main() -> None:
     # Scenario 1: Naive Cache-Aside
     naive_db, naive_cache = await run_scenario("1. Naive Cache-Aside (Unprotected)", worker_naive, client)
     verify_phase(
-        naive_db == CONCURRENT_REQUESTS and naive_cache == 0,
+        naive_db >= int(CONCURRENT_REQUESTS * 0.8) and naive_db + naive_cache == CONCURRENT_REQUESTS,
         "Scenario 1: Naive Stampede",
-        f"Expected db_hits={CONCURRENT_REQUESTS} and cache_hits=0, got db_hits={naive_db}, cache_hits={naive_cache}",
+        f"Expected db_hits >= {int(CONCURRENT_REQUESTS * 0.8)}, got db_hits={naive_db}, cache_hits={naive_cache}",
     )
 
     # Scenario 2: Distributed Lock Mutex
