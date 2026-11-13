@@ -26,11 +26,19 @@ import errno
 import os
 import platform
 import resource
+import sys
 
 from rich.console import Console
+from rich.markup import escape
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 def inspect_proc_self_fd() -> dict[int, str]:
@@ -81,17 +89,19 @@ def run_experiment() -> None:
 
     # 2. Configure target limit to 64
     TARGET_LIMIT = 64
+    soft_cur = -1
     try:
         resource.setrlimit(resource.RLIMIT_NOFILE, (TARGET_LIMIT, TARGET_LIMIT))
         soft_cur, hard_cur = resource.getrlimit(resource.RLIMIT_NOFILE)
         plain_console.print(f"[*] Enforced RLIMIT : soft={soft_cur}, hard={hard_cur}")
     except Exception as exc:
         plain_console.print(f"[!] Warning: Could not adjust RLIMIT_NOFILE to {TARGET_LIMIT}: {exc}")
-        TARGET_LIMIT = soft_before
+    verify_phase(soft_cur == TARGET_LIMIT, "Phase 0 RLIMIT_NOFILE", f"expected RLIMIT_NOFILE soft=={TARGET_LIMIT}, got {soft_cur}")
 
     # 3. Baseline /proc/self/fd inspection
     plain_console.print("\n--- Phase 1: Baseline /proc/self/fd Inspection ---")
     baseline_fds = inspect_proc_self_fd()
+    verify_phase(len(baseline_fds) >= 3, "Phase 1 Baseline FDs", f"expected >= 3 baseline FDs, got {len(baseline_fds)}")
     plain_console.print(f"[*] Baseline open descriptors ({len(baseline_fds)} active):")
     for fd, target in sorted(baseline_fds.items()):
         plain_console.print(f"    fd {fd:>2} -> {target}")
@@ -126,8 +136,11 @@ def run_experiment() -> None:
                     plain_console.print(f"\n[!] Unexpected OSError: {exc}")
                     raise
 
-        if not hit_emfile:
-            plain_console.print(f"\n[!] Warning: Opened {len(opened_files)} files without hitting EMFILE.")
+        verify_phase(
+            hit_emfile and len(opened_files) > 0,
+            "Phase 2 EMFILE Ceiling",
+            f"expected EMFILE (errno 24) after opening >0 files under RLIMIT_NOFILE={TARGET_LIMIT}, got hit_emfile={hit_emfile}, opened={len(opened_files)}",
+        )
 
         # 5. Inspection at Capacity
         plain_console.print("\n--- Phase 3: Inspecting FD Table at Capacity ---")
@@ -142,6 +155,11 @@ def run_experiment() -> None:
                 last_f.close()
 
         exhausted_fds = inspect_proc_self_fd()
+        verify_phase(
+            len(exhausted_fds) <= TARGET_LIMIT and len(exhausted_fds) >= len(opened_files),
+            "Phase 3 Capacity Snapshot",
+            f"expected {len(opened_files)} <= active FDs <= {TARGET_LIMIT}, got {len(exhausted_fds)}",
+        )
         plain_console.print(f"[*] Active entries in fd table ({len(exhausted_fds)} active):")
         for fd, target in sorted(exhausted_fds.items()):
             if fd >= 0:
@@ -171,6 +189,12 @@ def run_experiment() -> None:
         restored_fds = inspect_proc_self_fd()
         plain_console.print("[*] Successfully closed remaining leaked file descriptors.")
         plain_console.print(f"[*] Restored open descriptors in /proc/self/fd: {len(restored_fds)} active")
+
+    verify_phase(
+        len(restored_fds) <= len(baseline_fds) + 1,
+        "Phase 5 FD Cleanup",
+        f"FD leak detected after cleanup: baseline={len(baseline_fds)}, restored={len(restored_fds)}",
+    )
 
     # 8. Systems Takeaways & Interview Angles
     plain_console.print("\n" + "=" * 70)

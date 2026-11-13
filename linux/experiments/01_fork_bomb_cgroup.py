@@ -31,6 +31,12 @@ from rich.console import Console
 console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[✗] Phase validation failed ({phase}): {detail}")
+        sys.exit(1)
+
+
 def get_cgroup_pids_paths() -> tuple[str | None, str | None]:
     """Locate cgroup v2 or v1 pids controller files."""
     # Check cgroup v2 directly in container root
@@ -103,6 +109,11 @@ def run_experiment() -> None:
     if pids_max == "max" or pids_max == "N/A":
         console.print("[!] WARNING: cgroups pids.max is unconstrained or not detected.")
         console.print("    Ensure the container was started with `pids: 40` limit.")
+    verify_phase(
+        pids_max.isdigit() and int(pids_max) <= 64,
+        "Phase 0 Cgroup Limit",
+        f"expected constrained numeric cgroup pids.max <= 64, got {pids_max!r}",
+    )
 
     # 3. Controlled Process Spawning Loop
     console.print("\n--- Phase 1: Controlled Process Spawning (Approaching Cgroup Ceiling) ---")
@@ -149,9 +160,11 @@ def run_experiment() -> None:
                     console.print(f"\n[!] Unexpected OSError: {exc}")
                     raise
 
-        if not hit_limit:
-            console.print(f"\n[!] Warning: Spawned {spawn_count} processes without hitting EAGAIN.")
-            console.print("    Check docker-compose.yml resource limits.")
+        verify_phase(
+            hit_limit and spawn_count > 0,
+            "Phase 1 Fork EAGAIN",
+            f"expected fork() to hit EAGAIN after spawning >0 children, got hit_limit={hit_limit}, spawn_count={spawn_count}",
+        )
 
     finally:
         # 4. Deterministic Teardown & Hygiene
@@ -176,6 +189,14 @@ def run_experiment() -> None:
         final_curr = read_file_safe(pids_curr_file)
         console.print(f"[*] Reaped {reaped} child processes.")
         console.print(f"[*] Restored cgroups pids.current: {final_curr} / {pids_max}")
+
+    verify_phase(reaped == len(children), "Phase 2 Zombie Reap", f"expected reaped=={len(children)}, got {reaped}")
+    if final_curr.isdigit() and initial_pids.isdigit():
+        verify_phase(
+            int(final_curr) <= int(initial_pids) + 1,
+            "Phase 2 Cgroup Restore",
+            f"expected pids.current restored near {initial_pids}, got {final_curr}",
+        )
 
     # 5. Systems Takeaways & Interview Angles
     console.print("\n" + "=" * 70)

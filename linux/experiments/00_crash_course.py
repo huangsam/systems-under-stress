@@ -20,11 +20,19 @@ from __future__ import annotations
 import os
 import platform
 import resource
+import sys
 
 from rich.console import Console
+from rich.markup import escape
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 def read_file_safe(path: str) -> str | None:
@@ -48,8 +56,11 @@ def main() -> None:
     # 1. Kernel & Host
     plain_console.print("[*] 1. Kernel Runtime & Architecture")
     uname = platform.uname()
+    verify_phase(bool(uname.system) and bool(uname.release), "Phase 1 Kernel", f"missing uname metadata: {uname!r}")
     plain_console.print(f"    System: {uname.system} {uname.release} ({uname.machine})")
     proc_ver = read_file_safe("/proc/version")
+    if current_os == "Linux":
+        verify_phase(bool(proc_ver), "Phase 1 /proc/version", "expected readable /proc/version inside Linux container")
     if proc_ver:
         plain_console.print(f"    Kernel Build: {proc_ver.split('(')[0].strip()}")
 
@@ -57,11 +68,12 @@ def main() -> None:
     plain_console.print("\n[*] 2. Process Namespace & Status (/proc/self/status)")
     pid = os.getpid()
     ppid = os.getppid()
+    verify_phase(pid > 0, "Phase 2 PID", f"expected positive PID, got {pid}")
     plain_console.print(f"    Current PID: {pid} (Parent PID: {ppid})")
 
     status = read_file_safe("/proc/self/status")
+    status_dict: dict[str, str] = {}
     if status:
-        status_dict = {}
         for line in status.splitlines():
             if ":" in line:
                 k, v = line.split(":", 1)
@@ -69,6 +81,8 @@ def main() -> None:
         for metric in ["Name", "State", "Threads", "VmSize", "VmRSS"]:
             if metric in status_dict:
                 plain_console.print(f"    {metric:<10}: {status_dict[metric]}")
+    if current_os == "Linux":
+        verify_phase(bool(status) and "Name" in status_dict, "Phase 2 /proc/self/status", "expected process metadata in /proc/self/status")
 
     # 3. Process POSIX Limits
     plain_console.print("\n[*] 3. POSIX Resource Limits (getrlimit)")
@@ -79,6 +93,8 @@ def main() -> None:
     ]:
         if res_id is not None:
             soft, hard = resource.getrlimit(res_id)
+            if res_name == "RLIMIT_NOFILE":
+                verify_phase(soft > 0 and hard > 0, "Phase 3 RLIMIT_NOFILE", f"expected positive NOFILE limits, got soft={soft}, hard={hard}")
             soft_str = "unlimited" if soft == resource.RLIM_INFINITY else str(soft)
             hard_str = "unlimited" if hard == resource.RLIM_INFINITY else str(hard)
             plain_console.print(f"    {res_name:<15}: soft={soft_str:<12} hard={hard_str}")
@@ -86,6 +102,8 @@ def main() -> None:
     # 4. Cgroups v2
     plain_console.print("\n[*] 4. Cgroups v2 Subsystem (/sys/fs/cgroup)")
     cgroup_controllers = read_file_safe("/sys/fs/cgroup/cgroup.controllers")
+    if current_os == "Linux":
+        verify_phase(cgroup_controllers is not None, "Phase 4 Cgroups v2", "expected /sys/fs/cgroup/cgroup.controllers in Linux container")
     if cgroup_controllers:
         plain_console.print(f"    Available Controllers: {cgroup_controllers}")
 
@@ -115,8 +133,10 @@ def main() -> None:
     fd_dir = "/proc/self/fd"
     if os.path.isdir(fd_dir):
         fds = os.listdir(fd_dir)
+        verify_phase(len(fds) >= 3, "Phase 5 FDs", f"expected >= 3 open descriptors in /proc/self/fd, got {len(fds)}")
         plain_console.print(f"    Active Open Descriptors: {len(fds)} ({', '.join(fds[:8])}{'...' if len(fds) > 8 else ''})")
     else:
+        verify_phase(current_os != "Linux", "Phase 5 FDs", "expected /proc/self/fd directory on Linux")
         plain_console.print("    (/proc/self/fd not present in current environment)")
 
     plain_console.print("\n[✓] Linux Kernel Crash Course completed successfully!\n")

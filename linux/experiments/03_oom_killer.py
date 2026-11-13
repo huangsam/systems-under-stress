@@ -34,9 +34,16 @@ import sys
 import time
 
 from rich.console import Console
+from rich.markup import escape
 
 console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
+
+
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
 
 
 def get_cgroup_memory_paths() -> tuple[str | None, str | None, str | None]:
@@ -186,6 +193,12 @@ def run_experiment() -> None:
     plain_console.print(f"[*] cgroups memory.current : {mem_curr_mb} ({mem_curr_file})")
     plain_console.print(f"[*] Initial memory.events  : {initial_events}")
 
+    verify_phase(
+        mem_max_raw.isdigit() and int(mem_max_raw) <= 64 * 1024 * 1024,
+        "Phase 0 Cgroup Memory Limit",
+        f"expected constrained numeric memory.max <= 64MB, got {mem_max_raw!r}",
+    )
+
     if args.direct:
         # Direct mode: allocates until kernel kills the current process
         plain_console.print("\n--- Direct Mode: Allocating in-process until OOM termination ---")
@@ -244,6 +257,14 @@ def run_experiment() -> None:
 
     oom_kills = final_events.get("oom_kill", 0) - initial_events.get("oom_kill", 0)
     plain_console.print(f"[*] Net kernel oom_kill count  : +{oom_kills}")
+
+    verify_phase(exit_code == 137, "Phase 1 OOM Exit Code", f"expected child termination exit code 137 (SIGKILL), got {exit_code}")
+    if "oom_kill" in final_events:
+        verify_phase(
+            oom_kills >= 1,
+            "Phase 2 Cgroup OOM Counter",
+            f"expected memory.events oom_kill delta >= 1, got +{oom_kills} (initial={initial_events}, final={final_events})",
+        )
 
     # 5. Systems Takeaways & Interview Angles
     plain_console.print("\n" + "=" * 70)
