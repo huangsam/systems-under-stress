@@ -126,6 +126,7 @@ def ensure_replica_set_ready() -> tuple[MongoClient, dict[str, Any]]:
                         {"_id": 1, "host": "mongo-node2:27017", "priority": 1},
                         {"_id": 2, "host": "mongo-node3:27017", "priority": 1},
                     ],
+                    "settings": {"chainingAllowed": False},
                 },
             )
             time.sleep(3)
@@ -141,11 +142,12 @@ def ensure_replica_set_ready() -> tuple[MongoClient, dict[str, Any]]:
             pass
 
     cluster = get_cluster_client()
-    for _ in range(20):
+    for _ in range(30):
         try:
             status = cluster.admin.command("replSetGetStatus")
             primary = [m for m in status.get("members", []) if m.get("stateStr") == "PRIMARY"]
-            if primary:
+            secondaries = [m for m in status.get("members", []) if m.get("stateStr") == "SECONDARY"]
+            if len(primary) == 1 and len(secondaries) == 2:
                 return cluster, status
         except Exception:
             pass
@@ -475,17 +477,20 @@ def phase3_oplog_exhaustion(cluster: MongoClient) -> None:
             if batch % 5 == 0:
                 try:
                     cur_primary, cur_port = find_primary(cluster)
-                    with get_direct_client(cur_port, timeout_ms=5000) as cur_p_client:
+                    sec_port = 27018 if cur_port == 27017 else 27017
+                    with get_direct_client(cur_port, timeout_ms=5000) as cur_p_client, get_direct_client(sec_port, timeout_ms=5000) as sec_client:
                         cur_oplog = cur_p_client.local["oplog.rs"]
                         first_oplog = next(cur_oplog.find().sort("$natural", 1).limit(1))
+                        sec_first = next(sec_client.local["oplog.rs"].find().sort("$natural", 1).limit(1))
                         stats = cur_p_client.local.command("collStats", "oplog.rs")
                         size_mb = stats.get("size", 0) / (1024 * 1024)
                         oldest_ts = first_oplog["ts"]
+                        sec_oldest_ts = sec_first["ts"]
 
                         plain_console.print(f"    [Batch {batch:3d}] Churned {total:4d} ops | Oplog Size: {size_mb:.2f}MB | Oldest Oplog TS: {oldest_ts}")
                         sys.stdout.flush()
 
-                        if oldest_ts > node3_ts:
+                        if oldest_ts > node3_ts and sec_oldest_ts > node3_ts:
                             console.print(
                                 f"\n[bold green][✔] Oplog Window Exceeded: Oldest oplog entry ({oldest_ts}) "
                                 f"has advanced beyond node3's paused timestamp ({node3_ts})![/]"
@@ -525,6 +530,10 @@ def phase3_oplog_exhaustion(cluster: MongoClient) -> None:
                     s3_my_state = s3.get("myState")
                     if s3_my_state == 3:
                         state_str = "RECOVERING"
+                    s3_msgs = [str(m.get("infoMessage", "")) + " " + str(m.get("lastHeartbeatMessage", "")) for m in s3.get("members", [])]
+                    combined_s3_msg = " ".join(s3_msgs).strip()
+                    if not msg and combined_s3_msg:
+                        msg = combined_s3_msg
             except Exception:
                 pass
 
