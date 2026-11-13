@@ -52,6 +52,12 @@ plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 err_console = Console(stderr=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def print_banner(title: str) -> None:
     console.print(f"\n[bold cyan]{'=' * 70}[/]")
     console.print(f"[bold cyan]  {title}[/]")
@@ -176,6 +182,12 @@ def test_dynamic_credentials_lifecycle() -> None:
     lease_duration = creds_resp["lease_duration"]
     renewable = creds_resp["renewable"]
 
+    verify_phase(
+        bool(username) and bool(password) and bool(lease_id) and lease_duration > 0,
+        "Phase 2 Creds Gen",
+        f"expected valid dynamic credentials and positive TTL, got user={username}, lease_id={lease_id}, ttl={lease_duration}",
+    )
+
     console.print(f"[bold green][+] Generated Dynamic Credentials in {gen_duration:.1f}ms:[/]")
     console.print(f"    - Generated Username : [bold magenta]{username}[/]")
     console.print(f"    - Generated Password : [bold magenta][REDACTED {len(password)} chars][/]")
@@ -190,12 +202,19 @@ def test_dynamic_credentials_lifecycle() -> None:
         with conn.cursor() as cur:
             cur.execute("SELECT current_user, session_user;")
             curr_user, sess_user = cur.fetchone()
+            verify_phase(
+                curr_user == username and sess_user == username, "Phase 3 PG Auth", f"expected user '{username}', got curr={curr_user}, sess={sess_user}"
+            )
             console.print("[bold green][+] Authenticated successfully to PostgreSQL![/]")
             plain_console.print(f"    - Current DB User : {curr_user}")
             plain_console.print(f"    - Session User    : {sess_user}")
 
             cur.execute("SELECT classification_level, secret_payload FROM vault_classified_vault;")
-            level, payload = cur.fetchone()
+            row = cur.fetchone()
+            verify_phase(
+                row is not None and bool(row[0]) and bool(row[1]), "Phase 3 PG Read", f"expected classified row from vault_classified_vault, got {row!r}"
+            )
+            level, payload = row
             console.print("[bold green][+] Query Execution Succeeded:[/]")
             plain_console.print(f"    - Classification  : {level}")
             plain_console.print(f"    - Secret Payload  : {payload}")
@@ -208,11 +227,21 @@ def test_dynamic_credentials_lifecycle() -> None:
     console.print(f"[bold green][+] Lease revoked by Vault in {revoke_duration:.1f}ms.[/]")
 
     # Verify lease is purged from Vault
+    lease_purged = False
     try:
         lease_status = client.sys.read_lease(lease_id=lease_id)
         console.print(f"[bold yellow][!] Warning: Lease still returned by Vault: {lease_status}[/]")
     except Exception as exc:
+        lease_purged = True
         console.print(f"[bold green][+] Vault confirmed lease lookup failure (revoked/purged): {escape(str(exc))}[/]")
+    verify_phase(lease_purged, "Phase 4 Lease Purge", f"lease '{lease_id}' still active in Vault after revoke_lease")
+
+    root_conn_str = f"postgresql://{ROOT_PG_USER}:{ROOT_PG_PASS}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    with psycopg.connect(root_conn_str, autocommit=True, connect_timeout=3) as root_conn:
+        with root_conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM pg_roles WHERE rolname = %s;", (username,))
+            role_cnt = cur.fetchone()[0]
+    verify_phase(role_cnt == 0, "Phase 4 PG Role Drop", f"expected PostgreSQL role '{username}' to be dropped after lease revocation, found count={role_cnt}")
 
     print_banner("5. Verification: Prove PostgreSQL Immediately Rejects Revoked User")
     plain_console.print(f"[*] Attempting new connection using revoked username '{username}'...")
@@ -227,9 +256,7 @@ def test_dynamic_credentials_lifecycle() -> None:
         console.print("[bold green][+] Postgres successfully rejected connection attempt![/]")
         console.print(f"    - Error Signature: [bold red]{escape(err_msg)}[/]")
 
-    if not rejected:
-        console.print("[bold red][-] ERROR: Connection succeeded after lease revocation![/]")
-        sys.exit(1)
+    verify_phase(rejected, "Phase 5 Post-Revoke Reject", f"revoked user '{username}' was still able to connect to PostgreSQL")
 
     print_banner("Summary: Dynamic Database Credentials Invariants")
     plain_console.print("  1. No static credentials shared across services or operators.")

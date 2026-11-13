@@ -38,6 +38,12 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def b64e(s: str) -> str:
     return base64.b64encode(s.encode("utf-8")).decode("utf-8")
 
@@ -101,6 +107,14 @@ def main() -> None:
     plain_console.print(f"    Sequential HTTP (200 calls) : {seq_ms:>7.1f}ms ({seq_ops:>7,.0f} records/sec)")
     plain_console.print(f"    Batched API (1 HTTP call)   : {batch_ms:>7.1f}ms ({batch_ops:>7,.0f} records/sec)")
     console.print(f"    Batch Throughput Gain       : [bold green]{speedup:.1f}x Faster[/]")
+    verify_phase(
+        len(seq_ciphertexts) == NUM_RECORDS
+        and len(batch_ciphertexts) == NUM_RECORDS
+        and all(c.startswith("vault:v1:") for c in batch_ciphertexts)
+        and batch_ops > seq_ops,
+        "Phase 1 Transit Batch",
+        f"expected {NUM_RECORDS} v1 ciphertexts and batch_ops ({batch_ops:.1f}) > seq_ops ({seq_ops:.1f})",
+    )
 
     # 3. Part 2: Zero-Downtime Key Rotation & Server-Side Rewrap
     console.print("\n[bold blue][*] Part 2: Zero-Downtime Key Rotation (v1 -> v2) & Rewrapping...[/]")
@@ -110,11 +124,13 @@ def main() -> None:
     # Rotate key to Version 2
     client.secrets.transit.rotate_key(name=KEY_NAME)
     key_info = client.secrets.transit.read_key(name=KEY_NAME)["data"]
+    verify_phase(key_info["latest_version"] == 2, "Phase 2 Key Rotation", f"expected latest_version == 2, got {key_info['latest_version']}")
     plain_console.print(f"    Rotated '{KEY_NAME}' -> Latest Version: v{key_info['latest_version']}")
 
     # Rewrap v1 ciphertext to v2 without exposing plaintext
     rewrap_resp = client.secrets.transit.rewrap_data(name=KEY_NAME, ciphertext=sample_v1)
     sample_v2 = rewrap_resp["data"]["ciphertext"]
+    verify_phase(sample_v2.startswith("vault:v2:"), "Phase 2 Rewrap", f"expected vault:v2 ciphertext prefix, got {sample_v2[:20]}")
     console.print(f"    Rewrapped v2 Ciphertext: [bold green]{sample_v2[:45]}...[/]")
 
     # Enforce minimum decryption version = 2 (deprecating v1 keys after migration)
@@ -133,7 +149,11 @@ def main() -> None:
     plaintext_recovered = b64d(dec_v2["data"]["plaintext"])
     plain_console.print(f"    [✓] Upgraded v2 decrypt valid : '{plaintext_recovered}'")
 
-    assert v1_blocked and plaintext_recovered == "SSN-999-00-0000"
+    verify_phase(
+        v1_blocked and plaintext_recovered == "SSN-999-00-0000",
+        "Phase 2 Deprecation & Decrypt",
+        f"expected v1_blocked=True and recovered plaintext 'SSN-999-00-0000', got v1_blocked={v1_blocked}, recovered={plaintext_recovered!r}",
+    )
 
     console.print("\n" + "=" * 70, style="bold green")
     plain_console.print("SYSTEMS TAKEAWAYS")

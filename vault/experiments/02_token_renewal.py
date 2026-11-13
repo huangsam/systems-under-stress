@@ -44,6 +44,12 @@ plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 err_console = Console(stderr=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def print_banner(title: str) -> None:
     console.print(f"\n[bold cyan]{'=' * 70}[/]")
     console.print(f"[bold cyan]  {title}[/]")
@@ -78,6 +84,11 @@ def test_token_renewal_lifecycle() -> None:
     # Initialize child client with the generated token
     child_client = hvac.Client(url=VAULT_ADDR, token=child_token)
     initial_lookup = child_client.auth.token.lookup_self()["data"]
+    verify_phase(
+        initial_lookup.get("creation_ttl") == 2 and initial_lookup.get("explicit_max_ttl") == 6,
+        "Phase 1 Token Metadata",
+        f"expected creation_ttl=2 and explicit_max_ttl=6, got {initial_lookup}",
+    )
     plain_console.print(f"    - Creation TTL    : {initial_lookup.get('creation_ttl')}s")
     plain_console.print(f"    - Explicit Max TTL: {initial_lookup.get('explicit_max_ttl')}s")
 
@@ -123,9 +134,11 @@ def test_token_renewal_lifecycle() -> None:
             break
 
     print_banner("3. Post-Ceiling Revocation Verification")
-    if not max_ttl_hit:
-        console.print("[bold red][-] FAILURE: Token was never rejected at the explicit_max_ttl boundary.[/]")
-        sys.exit(1)
+    verify_phase(
+        max_ttl_hit and cycle >= 2,
+        "Phase 2 Max TTL Ceiling",
+        f"expected renewal rejection after >= 2 pulses at explicit_max_ttl=6s, got max_ttl_hit={max_ttl_hit}, cycle={cycle}",
+    )
 
     plain_console.print("[*] Waiting 1.5s for Vault background reaper / complete lease purge...")
     time.sleep(1.5)
@@ -140,14 +153,17 @@ def test_token_renewal_lifecycle() -> None:
         console.print("[bold green][+] Token successfully purged and rejected by Vault:[/]")
         plain_console.print(f"    - Error: {exc}")
 
-    assert token_purged, "Expired token was not invalidated by Vault"
+    verify_phase(token_purged, "Phase 3 Child Token Purge", "expired token was still accepted by Vault lookup_self()")
 
     # Also verify from root client lookup
+    root_purged = False
     try:
         client.auth.token.lookup(token=child_token)
         console.print("[bold red][-] Warning: Root client still sees child token in index.[/]")
     except Exception as exc:
+        root_purged = True
         console.print(f"[bold green][+] Root client confirms token no longer exists in Vault: {escape(str(exc))}[/]")
+    verify_phase(root_purged, "Phase 3 Root Token Index", "root token lookup still resolved expired child token")
 
     print_banner("Summary: Token Lifecycle & Max TTL Invariants")
     plain_console.print("  1. Periodic renewal successfully maintains short-lived tokens in memory.")

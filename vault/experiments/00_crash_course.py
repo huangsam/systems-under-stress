@@ -34,6 +34,12 @@ console = Console()
 plain_console = Console(markup=False, highlight=False, soft_wrap=True)
 
 
+def verify_phase(condition: bool, phase: str, detail: str) -> None:
+    if not condition:
+        console.print(f"[bold red][✗] Phase validation failed ({phase}):[/] {escape(detail)}")
+        sys.exit(1)
+
+
 def main() -> None:
     console.print("\n" + "=" * 70, style="bold cyan")
     console.print("[bold green]HashiCorp Vault Crash Course: Secrets Engines, Leases & Diagnostics[/]")
@@ -53,6 +59,7 @@ def main() -> None:
 
     # 1. Health & Server Info
     console.print("[bold blue][*] 1. Server Health & Seal Status[/]")
+    verify_phase(is_init and not is_sealed, "Phase 1 Health", f"expected initialized & unsealed Vault, got init={is_init}, sealed={is_sealed}")
     plain_console.print(f"    Vault Version: {health.get('version')}, Cluster: {health.get('cluster_name')}")
     plain_console.print(f"    Initialized: {is_init}, Sealed: {is_sealed}, Performance Standby: {health.get('performance_standby', False)}")
 
@@ -60,6 +67,7 @@ def main() -> None:
     mounts = client.sys.list_mounted_secrets_engines().get("data", {})
     if "secret/" not in mounts:
         client.sys.enable_secrets_engine(backend_type="kv", path="secret", options={"version": "2"})
+        mounts = client.sys.list_mounted_secrets_engines().get("data", {})
 
     # 2. KV v2 Secrets & Versioning
     console.print("\n[bold blue][*] 2. Versioned Secrets Engine (KV v2 Write & Read)[/]")
@@ -70,6 +78,9 @@ def main() -> None:
     read_v1 = client.secrets.kv.v2.read_secret_version(path=SECRET_PATH)
     v1_data = read_v1["data"]["data"]
     v1_meta = read_v1["data"]["metadata"]
+    verify_phase(
+        v1_meta["version"] >= 1 and v1_data.get("api_key") == "prod_key_alpha_99", "Phase 2 KV v1", f"unexpected v1 payload/meta: {v1_meta}, {v1_data}"
+    )
     plain_console.print(f"    Written Secret v{v1_meta['version']}: {v1_data}")
 
     # Write Version 2
@@ -84,8 +95,15 @@ def main() -> None:
     plain_console.print(f"    Rotated to Secret v{v2_meta['version']}: {v2_data}")
 
     # Read historical Version 1
-    hist_v1 = client.secrets.kv.v2.read_secret_version(path=SECRET_PATH, version=1)
-    plain_console.print(f"    Historical query (v1 api_key): '{hist_v1['data']['data']['api_key']}'")
+    hist_v1 = client.secrets.kv.v2.read_secret_version(path=SECRET_PATH, version=v1_meta["version"])
+    verify_phase(
+        v2_meta["version"] == v1_meta["version"] + 1
+        and v2_data.get("api_key") == "rotated_key_beta_100"
+        and hist_v1["data"]["data"].get("api_key") == "prod_key_alpha_99",
+        "Phase 3 Secret Rotation",
+        f"unexpected v2/historical state: v1={v1_meta['version']}, v2={v2_meta['version']}, hist={hist_v1['data']['data']}",
+    )
+    plain_console.print(f"    Historical query (v{v1_meta['version']} api_key): '{hist_v1['data']['data']['api_key']}'")
 
     # 4. Child Token Creation with TTL
     console.print("\n[bold blue][*] 4. Ephemeral Child Tokens & Lease Metadata[/]")
@@ -97,19 +115,33 @@ def main() -> None:
     # Lookup token self info
     worker_client = hvac.Client(url=VAULT_ADDR, token=client_token)
     token_meta = worker_client.auth.token.lookup_self()["data"]
+    verify_phase(bool(client_token) and token_meta.get("accessor") is not None, "Phase 4 Child Token", "child token self-lookup missing accessor")
     plain_console.print(f"    Token accessor: {token_meta.get('accessor')}, Policies: {token_meta.get('policies')}")
 
     # Revoke child token
     client.auth.token.revoke(token=client_token)
+    token_revoked = False
+    try:
+        worker_client.auth.token.lookup_self()
+    except Exception:
+        token_revoked = True
+    verify_phase(token_revoked, "Phase 4 Revoke", "revoked child token still accepted on lookup_self()")
     plain_console.print("    Revoked child token.")
 
     # 5. Diagnostics
     console.print("\n[bold blue][*] 5. Mounted Secrets Engines & Auth Methods[/]")
+    verify_phase("secret/" in mounts, "Phase 5 Mounts", f"expected 'secret/' in mounts, got {list(mounts.keys())}")
     for path, cfg in mounts.items():
         plain_console.print(f"    - Mount: {path:<15} Type: {cfg.get('type'):<10} Desc: {cfg.get('description', '')}")
 
     # Cleanup
     client.secrets.kv.v2.delete_metadata_and_all_versions(path=SECRET_PATH)
+    secret_deleted = False
+    try:
+        client.secrets.kv.v2.read_secret_version(path=SECRET_PATH)
+    except Exception:
+        secret_deleted = True
+    verify_phase(secret_deleted, "Phase 5 Cleanup", f"expected '{SECRET_PATH}' to be deleted after cleanup")
     plain_console.print(f"    Cleaned up demo secret '{SECRET_PATH}' and all metadata.")
 
     console.print("\n[bold green][✓] HashiCorp Vault Crash Course completed successfully![/]\n")
