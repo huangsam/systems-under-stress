@@ -22,7 +22,7 @@ Instead of generating terabytes of data, each lab squeezes container and engine 
 | [**Cassandra**](./cassandra/) | Crash Course, Tombstone Threshold, PACELC Consistency, Partition Skew | `ReadFailureException` (10k tombstones), Quorum node loss, Partition GC |
 | [**Vault**](./vault/) | Crash Course, Dynamic DB Credentials, Token Leases, Transit EaaS | Synchronous `DROP ROLE` cascade, `max_ttl` expiration, Crypto HTTP batching |
 | [**Linux**](./linux/) | Crash Course, Fork Bomb (`pids.max`), File Descriptors, OOM Killer | `EAGAIN` (`pids.max: 40`), `EMFILE` fd exhaustion, Exit Code 137 (`SIGKILL`) |
-| [**Toxiproxy**](./chaos/) | Crash Course, Latency Injection, Connection Pool Starvation, Silent Drops | Pool timeout (`No connection available`), Retry storms, Half-open TCP hangs |
+| [**Toxiproxy**](./chaos/) | Crash Course, Pool Starvation, Retry Storms vs Backoff, Half-Open TCP Hangs | Pool timeout (`No connection available`), Retry storms, Half-open TCP hangs |
 
 ---
 
