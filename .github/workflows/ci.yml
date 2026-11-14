@@ -56,6 +56,7 @@ jobs:
           - vault
           - linux
           - chaos
+          - kafka
     steps:
       - uses: actions/checkout@v7
 

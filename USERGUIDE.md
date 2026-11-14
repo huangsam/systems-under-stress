@@ -51,6 +51,11 @@ Rather than studying one engine in isolation, group experiments by the failure d
 - **MongoDB:**
   - [`02_write_concern_crash.py`](./mongodb/experiments/02_write_concern_crash.py): Unjournaled `w:1` crash data loss vs `w:majority`
   - [`04_replica_set_elections.py`](./mongodb/experiments/04_replica_set_elections.py): Primary stepdown failover loss and oplog exhaustion (`RECOVERING`)
+- **Kafka:**
+  - [`01_rebalance_storms.py`](./kafka/experiments/01_rebalance_storms.py): `max.poll.interval.ms` breach triggering stop-the-world rebalance storms vs `cooperative-sticky`
+  - [`02_offset_commit_pitfalls.py`](./kafka/experiments/02_offset_commit_pitfalls.py): `enable.auto.commit=True` mid-batch data loss vs manual commit + poison-pill DLQ
+  - [`03_partition_skew_and_lag.py`](./kafka/experiments/03_partition_skew_and_lag.py): Hot-key partition skew and consumer lag vs salted key parallelism
+  - [`04_acks_and_insync_replicas.py`](./kafka/experiments/04_acks_and_insync_replicas.py): `acks=all` + `min.insync.replicas=2` (`NOT_ENOUGH_REPLICAS`) vs `acks=1` failover data loss
 
 ### Track C: Storage Engines, Query Execution & Data Modeling
 *Focus: How on-disk layouts and query planners fail under load*
@@ -95,7 +100,7 @@ Summarize each completed lab in ~45 seconds using the **Constraint → Failure S
 | Days | Focus | Labs |
 | :--- | :--- | :--- |
 | **1–3** | Track A: Caching & Gray Failures | `redis/`, `chaos/` |
-| **4–6** | Track B: Consistency & Replication | `postgres/`, `mongodb/`, `cassandra/` (`02`) |
+| **4–6** | Track B: Consistency & Replication | `postgres/`, `mongodb/`, `cassandra/` (`02`), `kafka/` |
 | **7–9** | Track C: Storage & Query Execution | `clickhouse/`, `cassandra/` (`01`, `03`), `mongodb/` (`01`, `03`) |
 | **10–11** | Track D: OS Limits & Secrets Infra | `linux/`, `vault/` |
 | **12–14** | **Recall Check** | Pick 5 random experiments from [`README.md`](./README.md); write down the failure signature, root cause, and fix in 3 minutes each without looking at the code. Re-run any you miss. |

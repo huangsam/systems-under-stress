@@ -1,6 +1,6 @@
 .PHONY: help lint format compose-lint test-compose verify verify-all clean-all
 
-LABS := redis postgres clickhouse mongodb cassandra vault linux chaos
+LABS := redis postgres clickhouse mongodb cassandra vault linux chaos kafka
 LAB ?= redis
 
 help:

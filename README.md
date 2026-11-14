@@ -3,7 +3,7 @@
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/huangsam/systems-under-stress/ci.yml)](https://github.com/huangsam/systems-under-stress/actions)
 [![License](https://img.shields.io/github/license/huangsam/systems-under-stress)](https://github.com/huangsam/systems-under-stress/blob/main/LICENSE)
 
-Docker and Python labs for breaking 8 databases and infrastructure tools on purpose.
+Docker and Python labs for breaking 9 databases and infrastructure tools on purpose.
 
 Instead of generating terabytes of data, each lab squeezes container and engine resource limits to trigger real production failure modes in seconds on a laptop.
 
@@ -11,7 +11,7 @@ Instead of generating terabytes of data, each lab squeezes container and engine 
 
 ---
 
-## Lab Matrix (36 Reproducible Scripts Across 8 Labs)
+## Lab Matrix (41 Reproducible Scripts Across 9 Labs)
 
 | Engine / Lab | Experiments | Primary Failure Signatures Reproduced |
 | :--- | :--- | :--- |
@@ -23,6 +23,7 @@ Instead of generating terabytes of data, each lab squeezes container and engine 
 | [**Vault**](./vault/) | Crash Course, Dynamic DB Credentials, Token Leases, Transit EaaS | Synchronous `DROP ROLE` cascade, `max_ttl` expiration, Crypto HTTP batching |
 | [**Linux**](./linux/) | Crash Course, Fork Bomb (`pids.max`), File Descriptors, OOM Killer | `EAGAIN` (`pids.max: 40`), `EMFILE` fd exhaustion, Exit Code 137 (`SIGKILL`) |
 | [**Toxiproxy**](./chaos/) | Crash Course, Pool Starvation, Retry Storms vs Backoff, Half-Open TCP Hangs | Pool timeout (`No connection available`), Retry storms, Half-open TCP hangs |
+| [**Kafka**](./kafka/) | Crash Course, Rebalance Storms, Offset Commit Pitfalls, Partition Skew & Lag, `acks` & ISR | Stop-the-world rebalance, Auto-commit data loss, Poison-pill block, Hot-key lag, `NOT_ENOUGH_REPLICAS` & `acks=1` loss |
 
 ---
 
