@@ -37,7 +37,7 @@ clean:
 	docker compose --profile "*" down -v
 
 soft-reset:
-	docker compose exec -T $(EXP) redis-cli FLUSHALL || uv run -s -c 'import redis; redis.Redis(host="127.0.0.1", port=6379).flushall()'
+	docker compose exec -T $(EXP) redis-cli FLUSHALL 2>/dev/null || uv run -q --with redis python -c 'import redis; redis.Redis(host="127.0.0.1", port=6379).flushall()'
 	@echo "==> Redis keys flushed."
 
 run:
