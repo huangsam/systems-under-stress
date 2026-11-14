@@ -1,10 +1,15 @@
-.PHONY: help lint format compose-lint test-compose clean-all
+.PHONY: help lint format compose-lint test-compose verify verify-all clean-all
+
+LABS := redis postgres clickhouse mongodb cassandra neo4j vault linux chaos
+LAB ?= redis
 
 help:
 	@echo "Systems Under Stress - Root Workspace Targets:"
 	@echo "  make lint         Check code formatting and linting (ruff)"
 	@echo "  make format       Auto-format Python files (ruff)"
 	@echo "  make compose-lint Validate Docker Compose configurations across all labs"
+	@echo "  make verify       Run end-to-end verification for LAB=<name> (default: redis)"
+	@echo "  make verify-all   Run end-to-end verification across all labs"
 	@echo "  make clean-all    Tear down and wipe named volumes across all labs"
 
 lint:
@@ -16,7 +21,7 @@ format:
 	uvx ruff format .
 
 compose-lint:
-	@for d in redis postgres clickhouse mongodb cassandra neo4j vault linux chaos; do \
+	@for d in $(LABS); do \
 		echo "Validating $$d/docker-compose.yml..."; \
 		(cd $$d && docker compose --profile "*" config -q) || exit 1; \
 	done
@@ -26,8 +31,17 @@ compose-lint:
 
 test-compose: compose-lint
 
+verify:
+	$(MAKE) -C $(LAB) verify
+
+verify-all:
+	@for d in $(LABS); do \
+		echo "=== Verifying $$d ==="; \
+		$(MAKE) -C $$d verify || exit 1; \
+	done
+
 clean-all:
-	@for d in redis postgres clickhouse mongodb cassandra neo4j vault linux chaos; do \
+	@for d in $(LABS); do \
 		echo "Cleaning $$d..."; \
 		(cd $$d && docker compose --profile "*" down -v --remove-orphans); \
 	done

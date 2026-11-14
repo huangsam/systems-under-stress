@@ -2,7 +2,7 @@
 EXP ?= traversal-depth
 SCRIPT ?= 01_unbounded_path
 
-.PHONY: help up down clean soft-reset run cypher-shell logs
+.PHONY: help up down clean soft-reset run cypher-shell logs verify
 
 help:
 	@echo "Neo4j Experiments Harness"
@@ -10,6 +10,7 @@ help:
 	@echo "Usage:"
 	@echo "  make up EXP=<profile>       Start container for profile and wait until healthy"
 	@echo "  make run SCRIPT=<name>      Run test script via 'uv run experiments/<name>.py'"
+	@echo "  make verify                 Run end-to-end verification across all profiles"
 	@echo "  make soft-reset EXP=<prof>  Wipe all nodes and relationships (sub-second reset)"
 	@echo "  make down EXP=<profile>     Stop and wipe volume for specific profile"
 	@echo "  make clean                  Stop all profiles and wipe all lab volumes"
@@ -42,3 +43,23 @@ cypher-shell:
 
 logs:
 	docker compose logs -f $(EXP)
+
+VERIFY_CASES = \
+	traversal-depth:00_crash_course,01_unbounded_path \
+	supernode:02_supernode \
+	compare-sql:03_cypher_vs_recursive_sql
+
+verify:
+	@set -e; \
+	for spec in $(VERIFY_CASES); do \
+		p=$${spec%%:*}; scripts=$${spec#*:}; \
+		echo "==> Verifying neo4j [$$p] -> $$scripts"; \
+		$(MAKE) up EXP=$$p; \
+		rc=0; \
+		for s in $$(echo "$$scripts" | tr ',' ' '); do \
+			echo "--> Running $$s (profile=$$p)"; \
+			$(MAKE) run EXP=$$p SCRIPT=$$s || { rc=$$?; break; }; \
+		done; \
+		$(MAKE) down EXP=$$p || true; \
+		[ $$rc -eq 0 ] || exit $$rc; \
+	done

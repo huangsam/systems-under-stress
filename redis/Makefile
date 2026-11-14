@@ -3,7 +3,7 @@
 EXP ?= eviction-lru
 SCRIPT ?= 01_eviction
 
-.PHONY: help up down clean soft-reset run monitor logs
+.PHONY: help up down clean soft-reset run monitor logs verify
 
 help:
 	@echo "Redis Experiments Harness"
@@ -11,6 +11,7 @@ help:
 	@echo "Usage:"
 	@echo "  make up EXP=<profile>       Start container for profile and wait until healthy"
 	@echo "  make run SCRIPT=<name>      Run test script via 'uv run experiments/<name>.py'"
+	@echo "  make verify                 Run end-to-end verification across all profiles"
 	@echo "  make monitor                Stream live Redis memory and eviction metrics"
 	@echo "  make soft-reset             Flush all keys in-memory (sub-second reset)"
 	@echo "  make down EXP=<profile>     Stop and wipe volume for specific profile"
@@ -47,3 +48,27 @@ monitor:
 
 logs:
 	docker compose logs -f $(EXP)
+
+VERIFY_CASES = \
+	eviction-lru:00_crash_course,01_eviction \
+	eviction-noeviction:01_eviction \
+	eviction-lfu:01_eviction \
+	stampede:02_stampede \
+	persistence-rdb:03_persistence \
+	persistence-aof:03_persistence \
+	persistence-always:03_persistence
+
+verify:
+	@set -e; \
+	for spec in $(VERIFY_CASES); do \
+		p=$${spec%%:*}; scripts=$${spec#*:}; \
+		echo "==> Verifying redis [$$p] -> $$scripts"; \
+		$(MAKE) up EXP=$$p; \
+		rc=0; \
+		for s in $$(echo "$$scripts" | tr ',' ' '); do \
+			echo "--> Running $$s (profile=$$p)"; \
+			$(MAKE) run EXP=$$p SCRIPT=$$s || { rc=$$?; break; }; \
+		done; \
+		$(MAKE) down EXP=$$p || true; \
+		[ $$rc -eq 0 ] || exit $$rc; \
+	done

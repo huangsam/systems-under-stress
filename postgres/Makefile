@@ -4,7 +4,7 @@ SCRIPT ?= 01_isolation
 
 TARGET_SVC = $(if $(filter replication,$(EXP)),postgres-primary,$(EXP))
 
-.PHONY: help up down clean soft-reset run psql logs
+.PHONY: help up down clean soft-reset run psql logs verify
 
 help:
 	@echo "PostgreSQL Experiments Harness"
@@ -12,6 +12,7 @@ help:
 	@echo "Usage:"
 	@echo "  make up EXP=<profile>       Start container for profile and wait until healthy"
 	@echo "  make run SCRIPT=<name>      Run test script via 'uv run experiments/<name>.py'"
+	@echo "  make verify                 Run end-to-end verification across all profiles"
 	@echo "  make soft-reset             Re-seed tables via init.sql (fast reset)"
 	@echo "  make down EXP=<profile>     Stop and wipe volume for specific profile"
 	@echo "  make clean                  Stop all profiles and wipe all lab volumes"
@@ -45,3 +46,24 @@ psql:
 
 logs:
 	docker compose logs -f $(TARGET_SVC)
+
+VERIFY_CASES = \
+	isolation:00_crash_course,01_isolation \
+	locks:02_locks \
+	work-mem:03_work_mem \
+	replication:04_replication_conflicts
+
+verify:
+	@set -e; \
+	for spec in $(VERIFY_CASES); do \
+		p=$${spec%%:*}; scripts=$${spec#*:}; \
+		echo "==> Verifying postgres [$$p] -> $$scripts"; \
+		$(MAKE) up EXP=$$p; \
+		rc=0; \
+		for s in $$(echo "$$scripts" | tr ',' ' '); do \
+			echo "--> Running $$s (profile=$$p)"; \
+			$(MAKE) run EXP=$$p SCRIPT=$$s || { rc=$$?; break; }; \
+		done; \
+		$(MAKE) down EXP=$$p || true; \
+		[ $$rc -eq 0 ] || exit $$rc; \
+	done

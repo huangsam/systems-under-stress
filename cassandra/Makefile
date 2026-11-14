@@ -2,7 +2,7 @@
 EXP ?= tombstones
 SCRIPT ?= 01_tombstone_threshold
 
-.PHONY: help up down clean soft-reset run cqlsh nodetool logs
+.PHONY: help up down clean soft-reset run cqlsh nodetool logs verify
 
 help:
 	@echo "Cassandra Operational Limits Lab Harness"
@@ -10,6 +10,7 @@ help:
 	@echo "Usage:"
 	@echo "  make up EXP=<profile>       Start container(s) for profile and wait until healthy"
 	@echo "  make run SCRIPT=<name>      Run Python test script via 'uv run experiments/<name>.py'"
+	@echo "  make verify                 Run end-to-end verification across all profiles"
 	@echo "  make soft-reset             Truncate lab tables (fast reset without cold-boot penalty)"
 	@echo "  make down EXP=<profile>     Stop and wipe volumes for specific profile"
 	@echo "  make clean                  Stop all profiles and wipe all lab volumes"
@@ -53,3 +54,23 @@ run:
 
 logs:
 	docker compose --profile $(EXP) logs -f
+
+VERIFY_CASES = \
+	tombstones:00_crash_course,01_tombstone_threshold \
+	cluster-consistency:02_consistency_levels \
+	wide-partitions:03_partition_skew
+
+verify:
+	@set -e; \
+	for spec in $(VERIFY_CASES); do \
+		p=$${spec%%:*}; scripts=$${spec#*:}; \
+		echo "==> Verifying cassandra [$$p] -> $$scripts"; \
+		$(MAKE) up EXP=$$p; \
+		rc=0; \
+		for s in $$(echo "$$scripts" | tr ',' ' '); do \
+			echo "--> Running $$s (profile=$$p)"; \
+			$(MAKE) run EXP=$$p SCRIPT=$$s || { rc=$$?; break; }; \
+		done; \
+		$(MAKE) down EXP=$$p || true; \
+		[ $$rc -eq 0 ] || exit $$rc; \
+	done

@@ -27,7 +27,7 @@ services:
       resources:
         limits:
           cpus: '0.5'
-          memory: 64M
+          memory: 128M
           pids: 40
 
   # Profile: fd-exhaustion - Exp 02: File Descriptor & Inode Limits

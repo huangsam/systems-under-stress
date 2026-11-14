@@ -7,7 +7,7 @@ PROFILE_02_fd_limits = fd-exhaustion
 PROFILE_03_oom_killer = oom-killer
 EXP ?= $(or $(PROFILE_$(SCRIPT)),pid-limit)
 
-.PHONY: help up down clean run sh logs ps
+.PHONY: help up down clean run sh logs ps verify
 
 help:
 	@echo "Linux Kernel & Container Limits Lab"
@@ -16,6 +16,7 @@ help:
 	@echo "  make up EXP=<profile>                 Start container for profile with cgroup limits"
 	@echo "  make run SCRIPT=<name>                Run script in its matching profile container"
 	@echo "  make run EXP=<profile> SCRIPT=<name>  Override the script's matching profile"
+	@echo "  make verify                           Run end-to-end verification across all profiles"
 	@echo "  make sh EXP=<profile>                 Open interactive shell inside container"
 	@echo "  make logs EXP=<profile>               Follow container logs"
 	@echo "  make down EXP=<profile>               Stop and remove container for profile"
@@ -49,3 +50,23 @@ run:
 
 logs:
 	docker compose --profile $(EXP) logs -f $(EXP)
+
+VERIFY_CASES = \
+	pid-limit:00_crash_course,01_fork_bomb_cgroup \
+	fd-exhaustion:02_fd_limits \
+	oom-killer:03_oom_killer
+
+verify:
+	@set -e; \
+	for spec in $(VERIFY_CASES); do \
+		p=$${spec%%:*}; scripts=$${spec#*:}; \
+		echo "==> Verifying linux [$$p] -> $$scripts"; \
+		$(MAKE) up EXP=$$p; \
+		rc=0; \
+		for s in $$(echo "$$scripts" | tr ',' ' '); do \
+			echo "--> Running $$s (profile=$$p)"; \
+			$(MAKE) run EXP=$$p SCRIPT=$$s || { rc=$$?; break; }; \
+		done; \
+		$(MAKE) down EXP=$$p || true; \
+		[ $$rc -eq 0 ] || exit $$rc; \
+	done

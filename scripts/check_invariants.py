@@ -13,7 +13,7 @@ Validates all labs against repository safety, architecture, and documentation in
 4. No sensitive host mounts: Volume mounts must be named volumes or relative paths within the lab folder.
 5. Isolated named volumes: Stateful volumes must not be shared across distinct profiles.
 6. Self-contained PEP 723 metadata on all experiments/[0-9][0-9]_*.py scripts, plus 00_crash_course.py presence.
-7. Required Makefile targets (help, up, run, down, clean, logs, plus soft-reset where applicable).
+7. Required Makefile targets (help, up, run, verify, down, clean, logs, plus soft-reset where applicable).
 8. Canonical lab README.md structure, complete profile & script coverage, no hardcoded image tags, and accurate root README counts.
 """
 
@@ -37,7 +37,7 @@ COMPOSE_FILES = sorted(REPO_ROOT.glob("*/docker-compose.yml"))
 SENSITIVE_PREFIXES = ("/", "~", "/var/run/docker.sock")
 
 STATELESS_NO_SOFT_RESET_LABS = {"linux", "vault"}
-REQUIRED_MAKE_TARGETS = {"help", "up", "run", "down", "clean", "logs"}
+REQUIRED_MAKE_TARGETS = {"help", "up", "run", "verify", "down", "clean", "logs"}
 
 REQUIRED_EXPERIMENT_SUBSECTIONS = [
     "### 1. Hypothesis & Objective",

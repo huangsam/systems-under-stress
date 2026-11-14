@@ -11,7 +11,7 @@ else
 SERVICE = vault-dynamic
 endif
 
-.PHONY: help up down clean run vault-cli logs
+.PHONY: help up down clean run vault-cli logs verify
 
 help:
 	@echo "HashiCorp Vault Experiments Harness"
@@ -19,6 +19,7 @@ help:
 	@echo "Usage:"
 	@echo "  make up EXP=<profile>       Start containers for profile and wait until healthy"
 	@echo "  make run SCRIPT=<name>      Run test script via 'uv run experiments/<name>.py'"
+	@echo "  make verify                 Run end-to-end verification across all profiles"
 	@echo "  make down EXP=<profile>     Stop and wipe volume for specific profile"
 	@echo "  make clean                  Stop all profiles and wipe all lab volumes"
 	@echo "  make vault-cli CMD=<args>   Run vault CLI inside the active container (default: status)"
@@ -46,3 +47,23 @@ vault-cli:
 
 logs:
 	docker compose logs -f
+
+VERIFY_CASES = \
+	dynamic-creds:00_crash_course,01_dynamic_db_creds \
+	token-lifecycle:02_token_renewal \
+	transit-crypto:03_transit_throughput
+
+verify:
+	@set -e; \
+	for spec in $(VERIFY_CASES); do \
+		p=$${spec%%:*}; scripts=$${spec#*:}; \
+		echo "==> Verifying vault [$$p] -> $$scripts"; \
+		$(MAKE) up EXP=$$p; \
+		rc=0; \
+		for s in $$(echo "$$scripts" | tr ',' ' '); do \
+			echo "--> Running $$s (profile=$$p)"; \
+			$(MAKE) run EXP=$$p SCRIPT=$$s || { rc=$$?; break; }; \
+		done; \
+		$(MAKE) down EXP=$$p || true; \
+		[ $$rc -eq 0 ] || exit $$rc; \
+	done

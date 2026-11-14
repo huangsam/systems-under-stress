@@ -28,7 +28,7 @@ from rich.console import Console
 from rich.markup import escape
 
 HOT_KEY = "product:trending:42"
-DB_COMPUTE_DELAY = 0.05  # 50ms simulated database query latency
+DB_COMPUTE_DELAY = 0.2  # 200ms simulated database query latency
 CONCURRENT_REQUESTS = 100
 
 
