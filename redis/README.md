@@ -17,7 +17,8 @@ redis/
 │   ├── 00_crash_course.py   # Core data structures, pipelining & INFO diagnostics
 │   ├── 01_eviction.py       # Stress memory limits & compare eviction policies
 │   ├── 02_stampede.py       # Cache stampede & locking fixes
-│   └── 03_persistence.py    # AOF vs RDB crash durability
+│   ├── 03_persistence.py    # AOF vs RDB crash durability
+│   └── 04_event_loop_blocking.py  # Single-threaded stalls (KEYS/DEL vs SCAN/UNLINK)
 └── README.md
 ```
 
@@ -181,6 +182,39 @@ make clean
 1. **Never rely on RDB alone for critical state**: RDB snapshots are great for cold backups and fast replica initialization, but fatal for disaster recovery because point-in-time snapshots lose up to 60+ seconds of confirmed user writes.
 2. **`appendfsync everysec` is the industry golden mean**: It delivers almost 85% of the raw in-memory write performance of RDB while bounding the worst-case disaster recovery blast radius to at most 1 second of transactions.
 3. **`appendfsync always` turns Redis into a disk engine**: Synchronous `fsync` slashes throughput from ~80k writes/sec to ~36k writes/sec even on fast local NVMe SSDs.
+
+---
+
+## Experiment 04: Event Loop Blocking (`KEYS` / `DEL` vs. `SCAN` / `UNLINK`)
+
+### 1. Hypothesis & Objective
+- Redis executes commands sequentially on a **single main event-loop thread**.
+- Blocking `O(N)` commands (`KEYS *`) and synchronous deallocation of large keys (`DEL` on a 250k-field hash) stall unrelated concurrent `PING` / read requests on the same server.
+- Incremental `SCAN` and asynchronous `UNLINK` (lazy-free background thread) keep concurrent `PING` tail latency low.
+
+### 2. Configuration & Limits
+- **Compose Profile**: `stampede` (`memory: 64M` container cap, `64MB` `maxmemory` in [`docker-compose.yml`](./docker-compose.yml))
+- **Workload**: 40,000 string keys (`KEYS` vs `SCAN count=500`) and two 250,000-field hashes (`DEL` vs `UNLINK`), probed concurrently with `PING` every `5ms`.
+
+### 3. How to Run
+```bash
+make up EXP=stampede
+make run SCRIPT=04_event_loop_blocking
+make soft-reset
+```
+
+### 4. Observed Metrics & Failure Signatures
+
+| Operation | Op Duration | Avg `PING` | Max `PING` (Stall) |
+|---|---|---|---|
+| **`KEYS item:*` (blocking)** | `21.7 ms` | `2.05 ms` | **`8.1 ms`** |
+| **`SCAN count=500` (incremental)** | `88.2 ms` | `1.02 ms` | **`4.2 ms`** |
+| **`DEL big:hash:del` (sync free)** | `26.3 ms` | `4.66 ms` | **`26.4 ms`** |
+| **`UNLINK big:hash:unlink` (async)** | `0.8 ms` | `1.04 ms` | **`2.7 ms`** |
+
+### 5. Production & Systems Takeaways
+1. **Never Run `KEYS *` in Production**: Always use `SCAN` with bounded `COUNT` so the event loop can interleave normal client requests between cursor iterations.
+2. **Use `UNLINK` for Large Keys**: `DEL` frees memory synchronously on the main thread; `UNLINK` removes the key from the keyspace in `O(1)` and reclaims memory asynchronously.
 
 ---
 

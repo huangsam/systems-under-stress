@@ -49,7 +49,7 @@ logs:
 
 VERIFY_CASES = \
 	isolation:00_crash_course,01_isolation \
-	locks:02_locks \
+	locks:02_locks,05_lock_queues \
 	work-mem:03_work_mem \
 	replication:04_replication_conflicts
 

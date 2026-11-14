@@ -53,7 +53,7 @@ VERIFY_CASES = \
 	eviction-lru:00_crash_course,01_eviction \
 	eviction-noeviction:01_eviction \
 	eviction-lfu:01_eviction \
-	stampede:02_stampede \
+	stampede:02_stampede,04_event_loop_blocking \
 	persistence-rdb:03_persistence \
 	persistence-aof:03_persistence \
 	persistence-always:03_persistence

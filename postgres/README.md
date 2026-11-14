@@ -20,7 +20,8 @@ postgres/
 │   ├── 01_isolation.py                 # Dirty reads & Write Skew (Repeatable Read vs Serializable)
 │   ├── 02_locks.py                     # Hot row lock queues & deadlock detection
 │   ├── 03_work_mem.py                  # Sort spill-to-disk on low work_mem
-│   └── 04_replication_conflicts.py     # Streaming replication lag, query conflict aborts & remediation
+│   ├── 04_replication_conflicts.py     # Streaming replication lag, query conflict aborts & remediation
+│   └── 05_lock_queues.py               # Migration ACCESS EXCLUSIVE lock queue pileup & lock_timeout
 └── README.md
 ```
 
@@ -208,6 +209,37 @@ make down EXP=replication
    - Setting a low delay (e.g., `1s` to `30s`) protects replication freshness but causes frequent cancellations of analytical reporting queries on read replicas.
    - Setting a high delay (or `-1` for unlimited) protects long-running queries but allows replication lag to grow unboundedly, delaying replica freshness and failover readiness.
 3. **`hot_standby_feedback` Costs**: Enabling `hot_standby_feedback = on` completely eliminates snapshot conflicts, but shifts the cost to the primary: long-running analytical queries on replicas prevent the primary from vacuuming dead tuples, causing primary table bloat and WAL bloat.
+
+---
+
+## Experiment 05: Migration Lock Queues (`ACCESS EXCLUSIVE` Pileup)
+
+### 1. Hypothesis & Objective
+- A fast `ALTER TABLE` requires an `ACCESS EXCLUSIVE` lock, which conflicts with every lock mode—including `ACCESS SHARE` held by a long-running `SELECT`.
+- Because PostgreSQL grants table locks in a **FIFO queue**, any subsequent normal `SELECT` or `INSERT` (even though compatible with the running reader) queues behind the waiting `ALTER TABLE` and stalls until the long reader finishes.
+- Setting `SET LOCAL lock_timeout = '200ms'` forces the migration to abort fast (`SQLSTATE 55P03`) instead of blocking application traffic.
+
+### 2. Configuration & Limits
+- **Compose Profile**: `locks` (`postgres-locks-1`, capped at `memory: 256M`, `cpus: '1.0'` in [`docker-compose.yml`](./docker-compose.yml))
+- **Contention Pattern**: 1 long-running `SELECT` (2.5s), 1 `ALTER TABLE ... ADD COLUMN`, and 4 concurrent `SELECT`/`INSERT` workers.
+
+### 3. How to Run
+```bash
+make up EXP=locks
+make run SCRIPT=05_lock_queues
+make soft-reset
+```
+
+### 4. Observed Metrics & Failure Signatures
+
+| Scenario | App Workers OK | Min Worker Latency | Max Worker Latency | Signature |
+|---|---|---|---|---|
+| **Unbounded `ALTER TABLE`** | `4/4` | `2283.9 ms` | `2284.6 ms` | `wait_event = 'relation'` (`pg_blocking_pids` points to `ALTER TABLE`) |
+| **`SET LOCAL lock_timeout='200ms'`** | `4/4` | `11.3 ms` | `12.6 ms` | Migration aborts in `211.8 ms` (`SQLSTATE 55P03` `LockNotAvailable`) |
+
+### 5. Production & Systems Takeaways
+1. **Always Set `lock_timeout` on DDL**: Never run `ALTER TABLE` in production without `SET LOCAL lock_timeout` (typically `100ms`–`2s`) wrapped in a retry loop with backoff.
+2. **Avoid `DEFAULT` Rewrites or Heavy Locks Under Load**: Even metadata-only `ALTER TABLE` operations briefly need `ACCESS EXCLUSIVE`; a single slow analytics query on the same table can trigger a site-wide outage.
 
 ---
 

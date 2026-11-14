@@ -11,12 +11,12 @@ Instead of generating terabytes of data, each lab squeezes container and engine 
 
 ---
 
-## Lab Matrix (34 Reproducible Scripts Across 8 Labs)
+## Lab Matrix (36 Reproducible Scripts Across 8 Labs)
 
 | Engine / Lab | Experiments | Primary Failure Signatures Reproduced |
 | :--- | :--- | :--- |
-| [**Redis**](./redis/) | Crash Course, Eviction (`maxmemory`), Cache Stampede, Crash Durability | `OOM command not allowed`, Thundering herd (100x), `SIGKILL` data loss |
-| [**PostgreSQL**](./postgres/) | Crash Course, Isolation Levels, Row Locks, Sort `work_mem`, Streaming Replication | Write skew (`REPEATABLE READ`), Deadlock `40P01`, Disk spill, Standby query conflict `40001` |
+| [**Redis**](./redis/) | Crash Course, Eviction (`maxmemory`), Cache Stampede, Crash Durability, Event Loop Blocking | `OOM command not allowed`, Thundering herd (100x), `SIGKILL` data loss, Main-thread stalls |
+| [**PostgreSQL**](./postgres/) | Crash Course, Isolation Levels, Row Locks, Sort `work_mem`, Streaming Replication, Migration Lock Queues | Write skew (`REPEATABLE READ`), Deadlock `40P01`, Disk spill, Standby conflict `40001`, `55P03` lock queue pileup |
 | [**ClickHouse**](./clickhouse/) | Crash Course, Parts Explosion, Analytical Memory Cap, Columnar Codecs | `Code: 252 TOO_MANY_PARTS`, `Code: 241 MEMORY_LIMIT_EXCEEDED` |
 | [**MongoDB**](./mongodb/) | Crash Course, In-Memory Sort Limit, Write Concern Crash, Document Size, Replica Set Elections | Sort exceeded 100MB (Code 96), Unjournaled crash loss, 16MB BSON cap, Stepdown failover loss, Oplog exhaustion (`RECOVERING`) |
 | [**Cassandra**](./cassandra/) | Crash Course, Tombstone Threshold, PACELC Consistency, Partition Skew | `ReadFailureException` (10k tombstones), Quorum node loss, Partition GC |
