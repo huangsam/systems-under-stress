@@ -64,14 +64,19 @@ def ensure_container_ready() -> MongoClient:
     except (subprocess.CalledProcessError, FileNotFoundError) as err:
         console.print(f"[bold yellow][Notice] Docker command execution issue: {escape(str(err))}[/]")
 
-    # Connect with timeout
-    for attempt in range(1, 15):
+    # Connect within deadline
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        timeout_ms = min(2000, max(200, int(remaining * 1000)))
         try:
-            client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+            client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=timeout_ms)
             client.admin.command("ping")
             return client
         except ConnectionFailure:
-            time.sleep(1)
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(1.0, remaining))
 
     console.print("[bold red][ERROR] Unable to connect to MongoDB on 127.0.0.1:27017.[/]")
     plain_console.print("Please ensure the durability container is up:")

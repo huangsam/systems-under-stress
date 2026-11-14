@@ -142,13 +142,16 @@ def main() -> None:
     # Reconnect
     client = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
     reconnected = False
-    for _ in range(10):
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
         try:
             if client.ping():
                 reconnected = True
                 break
         except redis.ConnectionError:
-            time.sleep(0.5)
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(0.5, remaining))
     verify_phase(reconnected, "Phase 3: Restart & Reconnect", "Failed to reconnect to Redis after SIGKILL restart")
 
     # Phase 4: Audit recovered data

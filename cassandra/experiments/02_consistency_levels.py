@@ -83,7 +83,10 @@ def wait_for_coordinator() -> Cluster:
         request_timeout=15.0,
         load_balancing_policy=WhiteListRoundRobinPolicy([HOST]),
     )
-    for attempt in range(1, 45):
+    deadline = time.monotonic() + 90.0
+    attempt = 0
+    while time.monotonic() < deadline:
+        attempt += 1
         try:
             cluster = Cluster(
                 contact_points=[HOST],
@@ -97,13 +100,17 @@ def wait_for_coordinator() -> Cluster:
                 log(f"Waiting for peer nodes to join cluster ({len(peers)}/2 peers discovered)...", "[dim]")
                 session.shutdown()
                 cluster.shutdown()
-                time.sleep(3)
+                remaining = deadline - time.monotonic()
+                if remaining > 0:
+                    time.sleep(min(3.0, remaining))
                 continue
             log(f"Connected to Cassandra coordinator with {len(peers) + 1} cluster nodes active (attempt {attempt}).", "[bold green]")
             return cluster
         except Exception:
-            time.sleep(2)
-    log("Failed to connect to Cassandra cluster. Make sure 'make up EXP=cluster-consistency' is running.", "[bold red]")
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(2.0, remaining))
+    log("Failed to connect to Cassandra cluster before deadline (90s). Make sure 'make up EXP=cluster-consistency' is running.", "[bold red]")
     sys.exit(1)
 
 
@@ -244,15 +251,18 @@ def run_experiment() -> None:
 
         log("Waiting for nodes to rejoin gossip ring...", "[dim]")
         healed = False
-        for _ in range(15):
-            time.sleep(3)
+        heal_deadline = time.monotonic() + 45.0
+        while time.monotonic() < heal_deadline:
+            remaining = heal_deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(3.0, remaining))
             # Test if ALL can pass again
             success, _, _ = test_write_read(session, ConsistencyLevel.ALL, 999, "ALL")
             if success:
                 healed = True
                 log("Cluster fully recovered! All 3 replicas responding.", "[bold green]")
                 break
-        verify_phase(healed, "Phase 4: Cluster Healing", "Cluster did not heal all 3 replicas within timeout")
+        verify_phase(healed, "Phase 4: Cluster Healing", "Cluster did not heal all 3 replicas within deadline (45s)")
 
         res4 = evaluate_levels(session, "3 Nodes Alive (After Healing)", 400)
         verify_phase(

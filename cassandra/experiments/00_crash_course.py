@@ -52,17 +52,24 @@ def main() -> None:
 
     session = None
     cluster = None
-    for attempt in range(1, 25):
+    deadline = time.monotonic() + 60.0
+    last_err: Exception | None = None
+    while time.monotonic() < deadline:
         try:
             cluster = Cluster([HOST], port=PORT, connect_timeout=5.0)
             session = cluster.connect()
             break
         except Exception as e:
-            if attempt == 24:
-                console.print(f"[bold red][!] Connection failed: {escape(str(e))}[/]")
-                plain_console.print("Start the lab container first: cd cassandra && make up EXP=tombstones")
-                sys.exit(1)
-            time.sleep(2)
+            last_err = e
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(2.0, remaining))
+
+    if session is None:
+        console.print(f"[bold red][!] Connection failed: {escape(str(last_err))}[/]")
+        plain_console.print("Start the lab container first: cd cassandra && make up EXP=tombstones")
+        sys.exit(1)
 
     try:
         # 1. Cluster Metadata & Connectivity

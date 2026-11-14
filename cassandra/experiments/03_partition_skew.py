@@ -64,7 +64,8 @@ def wait_for_cassandra() -> Cluster:
         request_timeout=60.0,
         load_balancing_policy=WhiteListRoundRobinPolicy([HOST]),
     )
-    for attempt in range(1, 30):
+    deadline = time.monotonic() + 60.0
+    while time.monotonic() < deadline:
         try:
             cluster = Cluster(
                 contact_points=[HOST],
@@ -76,8 +77,10 @@ def wait_for_cassandra() -> Cluster:
             session.execute("SELECT release_version FROM system.local")
             return cluster
         except Exception:
-            time.sleep(2)
-    log("Failed to connect. Start with 'make up EXP=wide-partitions' or 'make up EXP=tombstones'", "[bold red]")
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(2.0, remaining))
+    log("Failed to connect before deadline (60s). Start with 'make up EXP=wide-partitions' or 'make up EXP=tombstones'", "[bold red]")
     sys.exit(1)
 
 

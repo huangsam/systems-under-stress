@@ -144,7 +144,8 @@ def ensure_replica_set_ready() -> tuple[MongoClient, dict[str, Any]]:
             pass
 
     cluster = get_cluster_client()
-    for _ in range(30):
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
         try:
             status = cluster.admin.command("replSetGetStatus")
             primary = [m for m in status.get("members", []) if m.get("stateStr") == "PRIMARY"]
@@ -153,15 +154,18 @@ def ensure_replica_set_ready() -> tuple[MongoClient, dict[str, Any]]:
                 return cluster, status
         except Exception:
             pass
-        time.sleep(1)
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(1.0, remaining))
 
-    console.print("[bold red][ERROR] Replica set did not elect a PRIMARY within timeout.[/]")
+    console.print("[bold red][ERROR] Replica set did not elect a PRIMARY within deadline (30s).[/]")
     sys.exit(1)
 
 
 def find_primary(cluster_or_direct: MongoClient) -> tuple[str, int]:
     """Returns (node_name, host_port) for the current PRIMARY."""
-    for _ in range(15):
+    deadline = time.monotonic() + 15.0
+    while time.monotonic() < deadline:
         try:
             status = cluster_or_direct.admin.command("replSetGetStatus")
             for m in status.get("members", []):
@@ -171,7 +175,9 @@ def find_primary(cluster_or_direct: MongoClient) -> tuple[str, int]:
                     return name, port
         except Exception:
             pass
-        time.sleep(1)
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(1.0, remaining))
     raise RuntimeError("No PRIMARY found in replica set status")
 
 
@@ -518,8 +524,13 @@ def phase3_oplog_exhaustion(cluster: MongoClient) -> None:
     console.print("[bold white][*] Polling replica set status as mongo-node3 discovers oplog gap...[/]\n")
 
     stale_detected = False
-    for attempt in range(1, 15):
-        time.sleep(1.0)
+    stale_deadline = time.monotonic() + 30.0
+    attempt = 0
+    while time.monotonic() < stale_deadline:
+        attempt += 1
+        remaining = stale_deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(1.0, remaining))
         try:
             status = cluster.admin.command("replSetGetStatus")
             node3_info = next(m for m in status.get("members", []) if "node3" in m["name"])

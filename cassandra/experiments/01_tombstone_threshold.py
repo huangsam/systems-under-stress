@@ -89,7 +89,10 @@ def wait_for_cassandra() -> Cluster:
         request_timeout=30.0,
         load_balancing_policy=WhiteListRoundRobinPolicy([HOST]),
     )
-    for attempt in range(1, 31):
+    deadline = time.monotonic() + 60.0
+    attempt = 0
+    while time.monotonic() < deadline:
+        attempt += 1
         try:
             cluster = Cluster(
                 contact_points=[HOST],
@@ -102,8 +105,10 @@ def wait_for_cassandra() -> Cluster:
             log(f"Connected to Cassandra cluster successfully (attempt {attempt}).", "[bold green]")
             return cluster
         except Exception:
-            time.sleep(2)
-    log("Failed to connect to Cassandra after 30 attempts. Is 'make up EXP=tombstones' running?", "[bold red]")
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(2.0, remaining))
+    log("Failed to connect to Cassandra before deadline (60s). Is 'make up EXP=tombstones' running?", "[bold red]")
     sys.exit(1)
 
 
