@@ -107,7 +107,7 @@ This file serves as the root agent instructions, invariants, and guardrails.
 
 ## 3. Per-Lab Exceptions
 
-Specific architectural differences across the 9 labs are explicitly bounded in the table below:
+Specific architectural differences across the labs are explicitly bounded in the table below:
 
 | Lab | Scope / Exception | Reason |
 | :--- | :--- | :--- |
