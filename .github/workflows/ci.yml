@@ -53,7 +53,6 @@ jobs:
           - clickhouse
           - mongodb
           - cassandra
-          - neo4j
           - vault
           - linux
           - chaos

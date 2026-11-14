@@ -48,7 +48,7 @@ REQUIRED_EXPERIMENT_SUBSECTIONS = [
 ]
 
 HARDCODED_IMAGE_TAG_RE = re.compile(
-    r"\b(?:redis|postgres|clickhouse/clickhouse-server|mongo|cassandra|neo4j|hashicorp/vault|debian|ghcr\.io/shopify/toxiproxy):[0-9a-zA-Z._-]+"
+    r"\b(?:redis|postgres|clickhouse/clickhouse-server|mongo|cassandra|hashicorp/vault|debian|ghcr\.io/shopify/toxiproxy):[0-9a-zA-Z._-]+"
 )
 EXPERIMENT_SCRIPT_RE = re.compile(r"^\d{2}_[a-z0-9_]+\.py$")
 

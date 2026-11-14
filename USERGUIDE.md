@@ -66,10 +66,6 @@ Rather than studying one engine in isolation, group experiments by the failure d
 - **MongoDB:**
   - [`01_sort_memory_limit.py`](./mongodb/experiments/01_sort_memory_limit.py): Unindexed in-memory sort exceeding 100MB (Code 96)
   - [`03_document_size_cap.py`](./mongodb/experiments/03_document_size_cap.py): Unbounded embedded arrays hitting the 16MB BSON cap
-- **Neo4j:**
-  - [`01_unbounded_path.py`](./neo4j/experiments/01_unbounded_path.py): $\mathcal{O}(b^d)$ path explosion on unbounded traversals
-  - [`02_supernode.py`](./neo4j/experiments/02_supernode.py): 50k-edge supernode lock contention
-  - [`03_cypher_vs_recursive_sql.py`](./neo4j/experiments/03_cypher_vs_recursive_sql.py): Graph traversal vs recursive SQL joins
 
 ### Track D: OS Limits, Container Isolation & Secrets Infrastructure
 *Focus: Kernel resource caps, production diagnostics, and credential lifecycles*
@@ -100,6 +96,6 @@ Summarize each completed lab in ~45 seconds using the **Constraint → Failure S
 | :--- | :--- | :--- |
 | **1–3** | Track A: Caching & Gray Failures | `redis/`, `chaos/` |
 | **4–6** | Track B: Consistency & Replication | `postgres/`, `mongodb/`, `cassandra/` (`02`) |
-| **7–9** | Track C: Storage & Query Execution | `clickhouse/`, `cassandra/` (`01`, `03`), `neo4j/` |
+| **7–9** | Track C: Storage & Query Execution | `clickhouse/`, `cassandra/` (`01`, `03`), `mongodb/` (`01`, `03`) |
 | **10–11** | Track D: OS Limits & Secrets Infra | `linux/`, `vault/` |
 | **12–14** | **Recall Check** | Pick 5 random experiments from [`README.md`](./README.md); write down the failure signature, root cause, and fix in 3 minutes each without looking at the code. Re-run any you miss. |

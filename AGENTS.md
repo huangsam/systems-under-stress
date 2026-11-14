@@ -1,6 +1,6 @@
 # Systems Under Stress Agent Guidelines
 
-This repository (`systems-under-stress`) is an experimental lab for stress-testing and exploring the operational limits of database and systems Docker images (PostgreSQL, Redis, MongoDB, ClickHouse, Cassandra, Neo4j, Vault, Debian Linux, Toxiproxy).
+This repository (`systems-under-stress`) is an experimental lab for stress-testing and exploring the operational limits of database and systems Docker images (PostgreSQL, Redis, MongoDB, ClickHouse, Cassandra, Vault, Debian Linux, Toxiproxy).
 
 This file serves as the root agent instructions, invariants, and guardrails.
 
@@ -42,7 +42,7 @@ This file serves as the root agent instructions, invariants, and guardrails.
 ## 2. Architecture & Experiment Invariants
 
 1. **One Directory per Lab** *(enforced by CI)*:
-   - Group experiments by target engine or failure domain into a dedicated top-level directory (`redis/`, `postgres/`, `clickhouse/`, `mongodb/`, `cassandra/`, `neo4j/`, `vault/`, `linux/`, `chaos/`).
+   - Group experiments by target engine or failure domain into a dedicated top-level directory (`redis/`, `postgres/`, `clickhouse/`, `mongodb/`, `cassandra/`, `vault/`, `linux/`, `chaos/`).
 
 2. **Single Compose File with Profiles & Overrides** *(enforced by CI)*:
    - Each lab directory has one `docker-compose.yml` defining experiment variants via Docker Compose `profiles`.

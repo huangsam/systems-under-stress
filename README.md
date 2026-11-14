@@ -3,7 +3,7 @@
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/huangsam/systems-under-stress/ci.yml)](https://github.com/huangsam/systems-under-stress/actions)
 [![License](https://img.shields.io/github/license/huangsam/systems-under-stress)](https://github.com/huangsam/systems-under-stress/blob/main/LICENSE)
 
-Docker and Python labs for breaking 9 databases and infrastructure tools on purpose.
+Docker and Python labs for breaking 8 databases and infrastructure tools on purpose.
 
 Instead of generating terabytes of data, each lab squeezes container and engine resource limits to trigger real production failure modes in seconds on a laptop.
 
@@ -11,7 +11,7 @@ Instead of generating terabytes of data, each lab squeezes container and engine 
 
 ---
 
-## Lab Matrix (38 Reproducible Scripts Across 9 Labs)
+## Lab Matrix (34 Reproducible Scripts Across 8 Labs)
 
 | Engine / Lab | Experiments | Primary Failure Signatures Reproduced |
 | :--- | :--- | :--- |
@@ -20,7 +20,6 @@ Instead of generating terabytes of data, each lab squeezes container and engine 
 | [**ClickHouse**](./clickhouse/) | Crash Course, Parts Explosion, Analytical Memory Cap, Columnar Codecs | `Code: 252 TOO_MANY_PARTS`, `Code: 241 MEMORY_LIMIT_EXCEEDED` |
 | [**MongoDB**](./mongodb/) | Crash Course, In-Memory Sort Limit, Write Concern Crash, Document Size, Replica Set Elections | Sort exceeded 100MB (Code 96), Unjournaled crash loss, 16MB BSON cap, Stepdown failover loss, Oplog exhaustion (`RECOVERING`) |
 | [**Cassandra**](./cassandra/) | Crash Course, Tombstone Threshold, PACELC Consistency, Partition Skew | `ReadFailureException` (10k tombstones), Quorum node loss, Partition GC |
-| [**Neo4j**](./neo4j/) | Crash Course, Unbounded Traversal, Supernodes, Cypher vs Recursive SQL | $\mathcal{O}(b^d)$ path explosion, 50k-edge lock contention, Recursive joins |
 | [**Vault**](./vault/) | Crash Course, Dynamic DB Credentials, Token Leases, Transit EaaS | Synchronous `DROP ROLE` cascade, `max_ttl` expiration, Crypto HTTP batching |
 | [**Linux**](./linux/) | Crash Course, Fork Bomb (`pids.max`), File Descriptors, OOM Killer | `EAGAIN` (`pids.max: 40`), `EMFILE` fd exhaustion, Exit Code 137 (`SIGKILL`) |
 | [**Toxiproxy**](./chaos/) | Crash Course, Latency Injection, Connection Pool Starvation, Silent Drops | Pool timeout (`No connection available`), Retry storms, Half-open TCP hangs |
