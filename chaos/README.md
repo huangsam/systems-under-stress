@@ -92,7 +92,7 @@ make soft-reset
 ### 2. Configuration & Limits
 - **Compose Profile**: `chaos` (`toxiproxy` and `redis-upstream`, each capped at `memory: 64M`, `cpus: '0.5'` in [`docker-compose.yml`](./docker-compose.yml))
 - **Client Pool Constraints**: `BlockingConnectionPool(max_connections=5, timeout=0.08)` (80ms acquisition timeout)
-- **Fault Injected**: `latency` toxic (`latency=200ms`, `jitter=20ms`) across 15 concurrent worker threads.
+- **Fault Injected**: `latency` toxic (`latency=200ms`, `jitter=10ms`) across 15 concurrent worker threads.
 
 ### 3. How to Run
 ```bash

@@ -37,7 +37,7 @@ run:
 	uv run experiments/$(SCRIPT).py
 
 logs:
-	docker compose logs -f $(EXP)
+	docker compose --profile $(EXP) logs -f
 
 VERIFY_CASES = \
 	chaos:00_crash_course,01_pool_starvation,02_retry_storms_vs_backoff,03_half_open_tcp_hangs
