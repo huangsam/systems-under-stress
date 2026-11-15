@@ -34,6 +34,7 @@ Rather than studying one engine in isolation, group experiments by the failure d
   - [`01_eviction.py`](./redis/experiments/01_eviction.py): `noeviction` OOM (`OOM command not allowed`) vs LRU eviction under `maxmemory`
   - [`02_stampede.py`](./redis/experiments/02_stampede.py): Cache stampede / thundering herd (100x backend load) and singleflight mitigation
   - [`03_persistence.py`](./redis/experiments/03_persistence.py): RDB/AOF durability trade-offs vs `SIGKILL` data loss
+  - [`04_event_loop_blocking.py`](./redis/experiments/04_event_loop_blocking.py): Main-thread stalls (`KEYS *`, `DEL`) vs incremental `SCAN` / async `UNLINK`
 - **Toxiproxy (Chaos):**
   - [`01_pool_starvation.py`](./chaos/experiments/01_pool_starvation.py): Slow downstream latency starving fixed connection pools (`No connection available`)
   - [`02_retry_storms_vs_backoff.py`](./chaos/experiments/02_retry_storms_vs_backoff.py): Naive retries amplifying outages vs exponential backoff with jitter
@@ -46,6 +47,7 @@ Rather than studying one engine in isolation, group experiments by the failure d
   - [`01_isolation.py`](./postgres/experiments/01_isolation.py): Write skew under `REPEATABLE READ` vs `SERIALIZABLE` (SSI)
   - [`02_locks.py`](./postgres/experiments/02_locks.py): Row lock contention and deadlock detection (`40P01`)
   - [`04_replication_conflicts.py`](./postgres/experiments/04_replication_conflicts.py): Streaming replication standby query conflicts (`40001`)
+  - [`05_lock_queues.py`](./postgres/experiments/05_lock_queues.py): `ACCESS EXCLUSIVE` migration lock queue pileup vs `lock_timeout` (`55P03`)
 - **Cassandra:**
   - [`02_consistency_levels.py`](./cassandra/experiments/02_consistency_levels.py): PACELC trade-offs and `QUORUM` behavior under node loss
 - **MongoDB:**
