@@ -69,7 +69,7 @@ make soft-reset
 ### 2. Configuration & Limits
 - **Compose Profile**: `single-broker` (`kafka-single-data:/var/lib/kafka/data` in [`docker-compose.yml`](./docker-compose.yml))
 - **Container Limits**: `memory: 512M`, `cpus: '1.0'`, `KAFKA_HEAP_OPTS="-Xms128m -Xmx256m"`
-- **Experiment Parameters**: 4-partition topic, `max.poll.interval.ms=3000` (Phase A with 3.8s stall) vs. `max.poll.interval.ms=10000` + `cooperative-sticky` (Phase B)
+- **Experiment Parameters**: 4-partition topic, `max.poll.interval.ms=6500` (Phase A with 7.5s stall) vs. `max.poll.interval.ms=10000` + `cooperative-sticky` (Phase B)
 
 ### 3. How to Run
 ```bash

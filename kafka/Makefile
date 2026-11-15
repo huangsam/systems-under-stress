@@ -18,7 +18,7 @@ help:
 	@echo ""
 	@echo "Available Profiles:"
 	@echo "  - single-broker (1 KRaft node, 512MB RAM - Exp 00, 01, 02, 03)"
-	@echo "  - multi-broker  (3 KRaft nodes, 384MB RAM each - Exp 04 ISR & failover)"
+	@echo "  - multi-broker  (3 KRaft nodes, 512MB RAM each - Exp 04 ISR & failover)"
 
 up:
 	docker compose --profile $(EXP) up -d --wait
