@@ -173,8 +173,8 @@ make down EXP=work-mem
 - **Replication Baseline**: Primary streams WAL to a physical standby (`walreceiver`) with zero baseline byte lag (`pg_wal_lsn_diff(sent_lsn, replay_lsn) = 0`).
 - **Standby Query Cancellation Conflict (Recovery Conflict)**:
   - When an analytical transaction on the standby holds an open MVCC snapshot (`REPEATABLE READ`), and concurrent `DELETE` and `VACUUM` operations on the primary prune dead row versions, the primary emits cleanup WAL records (`HEAP2_CLEAN` / `HEAP2_VACUUM`).
-  - Standby recovery pauses WAL replay up to `max_standby_streaming_delay = 1s`. Once the delay expires, the standby engine terminates the conflicting query with SQLSTATE `40001 serialization_failure`:
-    `terminating connection due to conflict with recovery`
+  - Standby recovery pauses WAL replay up to `max_standby_streaming_delay = 1s`. Once the delay expires, the standby engine cancels the conflicting query with SQLSTATE `40001 serialization_failure`:
+    `canceling statement due to conflict with recovery`
 - **Remediation via `hot_standby_feedback = on`**:
   - The standby advertises its oldest active transaction ID (`backend_xmin`) back upstream to the primary.
   - The primary's `VACUUM` respects the standby's active snapshot and defers physical tuple removal until the standby transaction commits, eliminating query cancellations.
@@ -200,7 +200,7 @@ make down EXP=replication
 | Test Phase | Workload / Scenario | Standby Feedback | Outcome | Observed Failure Signature / Metric |
 |---|---|---|---|---|
 | **Phase 1: Status** | Baseline replication link | `off` | **Healthy Streaming** | Byte Lag: `0 B`, state: `streaming (async)` |
-| **Phase 2: Conflict** | Long snapshot + Primary `VACUUM` | `off` | **`ABORTED (40001)`** | `terminating connection due to conflict with recovery` (`delay > 1.0s`) |
+| **Phase 2: Conflict** | Long snapshot + Primary `VACUUM` | `off` | **`ABORTED (40001)`** | `canceling statement due to conflict with recovery` (`delay > 1.0s`) |
 | **Phase 3: Remediation** | Long snapshot + Primary `VACUUM` | **`on`** | **`COMMITTED` (Success)** | Standby `backend_xmin` pinned on primary; `10,000` rows preserved |
 
 ### 5. Production & Systems Takeaways
@@ -220,14 +220,15 @@ make down EXP=replication
 - Setting `SET LOCAL lock_timeout = '200ms'` forces the migration to abort fast (`SQLSTATE 55P03`) instead of blocking application traffic.
 
 ### 2. Configuration & Limits
-- **Compose Profile**: `locks` (`postgres-locks-1`, capped at `memory: 256M`, `cpus: '1.0'` in [`docker-compose.yml`](./docker-compose.yml))
+- **Compose Profile**: `locks` (`postgres-locks-data:/var/lib/postgresql`, capped at `memory: 256M`, `cpus: '1.0'` in [`docker-compose.yml`](./docker-compose.yml))
 - **Contention Pattern**: 1 long-running `SELECT` (2.5s), 1 `ALTER TABLE ... ADD COLUMN`, and 4 concurrent `SELECT`/`INSERT` workers.
 
 ### 3. How to Run
 ```bash
 make up EXP=locks
 make run SCRIPT=05_lock_queues
-make soft-reset
+make soft-reset EXP=locks
+make down EXP=locks
 ```
 
 ### 4. Observed Metrics & Failure Signatures
