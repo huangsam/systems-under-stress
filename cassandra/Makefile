@@ -19,7 +19,7 @@ help:
 	@echo "  make logs EXP=<profile>     Follow container logs"
 	@echo ""
 	@echo "Available Profiles:"
-	@echo "  - tombstones           (Single-node: 768M RAM, 512M heap, 10,000 tombstone threshold)"
+	@echo "  - tombstones           (Single-node: 1280M RAM, 512M heap, 10,000 tombstone threshold)"
 	@echo "  - cluster-consistency  (3-node cluster: RF=3, PACELC ONE vs QUORUM vs ALL)"
 	@echo "  - wide-partitions      (Single-node: wide partition hot-spotting test)"
 

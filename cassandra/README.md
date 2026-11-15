@@ -87,8 +87,8 @@ make down EXP=tombstones
 | **Phase 1: Ingest** | `INSERT` sensor telemetry | 15,000 rows | ~1.42s (~10,500 rows/s) | **SUCCESS** |
 | **Phase 2: Delete** | `DELETE` first 12,000 rows | 12,000 tombstones | ~1.18s (~10,100 ops/s) | **SUCCESS** |
 | **Phase 3: Flush** | `nodetool flush` | Flush memtables to SSTable | ~0.8s | **SUCCESS** |
-| **Phase 4: Full Scan** | `SELECT * WHERE sensor_id = 'A'` | Scanned > 10,000 tombstones | < 50ms | **ABORTED (`ReadFailureException`)** |
-| **Phase 5: Remediated** | `SELECT * WHERE sensor_id = 'A' AND ts >= boundary` | 3,000 live rows | **1.8 ms** (0 tombstones scanned) | **SUCCESS** |
+| **Phase 4: Full Scan** | `SELECT * WHERE sensor_id = 'sensor-alpha' LIMIT 5000` | Scanned > 10,000 tombstones | < 50ms | **ABORTED (`ReadFailureException`)** |
+| **Phase 5: Remediated** | `SELECT * WHERE sensor_id = 'sensor-alpha' AND recorded_at >= boundary LIMIT 1000` | 1,000 live rows | **1.8 ms** (0 tombstones scanned) | **SUCCESS** |
 
 #### Failure Signature (`ReadFailureException`):
 ```text
@@ -163,7 +163,7 @@ info={'consistency': 'QUORUM', 'required_replicas': 2, 'alive_replicas': 1}
 
 ### 1. Hypothesis & Objective
 - **Partition Sizing Ceilings**: A partition in Cassandra is identified by its partition key and hash-routed to a token range on the ring. Cassandra documentation specifies a hard rule: **Keep partitions under 100MB and fewer than 100,000 cells**.
-- **The Monolithic Anti-Pattern**: Putting all system events into a single partition key (`partition_id = 'GLOBAL'`) concentrates all read and write traffic onto the single node owning that token, starving other cluster nodes and causing coordinator timeouts.
+- **The Monolithic Anti-Pattern**: Putting all system events into a single partition key (`partition_key = 'ALL'`) concentrates all read and write traffic onto the single node owning that token, starving other cluster nodes and causing coordinator timeouts.
 - **Synthetic Bucketing**: Bucketing by `((tenant_id, date_bucket), event_id)` caps partition size, distributes tokens across all nodes, and allows predictable read latency.
 
 ### 2. Configuration & Limits
