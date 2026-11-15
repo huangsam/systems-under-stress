@@ -127,16 +127,17 @@ def run_phase_a_autocommit_loss(admin: AdminClient) -> tuple[int, int, int]:
     c2.subscribe([topic])
 
     c2_ids: list[int] = []
-    deadline = time.monotonic() + 10.0
-    idle_polls = 0
-    while time.monotonic() < deadline and idle_polls < 6:
+    deadline = time.monotonic() + 12.0
+    idle_after_first = 0
+    while time.monotonic() < deadline and idle_after_first < 6:
         msg = c2.poll(0.3)
         if msg is None:
-            idle_polls += 1
+            if c2_ids:
+                idle_after_first += 1
             continue
         if msg.error():
             continue
-        idle_polls = 0
+        idle_after_first = 0
         c2_ids.append(json.loads(msg.value().decode())["id"])
     c2.close()
 

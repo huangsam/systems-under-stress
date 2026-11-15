@@ -33,7 +33,7 @@ import time
 import uuid
 from pathlib import Path
 
-from confluent_kafka import Consumer, KafkaError, Producer
+from confluent_kafka import OFFSET_BEGINNING, Consumer, KafkaError, Producer, TopicPartition
 from confluent_kafka.admin import AdminClient, NewTopic
 from rich import box
 from rich.console import Console
@@ -140,6 +140,7 @@ def produce_batch(topic: str, count: int, prefix: str, acks: str, timeout_ms: in
             "acks": acks,
             "message.timeout.ms": timeout_ms,
             "retries": 0,
+            "log_level": 0,
         }
     )
     acked = 0
@@ -158,27 +159,29 @@ def produce_batch(topic: str, count: int, prefix: str, acks: str, timeout_ms: in
     return acked, errors
 
 
-def consume_all(topic: str, timeout_s: float = 8.0) -> list[str]:
+def consume_all(topic: str, timeout_s: float = 12.0) -> list[str]:
     consumer = Consumer(
         {
             "bootstrap.servers": BOOTSTRAP_SERVERS,
             "group.id": f"exp04-read-{uuid.uuid4().hex[:8]}",
             "auto.offset.reset": "earliest",
             "enable.auto.commit": False,
+            "log_level": 0,
         }
     )
-    consumer.subscribe([topic])
+    consumer.assign([TopicPartition(topic, 0, OFFSET_BEGINNING)])
     values: list[str] = []
-    idle = 0
+    idle_after_first = 0
     deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline and idle < 6:
-        msg = consumer.poll(0.4)
+    while time.monotonic() < deadline and idle_after_first < 6:
+        msg = consumer.poll(0.3)
         if msg is None:
-            idle += 1
+            if values:
+                idle_after_first += 1
             continue
         if msg.error():
             continue
-        idle = 0
+        idle_after_first = 0
         values.append(msg.value().decode())
     consumer.close()
     return values
@@ -277,7 +280,7 @@ def run_phase_b_acks1_loss(admin: AdminClient) -> tuple[int, int]:
         followers_restarted = True
 
         # Wait for one of the surviving followers to become leader
-        deadline = time.monotonic() + 30.0
+        deadline = time.monotonic() + 45.0
         new_leader = -1
         while time.monotonic() < deadline:
             try:
@@ -316,7 +319,7 @@ def main() -> None:
     console.print("[bold green]Experiment 04: acks=all + min.insync.replicas vs. acks=1 Failover Loss[/]")
     console.print("=" * 72, style="bold cyan")
 
-    admin = AdminClient({"bootstrap.servers": BOOTSTRAP_SERVERS})
+    admin = AdminClient({"bootstrap.servers": BOOTSTRAP_SERVERS, "log_level": 0})
     wait_for_cluster_brokers(admin, min_brokers=3)
 
     durable_a, err_sig = run_phase_a_min_isr(admin)

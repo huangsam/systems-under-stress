@@ -182,7 +182,7 @@ make down EXP=single-broker
 ### 2. Configuration & Limits
 - **Compose Profile**: `multi-broker` (3 KRaft nodes: `kafka-1`, `kafka-2`, `kafka-3` with isolated `kafka-1-data`, `kafka-2-data`, `kafka-3-data` volumes in [`docker-compose.yml`](./docker-compose.yml))
 - **Container Limits**: `memory: 512M`, `cpus: '0.75'`, `KAFKA_HEAP_OPTS="-Xms128m -Xmx256m"` per broker
-- **Cluster Tunings**: `KAFKA_REPLICA_LAG_TIME_MAX_MS=3000`, `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=3`, `KAFKA_LOG_CLEANER_DEDUPE_BUFFER_SIZE=16777216`
+- **Cluster Tunings**: `KAFKA_REPLICA_LAG_TIME_MAX_MS=3000`, `KAFKA_BROKER_SESSION_TIMEOUT_MS=3000`, `KAFKA_BROKER_HEARTBEAT_INTERVAL_MS=500`, `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=3`, `KAFKA_LOG_CLEANER_DEDUPE_BUFFER_SIZE=16777216`
 
 ### 3. How to Run
 ```bash
