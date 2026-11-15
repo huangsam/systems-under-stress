@@ -65,7 +65,7 @@ services:
   # Objective: Reproduces streaming replication lag, conflict recovery cancellation, and hot_standby_feedback remediation
   # Runner: make up EXP=replication && make run SCRIPT=04_replication_conflicts
   postgres-primary:
-    image: ${POSTGRES_IMAGE:-postgres:18.6-alpine}
+    image: ${POSTGRES_IMAGE:-postgres:18.6}
     profiles: ["replication"]
     ports:
       - "127.0.0.1:5432:5432"
@@ -95,7 +95,7 @@ services:
       - postgres-rep-primary-data:/var/lib/postgresql/data
 
   postgres-standby:
-    image: ${POSTGRES_IMAGE:-postgres:18.6-alpine}
+    image: ${POSTGRES_IMAGE:-postgres:18.6}
     profiles: ["replication"]
     ports:
       - "127.0.0.1:5433:5432"
