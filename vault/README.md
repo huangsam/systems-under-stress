@@ -47,7 +47,7 @@ make clean
 
 ## Experiment 00: Crash Course
 
-Verifies Vault seal status and health diagnostics, KV v2 versioned secret storage (`v1` $\rightarrow$ `v2` updates and versioned reads), soft delete vs permanent `destroy_secret_versions`, and child token lease creation.
+Verifies Vault seal status and health diagnostics, KV v2 versioned secret storage (`v1` $\rightarrow$ `v2` updates and versioned reads), metadata deletion, and child token lease creation/revocation.
 
 ```bash
 make up EXP=dynamic-creds
@@ -169,7 +169,7 @@ make down EXP=transit-crypto
 |---|---|---|---|---|
 | **Sequential Transit Encrypt** | 200 requests | 200 records | ~150–300 ops/sec (HTTP RTT bound) | `vault:v1:...` |
 | **Batched Transit (`batch_input`)** | **1 request** | 200 records | **>5,000 ops/sec (>20x speedup)** | `vault:v1:...` |
-| **Key Rotation + `rewrap_data`** | Server-side rewrap | 200 records | Zero plaintext exposure; `v1` retired | **`vault:v2:...` (`min_decryption_version=2`)** |
+| **Key Rotation + `rewrap_data`** | Server-side rewrap | 1 sample record (`batch_ciphertexts[0]`) | Zero plaintext exposure; `v1` retired | **`vault:v2:...` (`min_decryption_version=2`)** |
 
 ### 5. Production & Systems Takeaways
 1. **Always Batch High-Volume Transit Operations**: When encrypting rows during ETL or bulk API ingestion, use `batch_input` to amortize HTTP/TLS overhead across hundreds of items.
