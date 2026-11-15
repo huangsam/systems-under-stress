@@ -10,7 +10,7 @@ This lab uses a single [`docker-compose.yml`](./docker-compose.yml) and custom [
 
 ```text
 linux/
-├── Dockerfile                  # Debian slim base + python3, procps, lsof, rich
+├── Dockerfile                  # Debian trixie base + python3, procps, lsof, rich
 ├── docker-compose.yml          # Base anchor &linux-base, cgroups v2 controllers, ulimits, swap caps
 ├── Makefile                    # One-touch runner targets (up, run, down, clean, sh, logs)
 ├── experiments/
@@ -69,7 +69,7 @@ The macOS host and all neighboring containers experience **0% CPU or process tab
 
 ### 2. Configuration & Limits
 - **Compose Profile**: `pid-limit` (see [`docker-compose.yml`](./docker-compose.yml))
-- **Cgroups v2 Limits**: `pids: 40`, `memory: 64M`, `cpus: '0.5'`
+- **Cgroups v2 Limits**: `pids: 40`, `memory: 128M`, `cpus: '0.5'`
 - **Kernel Telemetry**: `/sys/fs/cgroup/pids.max` and `/sys/fs/cgroup/pids.current`
 
 ### 3. How to Run

@@ -23,7 +23,7 @@ help:
 	@echo "  make clean                            Stop all profiles and wipe any lab containers"
 	@echo ""
 	@echo "Available Profiles:"
-	@echo "  - pid-limit       (pids.limit: 40, memory: 64M, cpus: 0.5)"
+	@echo "  - pid-limit       (pids.limit: 40, memory: 128M, cpus: 0.5)"
 	@echo "  - fd-exhaustion   (ulimit -n 64, memory: 64M, cpus: 0.5)"
 	@echo "  - oom-killer      (memory: 32M, memswap: 32M - no swap)"
 	@echo ""

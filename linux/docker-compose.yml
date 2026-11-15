@@ -16,7 +16,7 @@ x-linux-base: &linux-base
 
 services:
   # Profile: pid-limit - Exp 01: Cgroups PID Limit & Contained Fork Bomb
-  # Limits: cgroups v2 pids.max=40, 64MB RAM, 0.5 CPU
+  # Limits: cgroups v2 pids.max=40, 128MB RAM, 0.5 CPU
   # Objective: Tests kernel EAGAIN fork bomb containment
   # Runner: cd linux && make up EXP=pid-limit && make run SCRIPT=01_fork_bomb_cgroup
   pid-limit:
