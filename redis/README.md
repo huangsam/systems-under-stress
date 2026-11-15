@@ -126,7 +126,7 @@ When a hot cache key expires under high concurrency (100 simultaneous requests):
 ### 2. Configuration & Limits
 - **Compose Profile**: `stampede` (`redis-stampede-data:/data` in [`docker-compose.yml`](./docker-compose.yml))
 - **Engine Ceiling**: `maxmemory 64mb`
-- **Workload**: 100 concurrent async workers querying an expiring hot key with a simulated 50ms backend database query penalty.
+- **Workload**: 100 concurrent async workers querying an expiring hot key with a simulated 200ms backend database query penalty (`DB_COMPUTE_DELAY = 0.2`).
 
 ### 3. How to Run
 ```bash
@@ -139,9 +139,9 @@ make down EXP=stampede
 
 | Strategy | Database Query Count | Served from Cache | Total Elapsed |
 |---|---|---|---|
-| **1. Naive Cache-Aside** | **100 queries** (100% stampede) | 0 | 81.5ms |
-| **2. Distributed Mutex (`SET NX PX`)** | **1 query** (Collapsed) | **99** | 82.5ms |
-| **3. Probabilistic Early Refresh (XFetch)** | **30 background queries** | **70 instant hits** | 58.9ms |
+| **1. Naive Cache-Aside** | **100 queries** (100% stampede) | 0 | `>= 200ms` (all 100 workers hit DB) |
+| **2. Distributed Mutex (`SET NX PX`)** | **1 query** (Collapsed) | **99** | `>= 200ms` (1st worker populates; 99 read cache) |
+| **3. Probabilistic Early Refresh (XFetch)** | **~30 background queries** | **~70 instant hits** | `< 200ms` for cache-hit path (refreshed before expiry) |
 
 ### 5. Production & Systems Takeaways
 1. **Never use unprotected Cache-Aside for hot keys**: Expiring a key for a homepage or top search term without locking or probabilistic refresh will instantly overwhelm primary database connection pools.
@@ -164,10 +164,10 @@ When an ungraceful crash (kernel panic or `SIGKILL`) strikes an active Redis ins
 
 ### 3. How to Run
 ```bash
-# 03_persistence.py orchestrates persistence-rdb, persistence-aof, and persistence-always:
+# Run against any one of the three persistence profiles (persistence-rdb, persistence-aof, or persistence-always):
 make up EXP=persistence-rdb
 make run SCRIPT=03_persistence
-make clean
+make down EXP=persistence-rdb
 ```
 
 ### 4. Observed Metrics & Failure Signatures
