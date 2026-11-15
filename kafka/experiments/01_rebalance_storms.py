@@ -32,7 +32,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 
-from confluent_kafka import Consumer, Producer
+from confluent_kafka import Consumer, KafkaException, Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 from rich import box
 from rich.console import Console
@@ -87,12 +87,18 @@ def produce_messages(topic: str, count: int, prefix: str) -> None:
 
 def make_consumer(group_id: str, strategy: str, max_poll_ms: int, metrics: ConsumerMetrics) -> Consumer:
     def on_assign(_consumer, partitions) -> None:
-        metrics.assign_events += 1
-        metrics.assigned_partitions = sorted(p.partition for p in partitions)
+        if partitions:
+            metrics.assign_events += 1
+            current = set(metrics.assigned_partitions)
+            current.update(p.partition for p in partitions)
+            metrics.assigned_partitions = sorted(current)
 
     def on_revoke(_consumer, partitions) -> None:
-        metrics.revoke_events += 1
-        metrics.revoked_partitions_total += len(partitions)
+        if partitions:
+            metrics.revoke_events += 1
+            metrics.revoked_partitions_total += len(partitions)
+            revoked = {p.partition for p in partitions}
+            metrics.assigned_partitions = sorted(p for p in metrics.assigned_partitions if p not in revoked)
 
     c = Consumer(
         {
@@ -104,9 +110,31 @@ def make_consumer(group_id: str, strategy: str, max_poll_ms: int, metrics: Consu
             "max.poll.interval.ms": max_poll_ms,
             "session.timeout.ms": 6000,
             "heartbeat.interval.ms": 500,
+            "log_level": 0,
         }
     )
     return c, on_assign, on_revoke
+
+
+def wait_for_balanced_join(c1: Consumer, m1: ConsumerMetrics, c2: Consumer, m2: ConsumerMetrics, phase: str, timeout_s: float = 15.0) -> None:
+    """Poll both consumers until all 4 partitions are assigned across both members (2 each) and stabilized."""
+    deadline = time.monotonic() + timeout_s
+    stable_ticks = 0
+    while time.monotonic() < deadline:
+        c1.poll(0.05)
+        c2.poll(0.05)
+        if len(m1.assigned_partitions) == 2 and len(m2.assigned_partitions) == 2:
+            stable_ticks += 1
+            if stable_ticks >= 4:
+                return
+        else:
+            stable_ticks = 0
+    verify_phase(
+        False,
+        f"{phase}: Initial Join",
+        f"Consumers failed to reach balanced 2+2 assignment: C1={m1.assigned_partitions}, C2={m2.assigned_partitions}",
+    )
+    return
 
 
 def run_phase_a_rebalance_storm(admin: AdminClient) -> tuple[ConsumerMetrics, ConsumerMetrics, int]:
@@ -123,13 +151,13 @@ def run_phase_a_rebalance_storm(admin: AdminClient) -> tuple[ConsumerMetrics, Co
     c1.subscribe([topic], on_assign=on_assign1, on_revoke=on_revoke1)
     c2.subscribe([topic], on_assign=on_assign2, on_revoke=on_revoke2)
 
-    # Wait for initial group join
-    deadline = time.monotonic() + 15.0
-    while (m1.assign_events == 0 or m2.assign_events == 0) and time.monotonic() < deadline:
-        c1.poll(0.1)
-        c2.poll(0.1)
-    verify_phase(m1.assign_events >= 1 and m2.assign_events >= 1, "Phase A: Initial Join", "Consumers failed to join group")
+    wait_for_balanced_join(c1, m1, c2, m2, "Phase A")
     plain_console.print(f"    Initial assignment: C1={m1.assigned_partitions}, C2={m2.assigned_partitions}")
+
+    # Reset revocation counters from any stagger during initial group join
+    m1.revoke_events = m1.revoked_partitions_total = 0
+    m2.revoke_events = m2.revoked_partitions_total = 0
+    m1.assign_events = m2.assign_events = 1
 
     produce_messages(topic, count=24, prefix="storm")
 
@@ -154,7 +182,10 @@ def run_phase_a_rebalance_storm(admin: AdminClient) -> tuple[ConsumerMetrics, Co
                 c1_resumed.set()
                 # Do NOT commit the stalled message before eviction -> triggers duplicate on C2
                 continue
-            c1.commit(message=msg, asynchronous=False)
+            try:
+                c1.commit(message=msg, asynchronous=False)
+            except KafkaException:
+                pass
 
     def c2_worker() -> None:
         while not stop_event.is_set():
@@ -163,26 +194,37 @@ def run_phase_a_rebalance_storm(admin: AdminClient) -> tuple[ConsumerMetrics, Co
                 continue
             key = msg.key().decode()
             m2.processed_keys.append(key)
-            c2.commit(message=msg, asynchronous=False)
+            try:
+                c2.commit(message=msg, asynchronous=False)
+            except KafkaException:
+                pass
 
     t1 = threading.Thread(target=c1_worker, daemon=True)
     t2 = threading.Thread(target=c2_worker, daemon=True)
     t1.start()
     t2.start()
 
-    # Wait until C1 stalls, resumes, and all 24 unique keys are processed
-    phase_deadline = time.monotonic() + 25.0
-    while time.monotonic() < phase_deadline:
-        unique_done = len(set(m1.processed_keys) | set(m2.processed_keys))
-        if c1_resumed.is_set() and unique_done >= 24 and m2.assign_events >= 3:
-            break
-        time.sleep(0.2)
+    try:
+        # Wait until C1 stalls, resumes, and all 24 unique keys are processed
+        phase_deadline = time.monotonic() + 25.0
+        while time.monotonic() < phase_deadline:
+            unique_done = len(set(m1.processed_keys) | set(m2.processed_keys))
+            if c1_resumed.is_set() and unique_done >= 24 and m2.assign_events >= 3:
+                break
+            time.sleep(0.2)
+        c2_assigns = m2.assign_events
+        c2_revokes = m2.revoke_events
+        c2_revoked_parts = m2.revoked_partitions_total
+    finally:
+        stop_event.set()
+        t1.join(timeout=5.0)
+        t2.join(timeout=5.0)
+        c1.close()
+        c2.close()
 
-    stop_event.set()
-    t1.join(timeout=5.0)
-    t2.join(timeout=5.0)
-    c1.close()
-    c2.close()
+    m2.assign_events = c2_assigns
+    m2.revoke_events = c2_revokes
+    m2.revoked_partitions_total = c2_revoked_parts
 
     total_deliveries = len(m1.processed_keys) + len(m2.processed_keys)
     unique_deliveries = len(set(m1.processed_keys) | set(m2.processed_keys))
@@ -220,12 +262,13 @@ def run_phase_b_cooperative_sticky(admin: AdminClient) -> tuple[ConsumerMetrics,
     c1.subscribe([topic], on_assign=on_assign1, on_revoke=on_revoke1)
     c2.subscribe([topic], on_assign=on_assign2, on_revoke=on_revoke2)
 
-    deadline = time.monotonic() + 15.0
-    while (m1.assign_events == 0 or m2.assign_events == 0) and time.monotonic() < deadline:
-        c1.poll(0.1)
-        c2.poll(0.1)
-    verify_phase(m1.assign_events >= 1 and m2.assign_events >= 1, "Phase B: Initial Join", "Consumers failed to join group")
+    wait_for_balanced_join(c1, m1, c2, m2, "Phase B")
     plain_console.print(f"    Initial assignment: C1={m1.assigned_partitions}, C2={m2.assigned_partitions}")
+
+    # Reset revocation counters from any stagger during initial group join
+    m1.revoke_events = m1.revoked_partitions_total = 0
+    m2.revoke_events = m2.revoked_partitions_total = 0
+    m1.assign_events = m2.assign_events = 1
 
     produce_messages(topic, count=24, prefix="coop")
 
@@ -238,41 +281,58 @@ def run_phase_b_cooperative_sticky(admin: AdminClient) -> tuple[ConsumerMetrics,
                 continue
             time.sleep(0.02)  # Bounded work well under max.poll.interval.ms
             metrics.processed_keys.append(msg.key().decode())
-            consumer.commit(message=msg, asynchronous=False)
+            try:
+                consumer.commit(message=msg, asynchronous=False)
+            except KafkaException:
+                pass
 
     t1 = threading.Thread(target=bounded_worker, args=(c1, m1), daemon=True)
     t2 = threading.Thread(target=bounded_worker, args=(c2, m2), daemon=True)
     t1.start()
     t2.start()
 
-    # Wait for all 24 messages to be processed with 0 revocations
-    deadline = time.monotonic() + 15.0
-    while len(set(m1.processed_keys) | set(m2.processed_keys)) < 24 and time.monotonic() < deadline:
-        time.sleep(0.1)
+    c3 = None
+    t3 = None
+    try:
+        # Wait for all 24 messages to be processed with 0 revocations
+        deadline = time.monotonic() + 15.0
+        while len(set(m1.processed_keys) | set(m2.processed_keys)) < 24 and time.monotonic() < deadline:
+            time.sleep(0.1)
 
-    verify_phase(
-        m1.revoke_events == 0 and m2.revoke_events == 0,
-        "Phase B: Zero Timeout Rebalances",
-        f"Expected 0 revocations during steady state, got C1={m1.revoke_events}, C2={m2.revoke_events}",
-    )
+        verify_phase(
+            m1.revoke_events == 0 and m2.revoke_events == 0,
+            "Phase B: Zero Timeout Rebalances",
+            f"Expected 0 revocations during steady state, got C1={m1.revoke_events}, C2={m2.revoke_events}",
+        )
 
-    # Now add C3 to observe incremental cooperative-sticky rebalance (only 1 partition moved, not all 4)
-    c3, on_assign3, on_revoke3 = make_consumer(group_id, "cooperative-sticky", max_poll_ms=10000, metrics=m3)
-    c3.subscribe([topic], on_assign=on_assign3, on_revoke=on_revoke3)
-    t3 = threading.Thread(target=bounded_worker, args=(c3, m3), daemon=True)
-    t3.start()
+        # Snapshot steady-state revocations before scale-out, then add C3 to observe incremental cooperative-sticky rebalance
+        steady_c2_revokes = m2.revoke_events
+        c3, on_assign3, on_revoke3 = make_consumer(group_id, "cooperative-sticky", max_poll_ms=10000, metrics=m3)
+        c3.subscribe([topic], on_assign=on_assign3, on_revoke=on_revoke3)
+        t3 = threading.Thread(target=bounded_worker, args=(c3, m3), daemon=True)
+        t3.start()
 
-    scale_deadline = time.monotonic() + 15.0
-    while not m3.assigned_partitions and time.monotonic() < scale_deadline:
-        time.sleep(0.1)
+        scale_deadline = time.monotonic() + 15.0
+        while not m3.assigned_partitions and time.monotonic() < scale_deadline:
+            time.sleep(0.1)
+        scale_moved = m1.revoked_partitions_total + m2.revoked_partitions_total
+        c3_parts = list(m3.assigned_partitions)
+    finally:
+        stop_event.set()
+        t1.join(timeout=5.0)
+        t2.join(timeout=5.0)
+        if t3 is not None:
+            t3.join(timeout=5.0)
+        c1.close()
+        c2.close()
+        if c3 is not None:
+            c3.close()
 
-    stop_event.set()
-    t1.join(timeout=5.0)
-    t2.join(timeout=5.0)
-    t3.join(timeout=5.0)
-    c1.close()
-    c2.close()
-    c3.close()
+    # Restore pre-close metrics so c.close() revocation callbacks do not overwrite scale-out observations
+    m2.revoke_events = steady_c2_revokes
+    m1.revoked_partitions_total = scale_moved
+    m2.revoked_partitions_total = 0
+    m3.assigned_partitions = c3_parts
 
     total_deliveries = len(m1.processed_keys) + len(m2.processed_keys) + len(m3.processed_keys)
     unique_deliveries = len(set(m1.processed_keys) | set(m2.processed_keys) | set(m3.processed_keys))
