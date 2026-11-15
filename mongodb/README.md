@@ -143,7 +143,7 @@ make down EXP=durability
 ### 1. Hypothesis & Objective
 - Appending events indefinitely into a single parent document via `$push` degrades write latency over time as WiredTiger repeatedly reallocates and rewrites the growing multi-megabyte document on every update.
 - Once the document crosses **16,777,216 bytes (16MB)**, MongoDB hard-rejects the update (`BSONObjectTooLarge` / `DocumentTooLarge`).
-- Remediating with the **Bucket Pattern** (`bucket_count < 500` + `upsert: true`) keeps individual documents small and write latency flat.
+- Remediating with the **Bucket Pattern** (`bucket_count < 64` + `upsert: true`) keeps individual documents small and write latency flat.
 
 ### 2. Configuration & Limits
 - **Compose Profile**: `document-limits` (`mongo-doclimit-data:/data/db` in [`docker-compose.yml`](./docker-compose.yml))
@@ -162,7 +162,7 @@ make down EXP=document-limits
 | Ingestion Pattern | Document Size Reached | Write Latency Trend | Outcome / Failure Signature |
 |---|---|---|---|
 | **Unbounded Array (`$push`)** | **16,777,216 bytes (16.0 MB)** | Degrades linearly with document size | **REJECTED (`OperationFailure: BSONObjectTooLarge`)** |
-| **Bucket Pattern (`count < 500`)** | Bounded (~250 KB / bucket) | Flat sub-millisecond writes | **SUCCEEDED (Infinite horizontal scale)** |
+| **Bucket Pattern (`count < 64`)** | Bounded (~250 KB / bucket) | Flat sub-millisecond writes | **SUCCEEDED (Infinite horizontal scale)** |
 
 ### 5. Production & Systems Takeaways
 1. **Never model 1-to-Many as an unbounded embedded array**: High-frequency telemetry, audit logs, or comments appended via `$push` will eventually hit the 16MB BSON cliff and break writes.
