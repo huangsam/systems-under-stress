@@ -32,7 +32,7 @@ clean:
 	docker compose --profile "*" down -v
 
 soft-reset:
-	docker compose exec -T $(EXP) clickhouse-client --query "DROP TABLE IF EXISTS parts_test; DROP TABLE IF EXISTS clickstream_events;"
+	docker compose exec -T $(EXP) clickhouse-client --query "DROP TABLE IF EXISTS parts_test; DROP TABLE IF EXISTS clickstream_events; DROP TABLE IF EXISTS telemetry_none; DROP TABLE IF EXISTS telemetry_lz4; DROP TABLE IF EXISTS telemetry_optimized;"
 	@echo "==> ClickHouse experiment tables dropped."
 
 run:

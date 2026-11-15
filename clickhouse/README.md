@@ -18,7 +18,7 @@ clickhouse/
 │   ├── 00_crash_course.py      # Columnar ingestion, MergeTree basics & system.parts
 │   ├── 01_parts_explosion.py   # Un-batched single-row inserts vs batched ingestion
 │   ├── 02_memory_limit.py      # Analytical RAM ceiling & external group-by disk spill
-│   └── 03_codec_compression.py # Columnar codecs (DoubleDelta, Gorilla, ZSTD) vs NONE
+│   └── 03_codec_compression.py # Columnar codecs (Delta(4), Gorilla, ZSTD) vs NONE
 └── README.md
 ```
 
@@ -106,14 +106,14 @@ Merges are processing significantly slower than inserts. (TOO_MANY_PARTS)
 
 ### 1. Hypothesis & Objective
 - **Aggregation Hash Tables**: For `GROUP BY`, `DISTINCT`, and join operations, ClickHouse constructs vectorized in-memory hash tables mapping keys to aggregate states.
-- **Memory Cap Breach**: When aggregating across high-cardinality keys (such as 1,000,000 unique UUIDs), RAM consumption grows linearly with key count. Under a strict query memory limit (`max_memory_usage = 64000000` / 64MB), ClickHouse terminates the query with `DB::Exception: Memory limit (for query) exceeded (Code: 241)` to prevent host container OOM (Exit 137).
-- **External Group By (Spill to Disk)**: Setting `max_bytes_before_external_group_by = 20000000` enables ClickHouse to spill partial aggregation hash tables to temporary files on disk, execute a multi-way external merge sort, and complete the query successfully.
+- **Memory Cap Breach**: When aggregating across high-cardinality keys (such as 500,000 unique UUIDs), RAM consumption grows linearly with key count. Under a strict query memory limit (`max_memory_usage = 25000000` / 25MB, overriding the 64MB server default), ClickHouse terminates the query with `DB::Exception: Memory limit (for query) exceeded (Code: 241)` to prevent host container OOM (Exit 137).
+- **External Group By (Spill to Disk)**: Setting `max_bytes_before_external_group_by = 12000000` (12MB) enables ClickHouse to spill partial aggregation hash tables to temporary files on disk, execute a multi-way external merge sort, and complete the query successfully.
 - **Algorithmic Alternatives**: Replacing exact cardinality (`uniqExact`) with HyperLogLog (`uniq`) drastically reduces memory footprint from tens of megabytes to a constant 12KB register.
 
 ### 2. Configuration & Limits
 - **Compose Profile**: `memory-cap` (`clickhouse-mem-data:/var/lib/clickhouse` in [`docker-compose.yml`](./docker-compose.yml))
-- **Server Override**: [`users.d/memory-limit.xml`](./users.d/memory-limit.xml) (`max_memory_usage: 64000000`)
-- **Dataset**: 1,000,000 synthetic clickstream events generated in-engine via `numbers(1000000)`.
+- **Server Override & Query Caps**: [`users.d/memory-limit.xml`](./users.d/memory-limit.xml) (`max_memory_usage: 64000000` server default), overridden per-query in `02_memory_limit.py` to `max_memory_usage = 25000000` (25MB) and `max_bytes_before_external_group_by = 12000000` (12MB).
+- **Dataset**: 500,000 synthetic clickstream events generated in-engine via `numbers()`.
 
 ### 3. How to Run
 ```bash
@@ -126,9 +126,9 @@ make down EXP=memory-cap
 
 | Aggregation Strategy | Cardinality | Query Settings | Memory Consumed | Outcome | Duration |
 |---|---|---|---|---|---|
-| **In-Memory Hash Table** | 1,000,000 UUIDs | `max_bytes_before_external_group_by = 0` | > 64 MiB | **ABORTED (Code: 241)** | ~0.35s |
-| **External Group By (Disk Spill)** | 1,000,000 UUIDs | `max_bytes_before_external_group_by = 20MB` | Kept under 64 MiB | **SUCCESS** | ~1.45s |
-| **HyperLogLog (`uniq`)** | 1,000,000 UUIDs | `uniq(user_id)` | ~12 KB | **SUCCESS** | ~0.02s |
+| **In-Memory Hash Table** | 500,000 UUIDs | `max_memory_usage = 25MB`, `max_bytes_before_external_group_by = 0` | > 25 MB | **ABORTED (Code: 241)** | ~0.35s |
+| **External Group By (Disk Spill)** | 500,000 UUIDs | `max_memory_usage = 25MB`, `max_bytes_before_external_group_by = 12MB` | Kept under 25 MB | **SUCCESS** | ~1.45s |
+| **HyperLogLog (`uniq`)** | 500,000 UUIDs | `uniq(user_id)` | ~12 KB | **SUCCESS** | ~0.02s |
 
 #### Failure Signature (`Code: 241`):
 ```text
