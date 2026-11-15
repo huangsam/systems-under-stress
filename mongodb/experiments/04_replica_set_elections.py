@@ -241,6 +241,13 @@ def phase1_topology(status: dict[str, Any]) -> None:
     console.print("[bold green]✔ Quorum Verified: Exactly 1 PRIMARY and 2 SECONDARIES active.[/]")
 
 
+def _wait_for_acks(acknowledged: list[int], errors: list[str], min_acks: int = 5, timeout_s: float = 10.0) -> None:
+    """Wait until the writer thread records at least `min_acks` writes, errors, or times out."""
+    deadline = time.monotonic() + timeout_s
+    while len(acknowledged) < min_acks and not errors and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+
 def phase2_durability_comparison(cluster: MongoClient) -> None:
     """Phase 2: Unacknowledged vs Majority Write Durability Under Sudden Primary Stepdown."""
     console.print("\n" + "=" * 76, style="bold cyan")
@@ -283,7 +290,7 @@ def phase2_durability_comparison(cluster: MongoClient) -> None:
 
     t_w1 = threading.Thread(target=w1_worker, daemon=True)
     t_w1.start()
-    time.sleep(0.05)
+    _wait_for_acks(w1_acknowledged, w1_errors, min_acks=5, timeout_s=5.0)
 
     console.print(f"[bold red][!] Triggering abrupt primary stepdown on {primary_name} (secondaryCatchUp=0s, force=True)...[/]")
     try:
@@ -343,7 +350,7 @@ def phase2_durability_comparison(cluster: MongoClient) -> None:
 
     t_maj = threading.Thread(target=maj_worker, daemon=True)
     t_maj.start()
-    time.sleep(0.05)
+    _wait_for_acks(maj_acknowledged, maj_errors, min_acks=5, timeout_s=10.0)
 
     console.print(f"[bold red][!] Triggering abrupt primary stepdown on {new_primary_name} (secondaryCatchUp=0s, force=True)...[/]")
     try:
