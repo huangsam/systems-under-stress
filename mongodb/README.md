@@ -110,7 +110,7 @@ Error Code: 96
 MongoDB offers tunable write durability through write concern options (`w` and `j`):
 1. **Unacknowledged (`w=0`)**: The driver writes data into the local TCP socket buffer and immediately returns. If the container crashes, writes in network buffers or server queues are lost.
 2. **Memory-Acknowledged (`w=1, j=False`)**: The server acknowledges the write as soon as it is written to WiredTiger's in-memory cache. Writes waiting in RAM before the journal commit interval (up to 100ms) or checkpoint (60s) are lost on `SIGKILL`.
-3. **Journal-Committed (`w=1, j=True`)**: The server blocks acknowledgment until the write is flushed and fsynced to the on-disk journal (write-ahead log). Upon restart, WiredTiger replays the journal, guaranteeing 0 lost acknowledged writes.
+3. **Journal-Committed (`w=1, j=True`)**: The server waits for the write to be committed to the on-disk journal (write-ahead log). In this experiment, journaled writes survived a `SIGKILL` of the MongoDB process; this does not guarantee survival of every storage or host failure.
 
 ### 2. Configuration & Limits
 - **Compose Profile**: `durability` (`mongo-durability-data:/data/db` in [`docker-compose.yml`](./docker-compose.yml))
@@ -130,7 +130,7 @@ make down EXP=durability
 |---|---|---|---|---|---|
 | **Unacknowledged** | `w=0` | ~1,500 | ~1,120 | **~380 (25.3%)** | None (Fire-and-forget) |
 | **Memory-Ack (Standalone Default)** | `w=1, j=False` | ~1,200 | ~1,040 | **~160 (13.3%)** | Vulnerable (Lost uncommitted cache) |
-| **Journal-Synced** | `w=1, j=True` | ~700 | 700 | **0 (0.0%)** | **100% Guaranteed Durability** |
+| **Journal-Synced** | `w=1, j=True` | ~700 | 700 | **0 (0.0%)** | **0 acknowledged writes lost in this run** |
 
 ### 5. Production & Systems Takeaways
 1. **Standalone vs Replica Set Write Concern Defaults**: On a standalone instance with `w: 1, j: false`, acknowledged writes reside in RAM and can vanish on power loss or kernel panic.
