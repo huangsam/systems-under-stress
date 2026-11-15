@@ -31,8 +31,10 @@ clean:
 
 soft-reset:
 	@uv run -q --with confluent-kafka python -c 'from confluent_kafka.admin import AdminClient; \
-	[AdminClient({"bootstrap.servers": bs}).delete_topics([t for t in AdminClient({"bootstrap.servers": bs}).list_topics(timeout=2).topics if not t.startswith("__")], operation_timeout=5) \
-	for bs in ("127.0.0.1:9092", "127.0.0.1:19092") if True]' 2>/dev/null || true
+	[f.result(timeout=5) for bs in ("127.0.0.1:9092", "127.0.0.1:19092") \
+	for a in (AdminClient({"bootstrap.servers": bs, "log_level": 0}),) \
+	for topics in ([t for t in a.list_topics(timeout=2).topics if not t.startswith("__")],) if topics \
+	for f in a.delete_topics(topics, operation_timeout=5).values()]' 2>/dev/null || true
 	@echo "==> Kafka user topics deleted."
 
 run:

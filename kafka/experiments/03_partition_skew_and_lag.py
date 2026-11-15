@@ -76,81 +76,85 @@ def run_workload(admin: AdminClient, label: str, hot_key_mode: bool) -> dict:
     consumer_counts = [0, 0, 0, 0]
     count_lock = threading.Lock()
     stop_event = threading.Event()
+    threads: list[threading.Thread] = []
 
-    for idx in range(4):
-        c = Consumer(
-            {
-                "bootstrap.servers": BOOTSTRAP_SERVERS,
-                "group.id": group_id,
-                "auto.offset.reset": "earliest",
-                "enable.auto.commit": False,
-            }
-        )
+    try:
+        for idx in range(4):
+            c = Consumer(
+                {
+                    "bootstrap.servers": BOOTSTRAP_SERVERS,
+                    "group.id": group_id,
+                    "auto.offset.reset": "earliest",
+                    "enable.auto.commit": False,
+                    "log_level": 0,
+                }
+            )
 
-        def make_on_assign(ev: threading.Event):
-            def on_assign(_c, parts) -> None:
-                if parts:
-                    ev.set()
+            def make_on_assign(ev: threading.Event):
+                def on_assign(_c, parts) -> None:
+                    if parts:
+                        ev.set()
 
-            return on_assign
+                return on_assign
 
-        c.subscribe([topic], on_assign=make_on_assign(assigned_flags[idx]))
-        consumers.append(c)
+            c.subscribe([topic], on_assign=make_on_assign(assigned_flags[idx]))
+            consumers.append(c)
 
-    # Wait for all 4 consumers to receive a partition assignment
-    assign_deadline = time.monotonic() + 15.0
-    while not all(ev.is_set() for ev in assigned_flags) and time.monotonic() < assign_deadline:
-        for c in consumers:
-            c.poll(0.05)
-    verify_phase(all(ev.is_set() for ev in assigned_flags), label, "Not all 4 consumers received partition assignments")
+        # Wait for all 4 consumers to receive a partition assignment
+        assign_deadline = time.monotonic() + 15.0
+        while not all(ev.is_set() for ev in assigned_flags) and time.monotonic() < assign_deadline:
+            for c in consumers:
+                c.poll(0.05)
+        verify_phase(all(ev.is_set() for ev in assigned_flags), label, "Not all 4 consumers received partition assignments")
 
-    # Produce 200 messages and record partition distribution
-    producer = Producer({"bootstrap.servers": BOOTSTRAP_SERVERS})
-    part_counts: Counter[int] = Counter()
+        # Produce 200 messages and record partition distribution
+        producer = Producer({"bootstrap.servers": BOOTSTRAP_SERVERS, "log_level": 0})
+        part_counts: Counter[int] = Counter()
 
-    def on_delivery(err, msg) -> None:
-        if err is None:
-            part_counts[msg.partition()] += 1
+        def on_delivery(err, msg) -> None:
+            if err is None:
+                part_counts[msg.partition()] += 1
 
-    for i in range(TOTAL_MESSAGES):
-        if hot_key_mode:
-            key = "tenant:vip-1" if i < 180 else f"tenant:other-{i}"
-        else:
-            key = f"tenant:vip-1#{i}"
-        producer.produce(topic, key=key.encode(), value=f"event-{i:03d}".encode(), callback=on_delivery)
+        for i in range(TOTAL_MESSAGES):
+            if hot_key_mode:
+                key = "tenant:vip-1" if i < 180 else f"tenant:other-{i}"
+            else:
+                key = f"tenant:vip-1#{i}"
+            producer.produce(topic, key=key.encode(), value=f"event-{i:03d}".encode(), callback=on_delivery)
 
-    remaining = producer.flush(timeout=10.0)
-    verify_phase(remaining == 0, label, f"Failed to flush {remaining} messages")
-    plain_console.print(f"    Partition distribution: {dict(sorted(part_counts.items()))}")
+        remaining = producer.flush(timeout=10.0)
+        verify_phase(remaining == 0, label, f"Failed to flush {remaining} messages")
+        plain_console.print(f"    Partition distribution: {dict(sorted(part_counts.items()))}")
 
-    def worker(idx: int, consumer: Consumer) -> None:
-        while not stop_event.is_set():
-            msg = consumer.poll(0.1)
-            if msg is None or msg.error():
-                continue
-            time.sleep(WORK_PER_MSG_S)
+        def worker(idx: int, consumer: Consumer) -> None:
+            while not stop_event.is_set():
+                msg = consumer.poll(0.1)
+                if msg is None or msg.error():
+                    continue
+                time.sleep(WORK_PER_MSG_S)
+                with count_lock:
+                    consumer_counts[idx] += 1
+
+        start_t = time.monotonic()
+        threads = [threading.Thread(target=worker, args=(i, consumers[i]), daemon=True) for i in range(4)]
+        for t in threads:
+            t.start()
+
+        drain_deadline = time.monotonic() + 20.0
+        while time.monotonic() < drain_deadline:
             with count_lock:
-                consumer_counts[idx] += 1
+                done = sum(consumer_counts)
+            if done >= TOTAL_MESSAGES:
+                break
+            time.sleep(0.05)
 
-    start_t = time.monotonic()
-    threads = [threading.Thread(target=worker, args=(i, consumers[i]), daemon=True) for i in range(4)]
-    for t in threads:
-        t.start()
-
-    drain_deadline = time.monotonic() + 20.0
-    while time.monotonic() < drain_deadline:
-        with count_lock:
-            done = sum(consumer_counts)
-        if done >= TOTAL_MESSAGES:
-            break
-        time.sleep(0.05)
-
-    elapsed_s = time.monotonic() - start_t
-    stop_event.set()
-    for t in threads:
-        t.join(timeout=5.0)
-    for c in consumers:
-        c.close()
+        elapsed_s = time.monotonic() - start_t
+    finally:
+        stop_event.set()
+        for t in threads:
+            t.join(timeout=5.0)
+        for c in consumers:
+            c.close()
 
     with count_lock:
         total_done = sum(consumer_counts)

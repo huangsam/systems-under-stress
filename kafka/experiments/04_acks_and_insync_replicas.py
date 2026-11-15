@@ -75,12 +75,12 @@ def wait_for_cluster_brokers(admin: AdminClient, min_brokers: int = 3, timeout_s
     while time.monotonic() < deadline:
         try:
             meta = admin.list_topics(timeout=2.0)
-            if len(meta.brokers) >= min_brokers:
+            if len(meta.brokers) >= min_brokers and meta.controller_id >= 0:
                 return
         except Exception:
             pass
         time.sleep(0.5)
-    verify_phase(False, "Cluster Readiness", f"Expected {min_brokers} brokers within {timeout_s}s")
+    verify_phase(False, "Cluster Readiness", f"Expected {min_brokers} brokers and active controller within {timeout_s}s")
 
 
 def create_topic_and_wait_isr(
@@ -90,18 +90,28 @@ def create_topic_and_wait_isr(
     config: dict[str, str],
     timeout_s: float = 20.0,
 ) -> tuple[int, list[int], list[int]]:
-    futures = admin.create_topics(
-        [
-            NewTopic(
-                topic,
-                num_partitions=1,
-                replication_factor=replication_factor,
-                config=config,
-            )
-        ]
-    )
-    for fut in futures.values():
-        fut.result(timeout=10.0)
+    create_deadline = time.monotonic() + 15.0
+    while True:
+        futures = admin.create_topics(
+            [
+                NewTopic(
+                    topic,
+                    num_partitions=1,
+                    replication_factor=replication_factor,
+                    config=config,
+                )
+            ]
+        )
+        try:
+            for fut in futures.values():
+                fut.result(timeout=10.0)
+            break
+        except Exception as exc:
+            if "TOPIC_ALREADY_EXISTS" in str(exc):
+                break
+            if time.monotonic() >= create_deadline:
+                raise
+            time.sleep(0.5)
 
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:

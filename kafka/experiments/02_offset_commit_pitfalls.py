@@ -92,28 +92,30 @@ def run_phase_a_autocommit_loss(admin: AdminClient) -> tuple[int, int, int]:
             "auto.commit.interval.ms": 200,
         }
     )
-    c1.subscribe([topic])
-
-    # Fetch first batch of 10 messages
-    batch: list = []
-    deadline = time.monotonic() + 15.0
-    while len(batch) < 10 and time.monotonic() < deadline:
-        polled = c1.consume(num_messages=10 - len(batch), timeout=1.0)
-        batch.extend(m for m in polled if m is not None and not m.error())
-
-    verify_phase(len(batch) == 10, "Phase A: Batch Fetch", f"Expected 10 messages in batch, got {len(batch)}")
-
     processed_ids: list[int] = []
-    for idx, msg in enumerate(batch):
-        data = json.loads(msg.value().decode())
-        if idx < 3:
-            processed_ids.append(data["id"])
-            time.sleep(0.12)  # Total > 360ms > auto.commit.interval.ms=200
-        else:
-            # Simulate crash mid-batch; closing consumer triggers final auto-commit of polled offset (10)
-            plain_console.print(f"    [!] C1 crashed while processing id={data['id']} (offset {msg.offset()}) after batch poll...")
-            break
-    c1.close()
+    try:
+        c1.subscribe([topic])
+
+        # Fetch first batch of 10 messages
+        batch: list = []
+        deadline = time.monotonic() + 15.0
+        while len(batch) < 10 and time.monotonic() < deadline:
+            polled = c1.consume(num_messages=10 - len(batch), timeout=1.0)
+            batch.extend(m for m in polled if m is not None and not m.error())
+
+        verify_phase(len(batch) == 10, "Phase A: Batch Fetch", f"Expected 10 messages in batch, got {len(batch)}")
+
+        for idx, msg in enumerate(batch):
+            data = json.loads(msg.value().decode())
+            if idx < 3:
+                processed_ids.append(data["id"])
+                time.sleep(0.12)  # Total > 360ms > auto.commit.interval.ms=200
+            else:
+                # Simulate crash mid-batch; closing consumer triggers final auto-commit of polled offset (10)
+                plain_console.print(f"    [!] C1 crashed while processing id={data['id']} (offset {msg.offset()}) after batch poll...")
+                break
+    finally:
+        c1.close()
 
     # Replacement consumer joins same group
     c2 = Consumer(
