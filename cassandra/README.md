@@ -156,6 +156,7 @@ info={'consistency': 'QUORUM', 'required_replicas': 2, 'alive_replicas': 1}
 1. **Never use `ALL` in Production**: `ALL` provides zero fault tolerance. In a 3-node cluster with RF=3, a temporary GC pause or rolling restart on a single node causes an outage for all queries configured with `ALL`.
 2. **`LOCAL_QUORUM` is the Multi-DC Gold Standard**: In multi-datacenter clusters, `LOCAL_QUORUM` requires a majority of replicas only in the coordinator's local datacenter, isolating queries from cross-region WAN network latency and partitions.
 3. **Hinted Handoffs**: When a write uses `ConsistencyLevel.ONE` and a replica is down, the coordinator writes a "hint" locally. When the replica comes back online, the coordinator replays the hints to restore eventual consistency.
+4. **PACELC's E-L-C Branch**: With no partition, fewer required replica acknowledgments (e.g., `ONE` vs `QUORUM`) generally reduce latency but may weaken consistency. `ALL` waits for every replica, while Paxos-based lightweight transactions (LWTs) add coordination for linearizable conditional updates; both can increase latency.
 
 ---
 

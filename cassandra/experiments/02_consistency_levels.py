@@ -298,6 +298,9 @@ def run_experiment() -> None:
         plain_console.print("4. Strong Consistency Formula: Read Consistency + Write Consistency > Replication Factor.")
         plain_console.print("   - QUORUM Write (2) + QUORUM Read (2) = 4 > 3 (RF). Guarantees strong consistency (Pigeonhole principle).")
         plain_console.print("   - ONE Write (1) + ONE Read (1) = 2 <= 3. Eventual consistency only.")
+        plain_console.print("5. Else (E), during normal operation: trade-off between Latency (L) and Consistency (C).")
+        plain_console.print("   - ONE waits for 1 replica and QUORUM for 2 of 3; fewer acknowledgments generally reduce latency but may weaken consistency.")
+        plain_console.print("   - ALL waits for all 3 replicas; Paxos-based LWTs add coordination for linearizable conditional updates, increasing latency.")
         plain_console.print()
 
     finally:
